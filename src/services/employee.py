@@ -1,0 +1,158 @@
+import asyncio
+from typing import TYPE_CHECKING
+
+from fastapi import UploadFile, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+
+from .base import BaseService
+from src.db.models import employees, ImportLogs, District, Region, Position, ProductGroup, Company
+from src.schemas import employee
+from src.utils.excel_parser import parse_excel_file
+from src.utils.mapping import map_record
+from src.mapping.employees import employee_mapping, position_mapping
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class EmployeeService(BaseService[employees.Employee, employee.EmployeeCreate, employee.EmployeeUpdate]):
+    async def import_excel(self, session: 'AsyncSession', file: 'UploadFile', user_id: int):
+        records = await parse_excel_file(file)
+
+        import_log = ImportLogs(
+            uploaded_by=user_id,
+            target_table='Сотрудники',
+            records_count=len(records),
+        )
+        session.add(import_log)
+        await session.flush()
+
+        results = await asyncio.gather(
+            self.get_id_map(session, Region, 'name', {r['область'] for r in records}),
+            self.get_id_map(session, Company, 'name', {r['компания'] for r in records}),
+            self.get_id_map(session, Position, 'name', {r['должность'] for r in records}),
+            self.get_id_map(session, ProductGroup, 'name', {r['группа'] for r in records}),
+            return_exceptions=True
+        )
+
+        region_map, missing_regions = results[0]
+        company_map, missing_companies = results[1]
+        position_map, missing_positions = results[2]
+        product_group_map, missing_product_groups = results[3]
+
+        district_triples = {
+            (r['район'], region_map.get(r['область']), company_map.get(r['компания']))
+            for r in records
+            if r['район'] is not None
+               and r['область'] in region_map
+               and r['компания'] in company_map
+        }
+
+        district_map = {}
+        missing_districts = set()
+
+        if district_triples:
+            district_names = {t[0] for t in district_triples}
+            region_ids = {t[1] for t in district_triples}
+            company_ids = {t[2] for t in district_triples}
+
+            stmt = select(District).where(
+                District.name.in_(district_names),
+                District.region_id.in_(region_ids),
+                District.company_id.in_(company_ids)
+            )
+            result = await session.execute(stmt)
+            districts = result.scalars().all()
+
+            district_map = {
+                (d.name, d.region_id, d.company_id): d.id
+                for d in districts
+            }
+            missing_districts = district_triples - district_map.keys()
+
+        skipped_records = []
+        data_to_insert = []
+
+        for idx, r in enumerate(records):
+            missing_keys = []
+
+            if r['область'] in missing_regions:
+                missing_keys.append(f"область: {r['область']}")
+
+            if r['компания'] in missing_companies:
+                missing_keys.append(f"компания: {r['компания']}")
+
+            if r['должность'] in missing_positions:
+                missing_keys.append(f"должность: {r['должность']}")
+
+            if r['группа'] in missing_product_groups:
+                missing_keys.append(f"группа: {r['группа']}")
+
+            region_id = region_map.get(r['область'])
+            company_id = company_map.get(r['компания'])
+
+            district_id = None
+            if r['район'] is not None and region_id and company_id:
+                district_key = (r['район'], region_id, company_id)
+                if district_key in missing_districts:
+                    missing_keys.append(f"район: {r['район']}")
+                else:
+                    district_id = district_map.get(district_key)
+
+            if missing_keys:
+                skipped_records.append({
+                    'row': idx + 1,
+                    'missing': missing_keys
+                })
+                continue
+
+            relation_fields = {
+                'company_id': company_id,
+                'region_id': region_id,
+                'position_id': position_map[r['должность']],
+                'product_group_id': product_group_map[r['группа']],
+                'district_id': district_id,
+                'import_log_id': import_log.id,
+            }
+            data_to_insert.append(map_record(r, employee_mapping, relation_fields))
+
+        if data_to_insert:
+            stmt = insert(self.model).on_conflict_do_nothing()
+            await session.execute(stmt, data_to_insert)
+
+        await session.commit()
+
+        return {
+            'imported': len(data_to_insert),
+            'skipped': len(skipped_records),
+            'total': len(records),
+            'skipped_records': skipped_records
+        }
+
+
+class PositionService(BaseService[employees.Position, employee.PositionCreate, employee.PositionUpdate]):
+    async def import_excel(self, session: 'AsyncSession', file: 'UploadFile', user_id: int):
+        records = await parse_excel_file(file)
+
+        import_log = ImportLogs(
+            uploaded_by=user_id,
+            target_table='Должности МП',
+            records_count=len(records),
+        )
+        session.add(import_log)
+        await session.flush()
+
+        data_to_insert = []
+        for r in records:
+            relation_fields = {
+                'import_log_id': import_log.id,
+            }
+            data_to_insert.append(map_record(r, position_mapping, relation_fields))
+        await session.execute(insert(self.model), data_to_insert)
+        await session.commit()
+
+
+employee_service = EmployeeService(employees.Employee)
+position_service = PositionService(employees.Position)

@@ -1,0 +1,80 @@
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class IMSCreate(BaseModel):
+    company: str
+    brand: str
+    segment: str
+    dosage: str
+    dosage_form: str
+    period: str
+    amount: float
+    packages: float
+    molecule: str
+
+
+class IMSUpdate(BaseModel):
+    company: str | None = None
+    brand: str | None = None
+    segment: str | None = None
+    dosage: str | None = None
+    dosage_form: str | None = None
+    period: str | None = None
+    amount: float | None = None
+    packages: float | None = None
+    molecule: str | None = None
+
+
+class IMSResponse(BaseModel):
+    id: int
+    company: str
+    brand: str
+    segment: str
+    dosage: str
+    dosage_form: str
+    period: str
+    amount: float
+    packages: float
+    molecule: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class IMSTopFilter(BaseModel):
+    group_column:  Literal["company", "brand", "segment"] = "company"
+    periods: list[str] = Field(default_factory=lambda: [datetime.now().strftime("%-m-%y")])
+    type_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
+    segment_name: str | None = None
+    brand_name: str | None = None
+
+
+class IMSMetricsFilter(BaseModel):
+    periods: list[str] = Field(default_factory=lambda: [datetime.now().strftime("%-m-%y")])
+    type_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
+
+
+class IMSMetricsResponse(BaseModel):
+    sales: float
+    market_sales: float
+    market_share: float
+    growth_vs_previous: float
+    market_growth: float
+    growth_vs_market: float
+
+
+class IMSTableFilter(BaseModel):
+    company_names: list[str] | None = None
+    brand_names: list[str] | None = None
+    segment_names: list[str] | None = None
+    dosage_form_names: list[str] | None = None
+    search: str | None = None
+    periods: list[str] = Field(default_factory=lambda: [f'6-{datetime.now().year % 100 - i}' for i in range(3)])
+    type_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
+    limit: int | None = None
+    offset: int = 0
+    group_by_dimensions: list[Literal["company", "brand", "segment", "dosage_form", "dosage", "molecule"]] = Field(
+        default_factory=lambda: ["company", "brand", "segment", "dosage_form", "dosage", "molecule"]
+    )
