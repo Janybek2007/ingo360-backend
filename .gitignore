@@ -204,3 +204,5 @@ __marimo__/
 
 .env.scripts
 postgres/
+.vscode
+commit.txt

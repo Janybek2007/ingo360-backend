@@ -1,22 +1,18 @@
+client_category_mapping = {"название": "name"}
 
-client_category_mapping = {'название': 'name'}
+doctor_mapping = {"фио": "full_name", "фио врача": "full_name"}
 
-doctor_mapping = {'фио врача': 'full_name'}
-
-pharmacy_mapping = {
-    'название': 'name',
-    'индикатор': 'indicator'
-}
+pharmacy_mapping = {"название": "name", "индикатор": "indicator"}
 
 
 medical_facility_mapping = {
-    'название': 'name',
-    'адрес': 'address',
-    'тип учреждения': 'facility_type',
+    "название": "name",
+    "адрес": "address",
+    "тип учреждения": "facility_type",
 }
 
-speciality_mapping = {'название': 'name'}
+speciality_mapping = {"название": "name"}
 
-distributor_mapping = {'название': 'name'}
+distributor_mapping = {"название": "name"}
 
-geo_indicator_mapping = {'название': 'name'}
+geo_indicator_mapping = {"название": "name"}

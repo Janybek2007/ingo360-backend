@@ -1,10 +1,12 @@
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
-from src.schemas.employee import EmployeeSimpleResponse
-from src.schemas.geography import SettlementSimpleResponse, DistrictSimpleResponse
-from src.schemas.product import ProductGroupSimpleResponse
-from src.schemas.company import CompanySimpleResponse
 from src.schemas.base_filter import BaseFilter
+from src.schemas.company import CompanySimpleResponse
+from src.schemas.employee import EmployeeSimpleResponse
+from src.schemas.geography import DistrictSimpleResponse, SettlementSimpleResponse
+from src.schemas.product import ProductGroupSimpleResponse
 
 
 class GeoIndicatorCreate(BaseModel):
@@ -121,6 +123,7 @@ class PharmacySimpleResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    distributor: Optional["DistributorResponse"]
     geo_indicator: GeoIndicatorResponse | None
 
 

@@ -38,8 +38,8 @@ class SKUCreate(BaseModel):
     promotion_type_id: int
     product_group_id: int
     dosage_form_id: int
-    dosage_id: int
-    segment_id: int
+    dosage_id: int | None = None
+    segment_id: int | None = None
     company_id: int
 
 
@@ -151,6 +151,6 @@ class SKUResponse(BaseModel):
     promotion_type: PromotionTypeResponse
     product_group: ProductGroupSimpleResponse
     dosage_form: DosageFormResponse
-    dosage: DosageResponse
-    segment: SegmentResponse
+    dosage: DosageResponse | None = None
+    segment: SegmentResponse | None = None
     company: CompanySimpleResponse | None

@@ -1,9 +1,13 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from src.schemas.client import PharmacySimpleResponse, DistributorResponse, GeoIndicatorResponse
+from src.schemas.client import (
+    DistributorResponse,
+    GeoIndicatorResponse,
+    PharmacySimpleResponse,
+)
 from src.schemas.product import SKUSimpleResponse
 
 
@@ -79,6 +83,15 @@ class TertiarySalesUpdate(BaseModel):
     published: bool | None = None
 
 
+class PublishUnpublishedRequest(BaseModel):
+    ids: list[int] = Field(default_factory=list)
+
+
+class PublishUnpublishedItem(BaseModel):
+    id: int
+    published: bool
+
+
 class PrimarySalesAndStockFilter(BaseModel):
     limit: int = 100
     offset: int = 0
@@ -132,6 +145,11 @@ class SecondarySalesResponse(BaseModel):
     pharmacy: PharmacySimpleResponse
     sku: SKUSimpleResponse
 
+    @computed_field
+    @property
+    def distributor(self) -> DistributorResponse | None:
+        return self.pharmacy.distributor
+
 
 class TertiarySalesResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -148,6 +166,11 @@ class TertiarySalesResponse(BaseModel):
     pharmacy: PharmacySimpleResponse
     sku: SKUSimpleResponse
 
+    @computed_field
+    @property
+    def distributor(self) -> DistributorResponse | None:
+        return self.pharmacy.distributor
+
 
 class SalesReportFilter(BaseModel):
     limit: int | None = None
@@ -160,26 +183,46 @@ class SalesReportFilter(BaseModel):
     group_ids: list[int] | None = None
     promo_type_id: int | None = None
     search: str | None = None
-    group_by_period: Literal["year", "quarter", "month"] = 'month'
+    group_by_period: Literal["year", "quarter", "month"] = "month"
     sku_ids: list[int] | None = None
 
 
 class DistributorShareFilter(SalesReportFilter):
-    group_by_dimensions: list[Literal["sku", "brand", "promotion_type", "product_group", "distributor"]] | None = None
+    group_by_dimensions: (
+        list[Literal["sku", "brand", "promotion_type", "product_group", "distributor"]]
+        | None
+    ) = None
 
 
 class StockCoverageFilter(SalesReportFilter):
-    group_by_dimensions: list[Literal["sku", "brand", "promotion_type", "product_group", "distributor"]] | None = None
+    group_by_dimensions: (
+        list[Literal["sku", "brand", "promotion_type", "product_group", "distributor"]]
+        | None
+    ) = None
 
 
 class ShipmentStockFilter(SalesReportFilter):
-    group_by_dimensions: list[Literal["sku", "brand", "promotion_type", "product_group", "distributor"]] | None = None
+    group_by_dimensions: (
+        list[Literal["sku", "brand", "promotion_type", "product_group", "distributor"]]
+        | None
+    ) = None
 
 
 class SecTerSalesReportFilter(SalesReportFilter):
     geo_indicators_ids: list[int] | None = None
-    group_by_dimensions: list[
-        Literal["sku", "brand", "promotion_type", "product_group", "distributor", "geo_indicator"]] | None = None
+    group_by_dimensions: (
+        list[
+            Literal[
+                "sku",
+                "brand",
+                "promotion_type",
+                "product_group",
+                "distributor",
+                "geo_indicator",
+            ]
+        ]
+        | None
+    ) = None
 
 
 class PeriodFilter(BaseModel):
@@ -190,7 +233,7 @@ class PeriodFilter(BaseModel):
     brand_ids: list[int] | None = None
     product_group_ids: list[int] | None = None
     sku_ids: list[int] | None = None
-    group_by_period: Literal['year', 'quarter', 'month'] = 'month'
+    group_by_period: Literal["year", "quarter", "month"] = "month"
 
 
 class SecTerSalesPeriodFilter(PeriodFilter):
@@ -205,7 +248,7 @@ class PeriodSalesResponse(BaseModel):
 class SalesByDistributorFilter(BaseModel):
     limit: int | None = None
     offset: int = 0
-    group_by_period: Literal['year', 'quarter', 'month'] = 'month'
+    group_by_period: Literal["year", "quarter", "month"] = "month"
     years: list[int] = Field(default_factory=lambda: [date.today().year])
     months: list[int] | None = None
     quarters: list[int] | None = None
@@ -214,11 +257,13 @@ class SalesByDistributorFilter(BaseModel):
     brand_ids: list[int] | None = None
     product_group_ids: list[int] | None = None
     geo_indicator_ids: list[int] | None = None
-    group_by_dimensions: list[Literal["distributor", "brand", "product_group"]] | None = None
+    group_by_dimensions: (
+        list[Literal["distributor", "brand", "product_group"]] | None
+    ) = None
 
 
 class ChartSalesByDistributorFilter(BaseModel):
-    group_by_period: Literal['year', 'quarter', 'month'] = 'month'
+    group_by_period: Literal["year", "quarter", "month"] = "month"
     years: list[int] = Field(default_factory=lambda: [date.today().year])
     months: list[int] | None = None
     quarters: list[int] | None = None
@@ -243,7 +288,19 @@ class NumericDistributionFilter(BaseModel):
     sku_ids: list[int] | None = None
     search: str | None = None
     group_by_period: Literal["year", "quarter", "month"] = "month"
-    group_by_dimensions: list[Literal["sku", "brand", "product_group", "segment", "distributor", "geo_indicator"]] | None = None
+    group_by_dimensions: (
+        list[
+            Literal[
+                "sku",
+                "brand",
+                "product_group",
+                "segment",
+                "distributor",
+                "geo_indicator",
+            ]
+        ]
+        | None
+    ) = None
 
 
 class SalesReportResponse(BaseModel):
@@ -303,7 +360,12 @@ class LowStockLevelFilter(BaseModel):
     months: list[int] | None = None
     quarters: list[int] | None = None
     group_by_period: Literal["year", "quarter", "month"] = "month"
-    group_by_dimensions: list[Literal["pharmacy", "product_group", "responsible_employee", "sku", "brand"]] | None = None
+    group_by_dimensions: (
+        list[
+            Literal["pharmacy", "product_group", "responsible_employee", "sku", "brand"]
+        ]
+        | None
+    ) = None
 
 
 class LowStockLevelResponse(BaseModel):
