@@ -206,3 +206,4 @@ __marimo__/
 postgres/
 .vscode
 commit.txt
+data/

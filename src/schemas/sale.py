@@ -93,7 +93,7 @@ class PublishUnpublishedItem(BaseModel):
 
 
 class PrimarySalesAndStockFilter(BaseModel):
-    limit: int = 100
+    limit: int | None = None
     offset: int = 0
     distributor_ids: list[int] | None = None
     sku_ids: list[int] | None = None
@@ -105,7 +105,7 @@ class PrimarySalesAndStockFilter(BaseModel):
 
 
 class SecondaryTertiarySalesFilter(BaseModel):
-    limit: int = 100
+    limit: int | None = None
     offset: int = 0
     pharmacy_ids: list[int] | None = None
     sku_ids: list[int] | None = None
@@ -145,11 +145,6 @@ class SecondarySalesResponse(BaseModel):
     pharmacy: PharmacySimpleResponse
     sku: SKUSimpleResponse
 
-    @computed_field
-    @property
-    def distributor(self) -> DistributorResponse | None:
-        return self.pharmacy.distributor
-
 
 class TertiarySalesResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -165,11 +160,6 @@ class TertiarySalesResponse(BaseModel):
     published: bool = False
     pharmacy: PharmacySimpleResponse
     sku: SKUSimpleResponse
-
-    @computed_field
-    @property
-    def distributor(self) -> DistributorResponse | None:
-        return self.pharmacy.distributor
 
 
 class SalesReportFilter(BaseModel):

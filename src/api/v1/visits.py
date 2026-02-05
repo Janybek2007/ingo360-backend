@@ -26,6 +26,7 @@ async def get_visits(
 ):
     load_options = [
         joinedload(Visit.pharmacy).joinedload(Pharmacy.geo_indicator),
+        joinedload(Visit.pharmacy).joinedload(Pharmacy.distributor),
         joinedload(Visit.doctor),
         joinedload(Visit.product_group),
         joinedload(Visit.employee),
@@ -41,6 +42,7 @@ async def create_visit(
 ):
     load_options = [
         joinedload(Visit.pharmacy).joinedload(Pharmacy.geo_indicator),
+        joinedload(Visit.pharmacy).joinedload(Pharmacy.distributor),
         joinedload(Visit.doctor),
         joinedload(Visit.product_group),
         joinedload(Visit.employee),
@@ -56,6 +58,7 @@ async def get_visit(
 ):
     load_options = [
         joinedload(Visit.pharmacy).joinedload(Pharmacy.geo_indicator),
+        joinedload(Visit.pharmacy).joinedload(Pharmacy.distributor),
         joinedload(Visit.doctor),
         joinedload(Visit.product_group),
         joinedload(Visit.employee),
@@ -72,6 +75,7 @@ async def update_visit(
 ):
     load_options = [
         joinedload(Visit.pharmacy).joinedload(Pharmacy.geo_indicator),
+        joinedload(Visit.pharmacy).joinedload(Pharmacy.distributor),
         joinedload(Visit.doctor),
         joinedload(Visit.product_group),
         joinedload(Visit.employee),

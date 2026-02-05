@@ -2,5 +2,5 @@ from pydantic import BaseModel
 
 
 class BaseFilter(BaseModel):
-    limit: int = 100
+    limit: int | None = None
     offset: int = 0
