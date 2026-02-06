@@ -1,9 +1,11 @@
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from src.schemas.base_filter import BaseFilter, SortDirection
 from src.schemas.company import CompanySimpleResponse
 from src.schemas.geography import DistrictSimpleResponse, RegionSimpleResponse
 from src.schemas.product import ProductGroupSimpleResponse
-from src.schemas.base_filter import BaseFilter
 
 
 class EmployeeCreate(BaseModel):
@@ -56,9 +58,36 @@ class EmployeeResponse(BaseModel):
 
 
 class EmployeeFilter(BaseFilter):
-    search: str | None = None
-    position_ids: list[int] | None = None
-    product_group_ids: list[int] | None = None
-    region_ids: list[int] | None = None
-    district_ids: list[int] | None = None
-    company_ids: list[int] | None = None
+    full_name: str | None = None
+    positions: str | None = None
+    product_groups: str | None = None
+    regions: str | None = None
+    districts: str | None = None
+    companies: str | None = None
+
+
+class PositionFilter(BaseFilter):
+    name: str | None = None
+
+
+EmployeeSortField = Literal[
+    "full_name",
+    "positions",
+    "product_groups",
+    "regions",
+    "districts",
+    "companies",
+]
+PositionSortField = Literal["name"]
+
+
+class EmployeeListRequest(BaseModel):
+    filters: EmployeeFilter = Field(default_factory=EmployeeFilter)
+    sort_by: EmployeeSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class PositionListRequest(BaseModel):
+    filters: PositionFilter = Field(default_factory=PositionFilter)
+    sort_by: PositionSortField | None = None
+    sort_order: SortDirection | None = None

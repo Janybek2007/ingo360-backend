@@ -1,5 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from .base_filter import BaseFilter, SortDirection
 from .company import CompanySimpleResponse
 
 
@@ -154,3 +157,102 @@ class SKUResponse(BaseModel):
     dosage: DosageResponse | None = None
     segment: SegmentResponse | None = None
     company: CompanySimpleResponse | None
+
+
+class ProductGroupFilter(BaseFilter):
+    name: str | None = None
+    companies: str | None = None
+
+
+class BrandFilter(BaseFilter):
+    name: str | None = None
+    promotion_types: str | None = None
+    product_groups: str | None = None
+    companies: str | None = None
+
+
+class PromotionTypeFilter(BaseFilter):
+    name: str | None = None
+
+
+class DosageFormFilter(BaseFilter):
+    name: str | None = None
+
+
+class DosageFilter(BaseFilter):
+    name: str | None = None
+
+
+class SegmentFilter(BaseFilter):
+    name: str | None = None
+
+
+class SKUFilter(BaseFilter):
+    name: str | None = None
+    brands: str | None = None
+    promotion_types: str | None = None
+    product_groups: str | None = None
+    dosage_forms: str | None = None
+    dosages: str | None = None
+    segments: str | None = None
+    companies: str | None = None
+
+
+ProductGroupSortField = Literal["name", "companies"]
+BrandSortField = Literal["name", "promotion_types", "product_groups", "companies"]
+PromotionTypeSortField = Literal["name"]
+DosageFormSortField = Literal["name"]
+DosageSortField = Literal["name"]
+SegmentSortField = Literal["name"]
+SKUSortField = Literal[
+    "name",
+    "brands",
+    "promotion_types",
+    "product_groups",
+    "dosage_forms",
+    "dosages",
+    "segments",
+    "companies",
+]
+
+
+class ProductGroupListRequest(BaseModel):
+    filters: ProductGroupFilter = Field(default_factory=ProductGroupFilter)
+    sort_by: ProductGroupSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class BrandListRequest(BaseModel):
+    filters: BrandFilter = Field(default_factory=BrandFilter)
+    sort_by: BrandSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class PromotionTypeListRequest(BaseModel):
+    filters: PromotionTypeFilter = Field(default_factory=PromotionTypeFilter)
+    sort_by: PromotionTypeSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class DosageFormListRequest(BaseModel):
+    filters: DosageFormFilter = Field(default_factory=DosageFormFilter)
+    sort_by: DosageFormSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class DosageListRequest(BaseModel):
+    filters: DosageFilter = Field(default_factory=DosageFilter)
+    sort_by: DosageSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class SegmentListRequest(BaseModel):
+    filters: SegmentFilter = Field(default_factory=SegmentFilter)
+    sort_by: SegmentSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class SKUListRequest(BaseModel):
+    filters: SKUFilter = Field(default_factory=SKUFilter)
+    sort_by: SKUSortField | None = None
+    sort_order: SortDirection | None = None

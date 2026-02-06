@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -13,7 +13,7 @@ from src.services import geography as geography_service
 router = APIRouter(dependencies=[Depends(current_operator_user)])
 
 
-@router.post("/countries", response_model=geography.CountryResponse)
+@router.post("/countries/create", response_model=geography.CountryResponse)
 async def create_country(
     country: geography.CountryCreate,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
@@ -37,10 +37,10 @@ async def bulk_insert_countries(
     )
 
 
-@router.get("/countries", response_model=list[geography.CountryResponse])
+@router.post("/countries", response_model=list[geography.CountryResponse])
 async def get_countries(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: geography.CountryListRequest,
 ):
     return await geography_service.country_service.get_multi(session, filters=filters)
 
@@ -68,7 +68,7 @@ async def delete_country(
     return await geography_service.country_service.delete(session, country_id)
 
 
-@router.post("/regions", response_model=geography.RegionResponse)
+@router.post("/regions/create", response_model=geography.RegionResponse)
 async def create_region(
     region: geography.RegionCreate,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
@@ -79,10 +79,10 @@ async def create_region(
     )
 
 
-@router.get("/regions", response_model=list[geography.RegionResponse])
+@router.post("/regions", response_model=list[geography.RegionResponse])
 async def get_regions(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: geography.RegionListRequest,
 ):
     load_options = [joinedload(Region.country)]
     return await geography_service.region_service.get_multi(
@@ -135,7 +135,7 @@ async def delete_region(
     return await geography_service.region_service.delete(session, region_id)
 
 
-@router.post("/settlements", response_model=geography.SettlementResponse)
+@router.post("/settlements/create", response_model=geography.SettlementResponse)
 async def create_settlement(
     settlement: geography.SettlementCreate,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
@@ -146,10 +146,10 @@ async def create_settlement(
     )
 
 
-@router.get("/settlements", response_model=list[geography.SettlementResponse])
+@router.post("/settlements", response_model=list[geography.SettlementResponse])
 async def get_settlements(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: geography.SettlementListRequest,
 ):
     load_options = [joinedload(Settlement.region)]
     return await geography_service.settlement_service.get_multi(
@@ -207,7 +207,7 @@ async def delete_settlement(
     return await geography_service.settlement_service.delete(session, settlement_id)
 
 
-@router.post("/districts", response_model=geography.DistrictResponse)
+@router.post("/districts/create", response_model=geography.DistrictResponse)
 async def create_district(
     district: geography.DistrictCreate,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
@@ -222,10 +222,10 @@ async def create_district(
     )
 
 
-@router.get("/districts", response_model=list[geography.DistrictResponse])
+@router.post("/districts", response_model=list[geography.DistrictResponse])
 async def get_districts(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: geography.DistrictListRequest,
 ):
     load_options = [
         joinedload(District.settlement),

@@ -1,6 +1,7 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Sequence
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
@@ -18,6 +19,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.mapping import map_record
 
 from .base import BaseService
+from .list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,6 +55,37 @@ class CountryService(
         await session.execute(stmt, data_to_insert)
         await session.commit()
 
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: geography_schema.CountryListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[geography.Country]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        sort_map = {"name": self.model.name}
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
 
 class RegionService(
     BaseService[
@@ -86,6 +119,55 @@ class RegionService(
         stmt = insert(self.model).on_conflict_do_nothing()
         await session.execute(stmt, data_to_insert)
         await session.commit()
+
+    @staticmethod
+    def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
+        if not value:
+            return None
+        try:
+            return [int(item.strip()) for item in value.split(",") if item.strip()]
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid {field_name}: expected comma-separated integers",
+            ) from exc
+
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: geography_schema.RegionListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[geography.Region]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        countries = self._parse_csv_ids(payload_filters.countries, "countries")
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.country_id, countries)
+
+        sort_map = {
+            "name": self.model.name,
+            "country": self.model.country_id,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
 
 
 class SettlementService(
@@ -150,6 +232,55 @@ class SettlementService(
             "total": len(records),
             "skipped_records": skipped_records,
         }
+
+    @staticmethod
+    def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
+        if not value:
+            return None
+        try:
+            return [int(item.strip()) for item in value.split(",") if item.strip()]
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid {field_name}: expected comma-separated integers",
+            ) from exc
+
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: geography_schema.SettlementListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[geography.Settlement]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        regions = self._parse_csv_ids(payload_filters.regions, "regions")
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.region_id, regions)
+
+        sort_map = {
+            "name": self.model.name,
+            "region": self.model.region_id,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
 
 
 class DistrictService(
@@ -216,6 +347,64 @@ class DistrictService(
             data_to_insert.append(map_record(r, district_mapping, relation_fields))
         await session.execute(insert(self.model), data_to_insert)
         await session.commit()
+
+    @staticmethod
+    def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
+        if not value:
+            return None
+        try:
+            return [int(item.strip()) for item in value.split(",") if item.strip()]
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid {field_name}: expected comma-separated integers",
+            ) from exc
+
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: geography_schema.DistrictListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[geography.District]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        regions = self._parse_csv_ids(payload_filters.regions, "regions")
+        settlements = self._parse_csv_ids(payload_filters.settlements, "settlements")
+        companies = self._parse_csv_ids(payload_filters.companies, "companies")
+
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.region_id, regions)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.settlement_id, settlements
+        )
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+
+        sort_map = {
+            "name": self.model.name,
+            "region": self.model.region_id,
+            "settlement": self.model.settlement_id,
+            "company": self.model.company_id,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
 
 
 country_service = CountryService(geography.Country)

@@ -1,32 +1,34 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.dependencies.current_user import current_operator_user
 from src.db.models import Doctor, MedicalFacility, Pharmacy, User
 from src.db.session import db_session
-from src.schemas import base_filter, client
+from src.schemas import client
 from src.services import client as client_service
 
 router = APIRouter()
 
 
-@router.get(
+@router.post(
     "/client-categories",
     response_model=list[client.ClientCategoryResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_client_categories(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: client.ClientCategoryListRequest,
 ):
-    return await client_service.client_category_service.get_multi(session, filters)
+    return await client_service.client_category_service.get_multi(
+        session, filters=filters
+    )
 
 
 @router.post(
-    "/client-categories",
+    "/client-categories/create",
     response_model=client.ClientCategoryResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -95,14 +97,14 @@ async def delete_client_category(
     )
 
 
-@router.get(
+@router.post(
     "/doctors",
     response_model=list[client.DoctorResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_doctors(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: client.DoctorListRequest,
 ):
     load_options = [
         joinedload(Doctor.responsible_employee),
@@ -117,7 +119,7 @@ async def get_doctors(
 
 
 @router.post(
-    "/doctors",
+    "/doctors/create",
     response_model=client.DoctorResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -203,14 +205,14 @@ async def delete_doctor(
     return await client_service.doctor_service.delete(session, doctor_id)
 
 
-@router.get(
+@router.post(
     "/pharmacies",
     response_model=list[client.PharmacyResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_pharmacies(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: client.PharmacyListRequest,
 ):
     load_options = [
         joinedload(Pharmacy.distributor),
@@ -228,7 +230,7 @@ async def get_pharmacies(
 
 
 @router.post(
-    "/pharmacies",
+    "/pharmacies/create",
     response_model=client.PharmacyResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -325,23 +327,16 @@ async def delete_pharmacy(
     return await client_service.pharmacy_service.delete(session, pharmacy_id)
 
 
-@router.get(
+@router.post(
     "/specialities",
     response_model=list[client.SpecialityResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_specialities(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: client.SpecialityListRequest,
 ):
     return await client_service.speciality_service.get_multi(session, filters=filters)
-
-
-@router.get("/specialities/filter-options", dependencies=[Depends(current_active_user)])
-async def get_filter_options(
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-):
-    return await client_service.speciality_service.get_field_id_pairs(session, "name")
 
 
 @router.post("/specialities/import-excel")
@@ -361,7 +356,7 @@ async def bulk_insert_specialities(
 
 
 @router.post(
-    "/specialities",
+    "/specialities/create",
     response_model=client.SpecialityResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -409,14 +404,14 @@ async def delete_speciality(
     return await client_service.speciality_service.delete(session, speciality_id)
 
 
-@router.get(
+@router.post(
     "/medical-facilities",
     response_model=list[client.MedicalFacilityResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_medical_facilities(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: client.MedicalFacilityListRequest,
 ):
     load_options = [
         joinedload(MedicalFacility.settlement),
@@ -429,7 +424,7 @@ async def get_medical_facilities(
 
 
 @router.post(
-    "/medical-facilities",
+    "/medical-facilities/create",
     response_model=client.MedicalFacilityResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -444,15 +439,6 @@ async def create_medical_facility(
     ]
     return await client_service.medical_facility_service.create(
         session, medical_facility, load_options=load_options
-    )
-
-
-@router.get("/medical-facilities/filter-options")
-async def get_filter_options(
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-):
-    return await client_service.medical_facility_service.get_field_id_pairs(
-        session, "name"
     )
 
 
@@ -525,27 +511,20 @@ async def delete_medical_facility(
     )
 
 
-@router.get(
+@router.post(
     "/distributors",
     response_model=list[client.DistributorResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_distributors(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: client.DistributorListRequest,
 ):
     return await client_service.distributor_service.get_multi(session, filters=filters)
 
 
-@router.get("/distributors/filter-options", dependencies=[Depends(current_active_user)])
-async def get_filter_options(
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-):
-    return await client_service.distributor_service.get_field_id_pairs(session, "name")
-
-
 @router.post(
-    "/distributors",
+    "/distributors/create",
     response_model=client.DistributorResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -609,14 +588,14 @@ async def delete_distributor(
     return await client_service.distributor_service.delete(session, distributor_id)
 
 
-@router.get(
+@router.post(
     "/geo-indicators",
     response_model=list[client.GeoIndicatorResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_geo_indicators(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: client.GeoIndicatorListRequest,
 ):
     return await client_service.geo_indicator_service.get_multi(
         session, filters=filters
@@ -624,7 +603,7 @@ async def get_geo_indicators(
 
 
 @router.post(
-    "/geo-indicators",
+    "/geo-indicators/create",
     response_model=client.GeoIndicatorResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -633,17 +612,6 @@ async def create_geo_indicator(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):
     return await client_service.geo_indicator_service.create(session, geo_indicator)
-
-
-@router.get(
-    "/geo-indicators/filter-options", dependencies=[Depends(current_active_user)]
-)
-async def get_filter_options(
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-):
-    return await client_service.geo_indicator_service.get_field_id_pairs(
-        session, "name"
-    )
 
 
 @router.post("/geo-indicators/import-excel")

@@ -1,7 +1,9 @@
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from .base_filter import BaseFilter, SortDirection
 from .company import CompanySimpleResponse
-from .base_filter import BaseFilter
 
 
 class CountryCreate(BaseModel):
@@ -93,18 +95,52 @@ class DistrictResponse(BaseModel):
     company: CompanySimpleResponse | None
 
 
+class CountryFilter(BaseFilter):
+    name: str | None = None
+
+
 class RegionFilter(BaseFilter):
-    search: str | None = None
-    country_ids: list[int] | None = None
+    name: str | None = None
+    countries: str | None = None
 
 
 class SettlementFilter(BaseFilter):
-    search: str | None = None
-    region_ids: list[int] | None = None
+    name: str | None = None
+    regions: str | None = None
 
 
 class DistrictFilter(BaseFilter):
-    search: str | None = None
-    region_ids: list[int] | None = None
-    settlement_ids: list[int] | None = None
-    company_ids: list[int] | None = None
+    name: str | None = None
+    regions: str | None = None
+    settlements: str | None = None
+    companies: str | None = None
+
+
+CountrySortField = Literal["name"]
+RegionSortField = Literal["name", "country"]
+SettlementSortField = Literal["name", "region"]
+DistrictSortField = Literal["name", "region", "settlement", "company"]
+
+
+class CountryListRequest(BaseModel):
+    filters: CountryFilter = Field(default_factory=CountryFilter)
+    sort_by: CountrySortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class RegionListRequest(BaseModel):
+    filters: RegionFilter = Field(default_factory=RegionFilter)
+    sort_by: RegionSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class SettlementListRequest(BaseModel):
+    filters: SettlementFilter = Field(default_factory=SettlementFilter)
+    sort_by: SettlementSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class DistrictListRequest(BaseModel):
+    filters: DistrictFilter = Field(default_factory=DistrictFilter)
+    sort_by: DistrictSortField | None = None
+    sort_order: SortDirection | None = None

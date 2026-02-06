@@ -1,7 +1,7 @@
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Sequence
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
@@ -32,14 +32,79 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.mapping import map_record
 
 from .base import BaseService
+from .list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
+def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
+    if not value:
+        return None
+    try:
+        return [int(item.strip()) for item in value.split(",") if item.strip()]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid {field_name}: expected comma-separated integers",
+        ) from exc
+
+
 class BrandService(
     BaseService[products.Brand, product.BrandCreate, product.BrandUpdate]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: product.BrandListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[products.Brand]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        promotion_types = _parse_csv_ids(
+            payload_filters.promotion_types, "promotion_types"
+        )
+        product_groups = _parse_csv_ids(
+            payload_filters.product_groups, "product_groups"
+        )
+        companies = _parse_csv_ids(payload_filters.companies, "companies")
+
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.promotion_type_id, promotion_types
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.product_group_id, product_groups
+        )
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+
+        sort_map = {
+            "name": self.model.name,
+            "promotion_types": self.model.promotion_type_id,
+            "product_groups": self.model.product_group_id,
+            "companies": self.model.company_id,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -129,6 +194,36 @@ class PromotionTypeService(
         products.PromotionType, product.PromotionTypeCreate, product.PromotionTypeUpdate
     ]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: product.PromotionTypeListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[products.PromotionType]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -158,6 +253,36 @@ class PromotionTypeService(
 class DosageFormService(
     BaseService[products.DosageForm, product.DosageFormCreate, product.DosageFormUpdate]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: product.DosageFormListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[products.DosageForm]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -185,6 +310,36 @@ class DosageFormService(
 class DosageService(
     BaseService[products.Dosage, product.DosageCreate, product.DosageUpdate]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: product.DosageListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[products.Dosage]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -212,6 +367,36 @@ class DosageService(
 class SegmentService(
     BaseService[products.Segment, product.SegmentCreate, product.SegmentUpdate]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: product.SegmentListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[products.Segment]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -237,6 +422,72 @@ class SegmentService(
 
 
 class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: product.SKUListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[products.SKU]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        brands = _parse_csv_ids(payload_filters.brands, "brands")
+        promotion_types = _parse_csv_ids(
+            payload_filters.promotion_types, "promotion_types"
+        )
+        product_groups = _parse_csv_ids(
+            payload_filters.product_groups, "product_groups"
+        )
+        dosage_forms = _parse_csv_ids(payload_filters.dosage_forms, "dosage_forms")
+        dosages = _parse_csv_ids(payload_filters.dosages, "dosages")
+        segments = _parse_csv_ids(payload_filters.segments, "segments")
+        companies = _parse_csv_ids(payload_filters.companies, "companies")
+
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.brand_id, brands)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.promotion_type_id, promotion_types
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.product_group_id, product_groups
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.dosage_form_id, dosage_forms
+        )
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.dosage_id, dosages)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.segment_id, segments)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+
+        sort_map = {
+            "name": self.model.name,
+            "brands": self.model.brand_id,
+            "promotion_types": self.model.promotion_type_id,
+            "product_groups": self.model.product_group_id,
+            "dosage_forms": self.model.dosage_form_id,
+            "dosages": self.model.dosage_id,
+            "segments": self.model.segment_id,
+            "companies": self.model.company_id,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -358,6 +609,43 @@ class ProductGroupService(
         products.ProductGroup, product.ProductGroupCreate, product.ProductGroupUpdate
     ]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: product.ProductGroupListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[products.ProductGroup]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        companies = _parse_csv_ids(payload_filters.companies, "companies")
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+
+        sort_map = {
+            "name": self.model.name,
+            "companies": self.model.company_id,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):

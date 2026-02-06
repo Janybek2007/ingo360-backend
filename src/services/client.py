@@ -1,8 +1,8 @@
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Sequence
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import asc, desc, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
@@ -34,6 +34,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.mapping import map_record
 
 from .base import BaseService
+from .list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +45,36 @@ class ClientCategoryService(
         clients.ClientCategory, client.ClientCategoryCreate, client.ClientCategoryUpdate
     ]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: client.ClientCategoryListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[clients.ClientCategory]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -72,6 +103,88 @@ class ClientCategoryService(
 class DoctorService(
     BaseService[clients.Doctor, client.DoctorCreate, client.DoctorUpdate]
 ):
+    @staticmethod
+    def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
+        if not value:
+            return None
+        try:
+            return [int(item.strip()) for item in value.split(",") if item.strip()]
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid {field_name}: expected comma-separated integers",
+            ) from exc
+
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: client.DoctorListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[clients.Doctor]:
+        payload_filters = filters.filters
+
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        full_name_filter = payload_filters.full_name
+        if full_name_filter:
+            stmt = stmt.where(self.model.full_name.ilike(f"%{full_name_filter}%"))
+
+        medical_facilities = self._parse_csv_ids(
+            payload_filters.medical_facilities, "medical_facilities"
+        )
+        responsible_employees = self._parse_csv_ids(
+            payload_filters.responsible_employees, "responsible_employees"
+        )
+        specialities = self._parse_csv_ids(payload_filters.specialities, "specialities")
+        client_categories = self._parse_csv_ids(
+            payload_filters.client_categories, "client_categories"
+        )
+        product_groups = self._parse_csv_ids(
+            payload_filters.product_groups, "product_groups"
+        )
+
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.medical_facility_id, medical_facilities
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.responsible_employee_id, responsible_employees
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.speciality_id, specialities
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.client_category_id, client_categories
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.product_group_id, product_groups
+        )
+
+        sort_map = {
+            "full_name": self.model.full_name,
+            "medical_facility": self.model.medical_facility_id,
+            "responsible_employee": self.model.responsible_employee_id,
+            "speciality": self.model.speciality_id,
+            "client_category": self.model.client_category_id,
+            "product_group": self.model.product_group_id,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -190,6 +303,100 @@ class DoctorService(
 class PharmacyService(
     BaseService[clients.Pharmacy, client.PharmacyCreate, client.PharmacyUpdate]
 ):
+    @staticmethod
+    def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
+        if not value:
+            return None
+        try:
+            return [int(item.strip()) for item in value.split(",") if item.strip()]
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid {field_name}: expected comma-separated integers",
+            ) from exc
+
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: client.PharmacyListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[clients.Pharmacy]:
+        payload_filters = filters.filters
+
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        sort_map = {
+            "name": self.model.name,
+            "companies": self.model.company_id,
+            "distributors": self.model.distributor_id,
+            "responsible_employees": self.model.responsible_employee_id,
+            "settlements": self.model.settlement_id,
+            "districts": self.model.district_id,
+            "client_categories": self.model.client_category_id,
+            "product_groups": self.model.product_group_id,
+            "geo_indicators": self.model.geo_indicator_id,
+        }
+
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.id.desc()
+        )
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        companies = self._parse_csv_ids(payload_filters.companies, "companies")
+        distributors = self._parse_csv_ids(payload_filters.distributors, "distributors")
+        responsible_employees = self._parse_csv_ids(
+            payload_filters.responsible_employees, "responsible_employees"
+        )
+        settlements = self._parse_csv_ids(payload_filters.settlements, "settlements")
+        districts = self._parse_csv_ids(payload_filters.districts, "districts")
+        client_categories = self._parse_csv_ids(
+            payload_filters.client_categories, "client_categories"
+        )
+        product_groups = self._parse_csv_ids(
+            payload_filters.product_groups, "product_groups"
+        )
+        geo_indicators = self._parse_csv_ids(
+            payload_filters.geo_indicators, "geo_indicators"
+        )
+
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.distributor_id, distributors
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.responsible_employee_id, responsible_employees
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.settlement_id, settlements
+        )
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.district_id, districts)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.client_category_id, client_categories
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.product_group_id, product_groups
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.geo_indicator_id, geo_indicators
+        )
+
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -214,6 +421,19 @@ class PharmacyService(
 
         has_region_column = any("область" in r for r in records)
         has_company_column = any("компания" in r for r in records)
+        has_product_group_column = any("группа" in r for r in records)
+
+        if not has_company_column:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="В файле отсутствует обязательная колонка 'компания'",
+            )
+
+        if not has_product_group_column:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="В файле отсутствует обязательная колонка 'группа'",
+            )
 
         group_values = {r.get("группа") for r in records if r.get("группа") is not None}
         company_values = {
@@ -360,12 +580,20 @@ class PharmacyService(
 
         for idx, r in enumerate(records):
             missing_keys = []
+            group_name = r.get("группа")
+            company_name = r.get("компания")
 
-            if r.get("группа") in missing_product_groups:
-                missing_keys.append(f"группа: {r['группа']}")
+            if not group_name:
+                missing_keys.append("группа: значение не заполнено")
 
-            if r.get("компания") in missing_companies:
-                missing_keys.append(f"компания: {r['компания']}")
+            if group_name in missing_product_groups:
+                missing_keys.append(f"группа: {group_name}")
+
+            if not company_name:
+                missing_keys.append("компания: значение не заполнено")
+
+            if company_name in missing_companies:
+                missing_keys.append(f"компания: {company_name}")
 
             if has_region_column and r.get("область") in missing_regions:
                 missing_keys.append(f"область: {r['область']}")
@@ -423,16 +651,16 @@ class PharmacyService(
 
             relation_fields = {
                 "responsible_employee_id": employee_map.get(
-                    r["фио ответственного сотрудника"]
+                    r.get("фио ответственного сотрудника")
                 ),
-                "client_category_id": client_category_map.get(r["категория"]),
-                "product_group_id": product_group_map.get(r["группа"]),
-                "distributor_id": distributor_map.get(r["дистрибьютор / сеть"]),
+                "client_category_id": client_category_map.get(r.get("категория")),
+                "product_group_id": product_group_map.get(group_name),
+                "distributor_id": distributor_map.get(r.get("дистрибьютор / сеть")),
                 "district_id": district_id,
                 "settlement_id": settlement_id,
                 "company_id": company_id,
                 "import_log_id": import_log.id,
-                "geo_indicator_id": geo_indicator_map.get(r["индикатор"]),
+                "geo_indicator_id": geo_indicator_map.get(r.get("индикатор")),
             }
             data_to_insert.append(map_record(r, pharmacy_mapping, relation_fields))
 
@@ -453,6 +681,48 @@ class PharmacyService(
 class SpecialityService(
     BaseService[clients.Speciality, client.SpecialityCreate, client.SpecialityUpdate]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: client.SpecialityListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[clients.Speciality]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
+    @staticmethod
+    def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
+        if not value:
+            return None
+        try:
+            return [int(item.strip()) for item in value.split(",") if item.strip()]
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid {field_name}: expected comma-separated integers",
+            ) from exc
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -483,6 +753,68 @@ class MedicalFacilityService(
         client.MedicalFacilityUpdate,
     ]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: client.MedicalFacilityListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[clients.MedicalFacility]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        settlements = self._parse_csv_ids(payload_filters.settlements, "settlements")
+        districts = self._parse_csv_ids(payload_filters.districts, "districts")
+        geo_indicators = self._parse_csv_ids(
+            payload_filters.geo_indicators, "geo_indicators"
+        )
+
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.settlement_id, settlements
+        )
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.district_id, districts)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.geo_indicator_id, geo_indicators
+        )
+
+        sort_map = {
+            "name": self.model.name,
+            "settlements": self.model.settlement_id,
+            "districts": self.model.district_id,
+            "geo_indicators": self.model.geo_indicator_id,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+
+    @staticmethod
+    def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
+        if not value:
+            return None
+        try:
+            return [int(item.strip()) for item in value.split(",") if item.strip()]
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid {field_name}: expected comma-separated integers",
+            ) from exc
+
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
@@ -678,6 +1010,35 @@ class MedicalFacilityService(
 class DistributorService(
     BaseService[clients.Distributor, client.DistributorCreate, client.DistributorUpdate]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: client.DistributorListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[clients.Distributor]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
 
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
@@ -705,6 +1066,35 @@ class DistributorService(
 class GeoIndicatorService(
     BaseService[GeoIndicator, client.GeoIndicatorCreate, client.GeoIndicatorUpdate]
 ):
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: client.GeoIndicatorListRequest,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[GeoIndicator]:
+        payload_filters = filters.filters
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        if payload_filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(
+            stmt, payload_filters.limit, payload_filters.offset
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
 
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int

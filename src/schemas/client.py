@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from src.schemas.base_filter import BaseFilter
+from src.schemas.base_filter import BaseFilter, SortDirection
 from src.schemas.company import CompanySimpleResponse
 from src.schemas.employee import EmployeeSimpleResponse
 from src.schemas.geography import DistrictSimpleResponse, SettlementSimpleResponse
@@ -182,29 +182,109 @@ class PharmacyResponse(BaseModel):
 
 
 class MedicalFacilityFilter(BaseFilter):
-    search: str | None = None
-    medical_facility_ids: list[int] | None = None
-    settlement_ids: list[int] | None = None
-    district_ids: list[int] | None = None
-    geo_indicator_ids: list[int] | None = None
+    name: str | None = None
+    settlements: str | None = None
+    districts: str | None = None
+    geo_indicators: str | None = None
+
+
+class ClientCategoryFilter(BaseFilter):
+    name: str | None = None
+
+
+class SpecialityFilter(BaseFilter):
+    name: str | None = None
+
+
+class DistributorFilter(BaseFilter):
+    name: str | None = None
+
+
+class GeoIndicatorFilter(BaseFilter):
+    name: str | None = None
 
 
 class DoctorFilter(BaseFilter):
-    search: str | None = None
-    medical_facility_ids: list[int] | None = None
-    responsible_employee_ids: list[int] | None = None
-    speciality_ids: list[int] | None = None
-    client_category_ids: list[int] | None = None
-    product_group_ids: list[int] | None = None
+    full_name: str | None = None
+    medical_facilities: str | None = None
+    responsible_employees: str | None = None
+    specialities: str | None = None
+    client_categories: str | None = None
+    product_groups: str | None = None
 
 
 class PharmacyFilter(BaseFilter):
-    search: str | None = None
-    responsible_employee_ids: list[int] | None = None
-    company_ids: list[int] | None = None
-    client_category_ids: list[int] | None = None
-    product_group_ids: list[int] | None = None
-    settlement_ids: list[int] | None = None
-    district_ids: list[int] | None = None
-    geo_indicator_ids: list[int] | None = None
-    distributor_ids: list[int] | None = None
+    name: str | None = None
+    companies: str | None = None
+    distributors: str | None = None
+    responsible_employees: str | None = None
+    settlements: str | None = None
+    districts: str | None = None
+    client_categories: str | None = None
+    product_groups: str | None = None
+    geo_indicators: str | None = None
+
+
+class PharmacyListRequest(BaseModel):
+    filters: PharmacyFilter = Field(default_factory=PharmacyFilter)
+    sort_by: (
+        Literal[
+            "name",
+            "companies",
+            "distributors",
+            "responsible_employees",
+            "settlements",
+            "districts",
+            "client_categories",
+            "product_groups",
+            "geo_indicators",
+        ]
+        | None
+    ) = None
+    sort_order: SortDirection | None = None
+
+
+class DoctorListRequest(BaseModel):
+    filters: DoctorFilter = Field(default_factory=DoctorFilter)
+    sort_by: (
+        Literal[
+            "full_name",
+            "medical_facility",
+            "responsible_employee",
+            "speciality",
+            "client_category",
+            "product_group",
+        ]
+        | None
+    ) = None
+    sort_order: SortDirection | None = None
+
+
+class ClientCategoryListRequest(BaseModel):
+    filters: ClientCategoryFilter = Field(default_factory=ClientCategoryFilter)
+    sort_by: Literal["name"] | None = None
+    sort_order: SortDirection | None = None
+
+
+class SpecialityListRequest(BaseModel):
+    filters: SpecialityFilter = Field(default_factory=SpecialityFilter)
+    sort_by: Literal["name"] | None = None
+    sort_order: SortDirection | None = None
+
+
+class DistributorListRequest(BaseModel):
+    filters: DistributorFilter = Field(default_factory=DistributorFilter)
+    sort_by: Literal["name"] | None = None
+    sort_order: SortDirection | None = None
+
+
+class GeoIndicatorListRequest(BaseModel):
+    filters: GeoIndicatorFilter = Field(default_factory=GeoIndicatorFilter)
+    sort_by: Literal["name"] | None = None
+    sort_order: SortDirection | None = None
+
+
+class MedicalFacilityListRequest(BaseModel):
+    filters: MedicalFacilityFilter = Field(default_factory=MedicalFacilityFilter)
+    sort_by: Literal["name", "settlements", "districts", "geo_indicators"] | None = None
+    sort_order: SortDirection | None = None

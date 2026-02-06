@@ -81,31 +81,3 @@ async def get_market_data(
         session: Annotated['AsyncSession', Depends(db_session.get_session)],
 ):
     return await ims_service.get_table_data(session, filters)
-
-
-@router.get('/filter-options/company-name', dependencies=[Depends(current_active_user)])
-async def get_company_names(
-        session: Annotated['AsyncSession', Depends(db_session.get_session)],
-):
-    return await ims_service.get_field(session, 'company')
-
-
-@router.get('/filter-options/brand-name', dependencies=[Depends(current_active_user)])
-async def get_brand_names(
-        session: Annotated['AsyncSession', Depends(db_session.get_session)],
-):
-    return await ims_service.get_field(session, 'brand')
-
-
-@router.get('/filter-options/segment-name', dependencies=[Depends(current_active_user)])
-async def get_segment_names(
-        session: Annotated['AsyncSession', Depends(db_session.get_session)],
-):
-    return await ims_service.get_field(session, 'segment')
-
-
-@router.get('/filter-options/dosage-form-name', dependencies=[Depends(current_active_user)])
-async def get_dosage_form_names(
-        session: Annotated['AsyncSession', Depends(db_session.get_session)],
-):
-    return await ims_service.get_field(session, 'dosage_form')

@@ -1,20 +1,20 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
 from src.db.models import SKU, Brand, ProductGroup, User
 from src.db.session import db_session
-from src.schemas import base_filter, product
+from src.schemas import product
 from src.services import product as product_serv
 
 router = APIRouter()
 
 
 @router.post(
-    "/product-groups",
+    "/product-groups/create",
     response_model=product.ProductGroupResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -44,28 +44,18 @@ async def bulk_insert_product_groups(
     )
 
 
-@router.get(
+@router.post(
     "/product-groups",
     response_model=list[product.ProductGroupResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_product_groups(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: product.ProductGroupListRequest,
 ):
     load_options = [joinedload(ProductGroup.company)]
     return await product_serv.product_group_service.get_multi(
         session, load_options=load_options, filters=filters
-    )
-
-
-@router.get("/product-groups/filter-options")
-async def get_filter_options(
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    current_user: Annotated[User, Depends(current_active_user)],
-):
-    return await product_serv.product_group_service.get_field_id_pairs(
-        session, "name", company_id=current_user.company_id
     )
 
 
@@ -109,7 +99,7 @@ async def delete_product_group(
 
 
 @router.post(
-    "/brands",
+    "/brands/create",
     response_model=product.BrandResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -127,14 +117,14 @@ async def create_brand(
     )
 
 
-@router.get(
+@router.post(
     "/brands",
     response_model=list[product.BrandResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_brands(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: product.BrandListRequest,
 ):
     load_options = [
         joinedload(Brand.promotion_type),
@@ -143,16 +133,6 @@ async def get_brands(
     ]
     return await product_serv.brand_service.get_multi(
         session, load_options=load_options, filters=filters
-    )
-
-
-@router.get("/brands/filter-options")
-async def get_filter_options(
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    current_user: Annotated[User, Depends(current_active_user)],
-):
-    return await product_serv.brand_service.get_field_id_pairs(
-        session, "name", company_id=current_user.company_id
     )
 
 
@@ -219,7 +199,7 @@ async def delete_brand(
 
 
 @router.post(
-    "/promotion-types",
+    "/promotion-types/create",
     response_model=product.PromotionTypeResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -246,25 +226,16 @@ async def bulk_insert_promotion_types(
     )
 
 
-@router.get(
+@router.post(
     "/promotion-types",
     response_model=list[product.PromotionTypeResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_promotion_types(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: product.PromotionTypeListRequest,
 ):
     return await product_serv.promotion_type_service.get_multi(session, filters=filters)
-
-
-@router.get(
-    "/promotion-types/filter-options", dependencies=[Depends(current_active_user)]
-)
-async def get_filter_options(
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-):
-    return await product_serv.promotion_type_service.get_field_id_pairs(session, "name")
 
 
 @router.get(
@@ -308,7 +279,7 @@ async def delete_promotion_type(
 
 
 @router.post(
-    "/dosage-forms",
+    "/dosage-forms/create",
     response_model=product.DosageFormResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -319,14 +290,14 @@ async def create_dosage_form(
     return await product_serv.dosage_form_service.create(session, dosage_form)
 
 
-@router.get(
+@router.post(
     "/dosage-forms",
     response_model=list[product.DosageFormResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_dosage_forms(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: product.DosageFormListRequest,
 ):
     return await product_serv.dosage_form_service.get_multi(session, filters=filters)
 
@@ -385,7 +356,7 @@ async def delete_dosage_form(
 
 
 @router.post(
-    "/dosages",
+    "/dosages/create",
     response_model=product.DosageResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -396,14 +367,14 @@ async def create_dosage(
     return await product_serv.dosage_service.create(session, dosage)
 
 
-@router.get(
+@router.post(
     "/dosages",
     response_model=list[product.DosageResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_dosages(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: product.DosageListRequest,
 ):
     return await product_serv.dosage_service.get_multi(session, filters=filters)
 
@@ -456,7 +427,7 @@ async def delete_dosage(
 
 
 @router.post(
-    "/segments",
+    "/segments/create",
     response_model=product.SegmentResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -467,14 +438,14 @@ async def create_segment(
     return await product_serv.segment_service.create(session, segment)
 
 
-@router.get(
+@router.post(
     "/segments",
     response_model=list[product.SegmentResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_segments(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: product.SegmentListRequest,
 ):
     return await product_serv.segment_service.get_multi(session, filters=filters)
 
@@ -527,7 +498,7 @@ async def delete_segment(
 
 
 @router.post(
-    "/skus",
+    "/skus/create",
     response_model=product.SKUResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -549,14 +520,14 @@ async def create_sku(
     )
 
 
-@router.get(
+@router.post(
     "/skus",
     response_model=list[product.SKUResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_skus(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: product.SKUListRequest,
 ):
     load_options = [
         joinedload(SKU.brand),
@@ -569,16 +540,6 @@ async def get_skus(
     ]
     return await product_serv.sku_service.get_multi(
         session, load_options=load_options, filters=filters
-    )
-
-
-@router.get("/skus/filter-options")
-async def get_filter_options(
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    current_user: Annotated[User, Depends(current_active_user)],
-):
-    return await product_serv.promotion_type_service.get_field_id_pairs(
-        session, "name", company_id=current_user.company_id
     )
 
 
