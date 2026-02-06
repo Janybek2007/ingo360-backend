@@ -3,9 +3,9 @@ services:
   back:
     build: .
     expose:
-     - "8000"
+      - '8000'
     volumes:
-     - .:/app
+      - .:/app
     depends_on:
       - db
     restart: always
@@ -13,22 +13,25 @@ services:
       - .env
 
   db:
+    # image: postgres:17-alpine
     image: postgres:15-alpine
     restart: always
     env_file:
       - .env
     volumes:
       - ./postgres:/var/lib/postgresql/data
+      # - postgres_data:/var/lib/postgresql/data
     expose:
-      - "5432"
+      - '5432'
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - '80:80'
+      - '443:443'
     volumes:
       - /home/basic/ingo360-frontend/dist:/usr/share/nginx/html:ro
       - ./nginx/nginx.ssl.conf:/etc/nginx/nginx.conf
+      # - ./nginx/nginx.nossl.conf:/etc/nginx/nginx.conf
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
@@ -36,3 +39,4 @@ services:
     restart: always
 volumes:
   postgres:
+  # postgres_data:

@@ -10,11 +10,12 @@ from sqlalchemy import (
     case,
     cast,
     func,
-    insert,
     or_,
     select,
+    tuple_,
     update,
 )
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from src.db.models import (
     SKU,
@@ -47,6 +48,53 @@ from .base import BaseService, ModelType
 if TYPE_CHECKING:
     from fastapi import UploadFile
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _deduplicate_batch_rows(
+    rows: list[dict[str, Any]], key_fields: tuple[str, ...]
+) -> list[dict[str, Any]]:
+    dedup_map: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = tuple(row[field] for field in key_fields)
+        dedup_map[key] = row
+    return list(dedup_map.values())
+
+
+async def _upsert_batch_with_stats(
+    session: "AsyncSession",
+    model: Any,
+    rows: list[dict[str, Any]],
+    key_fields: tuple[str, ...],
+    constraint_name: str,
+) -> tuple[int, int, int, int]:
+    if not rows:
+        return 0, 0, 0, 0
+
+    deduped_rows = _deduplicate_batch_rows(rows, key_fields)
+    deduplicated_in_batch = len(rows) - len(deduped_rows)
+
+    key_columns = tuple(getattr(model, field) for field in key_fields)
+    keys = [tuple(row[field] for field in key_fields) for row in deduped_rows]
+
+    existing_stmt = select(*key_columns).where(tuple_(*key_columns).in_(keys))
+    existing_result = await session.execute(existing_stmt)
+    existing_keys = set(existing_result.all())
+
+    stmt = pg_insert(model).values(deduped_rows)
+    stmt = stmt.on_conflict_do_update(
+        constraint=constraint_name,
+        set_={
+            "packages": stmt.excluded.packages,
+            "amount": stmt.excluded.amount,
+        },
+    )
+    await session.execute(stmt)
+
+    updated = len(existing_keys)
+    inserted = len(deduped_rows) - updated
+    imported = len(deduped_rows)
+
+    return imported, inserted, updated, deduplicated_in_batch
 
 
 class PrimarySalesAndStockService(
@@ -98,6 +146,9 @@ class PrimarySalesAndStockService(
             skipped_records = []
             data_to_insert = []
             imported = 0
+            inserted = 0
+            updated = 0
+            deduplicated_in_batch = 0
 
             for row_index, record in iter_excel_records(temp):
                 missing_keys = []
@@ -128,20 +179,63 @@ class PrimarySalesAndStockService(
                 )
 
                 if len(data_to_insert) >= batch_size:
-                    await session.execute(insert(self.model), data_to_insert)
-                    imported += len(data_to_insert)
+                    (
+                        batch_imported,
+                        batch_inserted,
+                        batch_updated,
+                        batch_deduplicated,
+                    ) = await _upsert_batch_with_stats(
+                        session=session,
+                        model=self.model,
+                        rows=data_to_insert,
+                        key_fields=(
+                            "distributor_id",
+                            "sku_id",
+                            "month",
+                            "year",
+                            "indicator",
+                        ),
+                        constraint_name="uq_primary_sales_business_key",
+                    )
+                    imported += batch_imported
+                    inserted += batch_inserted
+                    updated += batch_updated
+                    deduplicated_in_batch += batch_deduplicated
                     data_to_insert = []
 
             if data_to_insert:
-                await session.execute(insert(self.model), data_to_insert)
-                imported += len(data_to_insert)
+                (
+                    batch_imported,
+                    batch_inserted,
+                    batch_updated,
+                    batch_deduplicated,
+                ) = await _upsert_batch_with_stats(
+                    session=session,
+                    model=self.model,
+                    rows=data_to_insert,
+                    key_fields=(
+                        "distributor_id",
+                        "sku_id",
+                        "month",
+                        "year",
+                        "indicator",
+                    ),
+                    constraint_name="uq_primary_sales_business_key",
+                )
+                imported += batch_imported
+                inserted += batch_inserted
+                updated += batch_updated
+                deduplicated_in_batch += batch_deduplicated
 
             await session.commit()
 
             return {
-                "imported": imported,
-                "skipped": len(skipped_records),
                 "total": total_records,
+                "skipped": len(skipped_records),
+                "imported": imported,
+                "inserted": inserted,
+                "updated": updated,
+                "deduplicated_in_batch": deduplicated_in_batch,
                 "skipped_records": skipped_records,
             }
         finally:
@@ -1249,6 +1343,9 @@ class SecondarySalesService(
             skipped_records = []
             data_to_insert = []
             imported = 0
+            inserted = 0
+            updated = 0
+            deduplicated_in_batch = 0
 
             for row_index, record in iter_excel_records(temp):
                 missing_keys = []
@@ -1279,20 +1376,63 @@ class SecondarySalesService(
                 )
 
                 if len(data_to_insert) >= batch_size:
-                    await session.execute(insert(self.model), data_to_insert)
-                    imported += len(data_to_insert)
+                    (
+                        batch_imported,
+                        batch_inserted,
+                        batch_updated,
+                        batch_deduplicated,
+                    ) = await _upsert_batch_with_stats(
+                        session=session,
+                        model=self.model,
+                        rows=data_to_insert,
+                        key_fields=(
+                            "pharmacy_id",
+                            "sku_id",
+                            "month",
+                            "year",
+                            "indicator",
+                        ),
+                        constraint_name="uq_secondary_sales_business_key",
+                    )
+                    imported += batch_imported
+                    inserted += batch_inserted
+                    updated += batch_updated
+                    deduplicated_in_batch += batch_deduplicated
                     data_to_insert = []
 
             if data_to_insert:
-                await session.execute(insert(self.model), data_to_insert)
-                imported += len(data_to_insert)
+                (
+                    batch_imported,
+                    batch_inserted,
+                    batch_updated,
+                    batch_deduplicated,
+                ) = await _upsert_batch_with_stats(
+                    session=session,
+                    model=self.model,
+                    rows=data_to_insert,
+                    key_fields=(
+                        "pharmacy_id",
+                        "sku_id",
+                        "month",
+                        "year",
+                        "indicator",
+                    ),
+                    constraint_name="uq_secondary_sales_business_key",
+                )
+                imported += batch_imported
+                inserted += batch_inserted
+                updated += batch_updated
+                deduplicated_in_batch += batch_deduplicated
 
             await session.commit()
 
             return {
-                "imported": imported,
-                "skipped": len(skipped_records),
                 "total": total_records,
+                "skipped": len(skipped_records),
+                "imported": imported,
+                "inserted": inserted,
+                "updated": updated,
+                "deduplicated_in_batch": deduplicated_in_batch,
                 "skipped_records": skipped_records,
             }
         finally:
@@ -1887,6 +2027,9 @@ class TertiarySalesService(
             skipped_records = []
             data_to_insert = []
             imported = 0
+            inserted = 0
+            updated = 0
+            deduplicated_in_batch = 0
 
             for row_index, record in iter_excel_records(temp):
                 missing_keys = []
@@ -1917,20 +2060,63 @@ class TertiarySalesService(
                 )
 
                 if len(data_to_insert) >= batch_size:
-                    await session.execute(insert(self.model), data_to_insert)
-                    imported += len(data_to_insert)
+                    (
+                        batch_imported,
+                        batch_inserted,
+                        batch_updated,
+                        batch_deduplicated,
+                    ) = await _upsert_batch_with_stats(
+                        session=session,
+                        model=self.model,
+                        rows=data_to_insert,
+                        key_fields=(
+                            "pharmacy_id",
+                            "sku_id",
+                            "month",
+                            "year",
+                            "indicator",
+                        ),
+                        constraint_name="uq_tertiary_sales_business_key",
+                    )
+                    imported += batch_imported
+                    inserted += batch_inserted
+                    updated += batch_updated
+                    deduplicated_in_batch += batch_deduplicated
                     data_to_insert = []
 
             if data_to_insert:
-                await session.execute(insert(self.model), data_to_insert)
-                imported += len(data_to_insert)
+                (
+                    batch_imported,
+                    batch_inserted,
+                    batch_updated,
+                    batch_deduplicated,
+                ) = await _upsert_batch_with_stats(
+                    session=session,
+                    model=self.model,
+                    rows=data_to_insert,
+                    key_fields=(
+                        "pharmacy_id",
+                        "sku_id",
+                        "month",
+                        "year",
+                        "indicator",
+                    ),
+                    constraint_name="uq_tertiary_sales_business_key",
+                )
+                imported += batch_imported
+                inserted += batch_inserted
+                updated += batch_updated
+                deduplicated_in_batch += batch_deduplicated
 
             await session.commit()
 
             return {
-                "imported": imported,
-                "skipped": len(skipped_records),
                 "total": total_records,
+                "skipped": len(skipped_records),
+                "imported": imported,
+                "inserted": inserted,
+                "updated": updated,
+                "deduplicated_in_batch": deduplicated_in_batch,
                 "skipped_records": skipped_records,
             }
         finally:
