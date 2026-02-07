@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.schemas.base_filter import BaseFilter
+
 from .base_filter import BaseFilter, SortDirection
 from .company import CompanySimpleResponse
 
@@ -122,25 +124,26 @@ SettlementSortField = Literal["name", "region"]
 DistrictSortField = Literal["name", "region", "settlement", "company"]
 
 
-class CountryListRequest(BaseModel):
-    filters: CountryFilter = Field(default_factory=CountryFilter)
+class CountryListRequest(BaseFilter):
+    name: str | None = None
     sort_by: CountrySortField | None = None
-    sort_order: SortDirection | None = None
 
 
-class RegionListRequest(BaseModel):
-    filters: RegionFilter = Field(default_factory=RegionFilter)
+class RegionListRequest(BaseFilter):
+    name: str | None = None
+    country_ids: list[int] | None = None
     sort_by: RegionSortField | None = None
-    sort_order: SortDirection | None = None
 
 
-class SettlementListRequest(BaseModel):
-    filters: SettlementFilter = Field(default_factory=SettlementFilter)
+class SettlementListRequest(BaseFilter):
+    name: str | None = None
+    region_ids: list[int] | None = None
     sort_by: SettlementSortField | None = None
-    sort_order: SortDirection | None = None
 
 
-class DistrictListRequest(BaseModel):
-    filters: DistrictFilter = Field(default_factory=DistrictFilter)
+class DistrictListRequest(BaseFilter):
+    name: str | None = None
+    region_ids: list[int] | None = None
+    settlement_ids: list[int] | None = None
+    company_ids: list[int] | None = None
     sort_by: DistrictSortField | None = None
-    sort_order: SortDirection | None = None

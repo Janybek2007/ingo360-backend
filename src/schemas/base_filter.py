@@ -8,3 +8,5 @@ SortDirection = Literal["ASC", "DESC"]
 class BaseFilter(BaseModel):
     limit: int | None = None
     offset: int = 0
+    sort_order: SortDirection | None = None
+    

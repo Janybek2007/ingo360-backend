@@ -3,9 +3,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.schemas.product import ProductGroupSimpleResponse
+from src.schemas.base_filter import SortDirection
+from src.schemas.client import (
+    DoctorSimpleResponse,
+    MedicalFacilitySimpleResponse,
+    PharmacySimpleResponse,
+)
 from src.schemas.employee import EmployeeSimpleResponse
-from src.schemas.client import MedicalFacilitySimpleResponse, DoctorSimpleResponse, PharmacySimpleResponse
+from src.schemas.product import ProductGroupSimpleResponse
 
 
 class VisitCreate(BaseModel):
@@ -82,9 +87,20 @@ class DoctorsCountWithVisitFilter(BaseModel):
     years: list[int] = Field(default_factory=lambda: [date.today().year])
     limit: int | None = None
     offset: int = 0
-    group_by_dimensions: list[Literal["medical_facility", "speciality", "doctor"]] = Field(
-        default_factory=lambda: ["medical_facility", "speciality", "doctor"]
+    group_by_dimensions: list[Literal["medical_facility", "speciality", "doctor"]] = (
+        Field(default_factory=lambda: ["medical_facility", "speciality", "doctor"])
     )
+    sort_by: (
+        Literal[
+            "medical_facility",
+            "doctor",
+            "speciality",
+            "total_doctors",
+            "doctors_with_visits",
+        ]
+        | None
+    ) = None
+    sort_order: SortDirection | None = None
 
 
 class VisitCountFilter(BaseModel):
@@ -115,9 +131,43 @@ class VisitSumForPeriodFilter(BaseModel):
     years: list[int] | None = None
     geo_indicator_ids: list[int] | None = None
     speciality_ids: list[int] | None = None
-    group_by_dimensions: list[Literal["pharmacy", "medical_facility", "year", "month", "employee", "product_group", "geo_indicator", "speciality", "doctor"]] = Field(
-        default_factory=lambda: ["pharmacy", "medical_facility", "year", "month", "employee", "product_group", "geo_indicator", "speciality", "doctor"]
+    group_by_dimensions: list[
+        Literal[
+            "pharmacy",
+            "medical_facility",
+            "year",
+            "month",
+            "employee",
+            "product_group",
+            "geo_indicator",
+            "speciality",
+            "doctor",
+        ]
+    ] = Field(
+        default_factory=lambda: [
+            "pharmacy",
+            "medical_facility",
+            "year",
+            "month",
+            "employee",
+            "product_group",
+            "geo_indicator",
+            "speciality",
+            "doctor",
+        ]
     )
+    sort_by: (
+        Literal[
+            "medical_facility",
+            "pharmacy",
+            "employee",
+            "group",
+            "employee_visits",
+            "geo_indicator",
+        ]
+        | None
+    ) = None
+    sort_order: SortDirection | None = None
 
 
 class VisitCountPeriodResponse(BaseModel):
@@ -137,4 +187,3 @@ class VisitCountPeriodResponse(BaseModel):
     speciality_id: int | None
     speciality_name: str | None
     doctor_name: str | None
-

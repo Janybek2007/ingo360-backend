@@ -30,13 +30,13 @@ from src.services.sale import (
 router = APIRouter()
 
 
-@router.get(
+@router.post(
     "/primary",
     response_model=list[sale.PrimarySalesAndStockResponse],
     dependencies=[Depends(current_operator_user)],
 )
-async def get_primary_sales(
-    filters: Annotated[sale.PrimarySalesAndStockFilter, Query()],
+async def list_primary_sales(
+    payload: sale.PrimarySalesAndStockListRequest,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):
     load_options = [
@@ -44,12 +44,12 @@ async def get_primary_sales(
         joinedload(PrimarySalesAndStock.distributor),
     ]
     return await primary_sales_service.get_multi(
-        session, filters, load_options=load_options
+        session, payload, load_options=load_options
     )
 
 
 @router.post(
-    "/primary",
+    "/primary/create",
     response_model=sale.PrimarySalesAndStockResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -83,12 +83,12 @@ async def bulk_insert_primary_sales(
     return result
 
 
-@router.get(
+@router.post(
     "/primary/reports/stock-levels", dependencies=[Depends(can_view_primary_sales)]
 )
 async def get_primary_stock(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[sale.ShipmentStockFilter, Query()],
+    filters: sale.ShipmentStockFilter,
     current_user: Annotated[User, Depends(current_active_user)],
 ):
     return await primary_sales_service.get_shipment_stock_report(
@@ -99,9 +99,9 @@ async def get_primary_stock(
     )
 
 
-@router.get("/primary/reports/sales", dependencies=[Depends(can_view_primary_sales)])
+@router.post("/primary/reports/sales", dependencies=[Depends(can_view_primary_sales)])
 async def get_primary_sales(
-    filters: Annotated[sale.ShipmentStockFilter, Query()],
+    filters: sale.ShipmentStockFilter,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
@@ -113,9 +113,9 @@ async def get_primary_sales(
     )
 
 
-@router.get("/primary/reports/chart", dependencies=[Depends(can_view_primary_sales)])
+@router.post("/primary/reports/chart", dependencies=[Depends(can_view_primary_sales)])
 async def get_primary_sales_chart(
-    filters: Annotated[sale.PeriodFilter, Query()],
+    filters: sale.PeriodFilter,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
@@ -124,11 +124,11 @@ async def get_primary_sales_chart(
     )
 
 
-@router.get(
+@router.post(
     "/primary/reports/stock-coverages", dependencies=[Depends(can_view_primary_sales)]
 )
 async def get_inventory(
-    filters: Annotated[sale.StockCoverageFilter, Query()],
+    filters: sale.StockCoverageFilter,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
@@ -139,12 +139,12 @@ async def get_inventory(
     )
 
 
-@router.get(
+@router.post(
     "/primary/reports/distributor-shares",
     dependencies=[Depends(can_view_primary_sales)],
 )
 async def get_distributor_share(
-    filters: Annotated[sale.DistributorShareFilter, Query()],
+    filters: sale.DistributorShareFilter,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
@@ -155,12 +155,12 @@ async def get_distributor_share(
     )
 
 
-@router.get(
+@router.post(
     "/primary/reports/distributor-shares/chart",
     dependencies=[Depends(can_view_primary_sales)],
 )
 async def get_distributor_shares_chart(
-    filters: Annotated[sale.SalesReportFilter, Query()],
+    filters: sale.SalesReportFilter,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
@@ -230,13 +230,13 @@ async def delete_primary_sales(
     return await primary_sales_service.delete(session, primary_sales_id)
 
 
-@router.get(
+@router.post(
     "/secondary",
     response_model=list[sale.SecondarySalesResponse],
     dependencies=[Depends(current_operator_user)],
 )
-async def get_secondary_sales(
-    filters: Annotated[sale.SecondaryTertiarySalesFilter, Query()],
+async def list_secondary_sales(
+    payload: sale.SecondaryTertiarySalesListRequest,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):
     load_options = [
@@ -245,12 +245,12 @@ async def get_secondary_sales(
         joinedload(SecondarySales.sku).joinedload(SKU.brand),
     ]
     return await secondary_sales_service.get_multi(
-        session, filters, load_options=load_options
+        session, payload, load_options=load_options
     )
 
 
 @router.post(
-    "/secondary",
+    "/secondary/create",
     response_model=sale.SecondarySalesResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -280,11 +280,11 @@ async def bulk_insert_secondary_sales(
     return result
 
 
-@router.get(
+@router.post(
     "/secondary/reports/chart", dependencies=[Depends(can_view_secondary_sales)]
 )
 async def get_secondary_sales_chart(
-    filters: Annotated[sale.SecTerSalesPeriodFilter, Query()],
+    filters: sale.SecTerSalesPeriodFilter,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
@@ -293,11 +293,11 @@ async def get_secondary_sales_chart(
     )
 
 
-@router.get(
+@router.post(
     "/secondary/reports/sales", dependencies=[Depends(can_view_secondary_sales)]
 )
 async def get_secondary_sales_report(
-    filters: Annotated[sale.SecTerSalesReportFilter, Query()],
+    filters: sale.SecTerSalesReportFilter,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
@@ -322,14 +322,14 @@ async def get_sales_report_by_distributors(
     )
 
 
-@router.get(
+@router.post(
     "/secondary/reports/sales-by-distributors/chart",
     dependencies=[Depends(can_view_secondary_sales)],
 )
 async def get_sales_report_by_distributors_chart(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
-    filters: Annotated[sale.ChartSalesByDistributorFilter, Query()],
+    filters: sale.ChartSalesByDistributorFilter,
 ):
     return await secondary_sales_service.get_total_sales_by_distributor(
         session=session,
@@ -399,13 +399,13 @@ async def delete_secondary_sales(
     return await secondary_sales_service.delete(session, secondary_sales_id)
 
 
-@router.get(
+@router.post(
     "/tertiary",
     response_model=list[sale.TertiarySalesResponse],
     dependencies=[Depends(current_operator_user)],
 )
-async def get_tertiary_sales(
-    filters: Annotated[sale.SecondaryTertiarySalesFilter, Query()],
+async def list_tertiary_sales(
+    payload: sale.SecondaryTertiarySalesListRequest,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):
     load_options = [
@@ -414,12 +414,12 @@ async def get_tertiary_sales(
         joinedload(TertiarySalesAndStock.sku).joinedload(SKU.brand),
     ]
     return await tertiary_sales_service.get_multi(
-        session, filters, load_options=load_options
+        session, payload, load_options=load_options
     )
 
 
 @router.post(
-    "/tertiary",
+    "/tertiary/create",
     response_model=sale.TertiarySalesResponse,
     dependencies=[Depends(current_operator_user)],
 )
@@ -449,9 +449,9 @@ async def bulk_insert_tertiary_sales(
     return result
 
 
-@router.get("/tertiary/reports/sales", dependencies=[Depends(can_view_tertiary_sales)])
+@router.post("/tertiary/reports/sales", dependencies=[Depends(can_view_tertiary_sales)])
 async def get_tertiary_sales_report(
-    filters: Annotated[sale.SecTerSalesReportFilter, Query()],
+    filters: sale.SecTerSalesReportFilter,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
@@ -460,9 +460,9 @@ async def get_tertiary_sales_report(
     )
 
 
-@router.get("/tertiary/reports/chart", dependencies=[Depends(can_view_tertiary_sales)])
+@router.post("/tertiary/reports/chart", dependencies=[Depends(can_view_tertiary_sales)])
 async def get_tertiary_sales_chart(
-    filters: Annotated[sale.SecTerSalesPeriodFilter, Query()],
+    filters: sale.SecTerSalesPeriodFilter,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
@@ -532,13 +532,13 @@ async def delete_tertiary_sales(
     return await tertiary_sales_service.delete(session, tertiary_sales_id)
 
 
-@router.get(
+@router.post(
     "/tertiary/reports/numeric-distribution",
     dependencies=[Depends(can_view_tertiary_sales)],
 )
 async def get_numeric_distribution_report(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[sale.NumericDistributionFilter, Query()],
+    filters: sale.NumericDistributionFilter,
     current_user: Annotated[User, Depends(current_active_user)],
 ):
     return await tertiary_sales_service.get_numeric_distribution(
@@ -546,13 +546,13 @@ async def get_numeric_distribution_report(
     )
 
 
-@router.get(
+@router.post(
     "/tertiary/reports/low-stock-pharmacies",
     dependencies=[Depends(can_view_tertiary_sales)],
 )
 async def get_low_stock_pharmacies(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[sale.LowStockLevelFilter, Query()],
+    filters: sale.LowStockLevelFilter,
     current_user: Annotated[User, Depends(current_active_user)],
 ):
     return await tertiary_sales_service.get_low_stock(

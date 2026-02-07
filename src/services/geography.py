@@ -61,14 +61,13 @@ class CountryService(
         filters: geography_schema.CountryListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[geography.Country]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
         sort_map = {"name": self.model.name}
         sort_payload = (
@@ -79,9 +78,7 @@ class CountryService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, sort_map, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -138,17 +135,17 @@ class RegionService(
         filters: geography_schema.RegionListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[geography.Region]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        countries = self._parse_csv_ids(payload_filters.countries, "countries")
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.country_id, countries)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.country_id, filters.country_ids
+        )
 
         sort_map = {
             "name": self.model.name,
@@ -162,9 +159,7 @@ class RegionService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, sort_map, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -251,17 +246,17 @@ class SettlementService(
         filters: geography_schema.SettlementListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[geography.Settlement]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        regions = self._parse_csv_ids(payload_filters.regions, "regions")
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.region_id, regions)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.region_id, filters.region_ids
+        )
 
         sort_map = {
             "name": self.model.name,
@@ -275,9 +270,7 @@ class SettlementService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, sort_map, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -366,24 +359,23 @@ class DistrictService(
         filters: geography_schema.DistrictListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[geography.District]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        regions = self._parse_csv_ids(payload_filters.regions, "regions")
-        settlements = self._parse_csv_ids(payload_filters.settlements, "settlements")
-        companies = self._parse_csv_ids(payload_filters.companies, "companies")
-
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.region_id, regions)
         stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.settlement_id, settlements
+            stmt, self.model.region_id, filters.region_ids
         )
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.settlement_id, filters.settlement_ids
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.company_id, filters.company_ids
+        )
 
         sort_map = {
             "name": self.model.name,
@@ -399,9 +391,7 @@ class DistrictService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, sort_map, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()

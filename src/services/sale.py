@@ -7,8 +7,10 @@ from sqlalchemy import (
     Numeric,
     String,
     and_,
+    asc,
     case,
     cast,
+    desc,
     func,
     or_,
     select,
@@ -44,6 +46,7 @@ from src.utils.excel_parser import iter_excel_records, save_upload_to_temp
 from src.utils.mapping import map_record
 
 from .base import BaseService, ModelType
+from .list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from fastapi import UploadFile
@@ -95,6 +98,19 @@ async def _upsert_batch_with_stats(
     imported = len(deduped_rows)
 
     return imported, inserted, updated, deduplicated_in_batch
+
+
+def _apply_optional_sorting(
+    stmt, sort_by: str | None, sort_order: str | None, sort_map
+):
+    if not sort_by or not sort_order:
+        return stmt
+
+    column = sort_map.get(sort_by)
+    if column is None:
+        return stmt
+
+    return stmt.order_by(asc(column) if sort_order == "ASC" else desc(column))
 
 
 class PrimarySalesAndStockService(
@@ -244,7 +260,7 @@ class PrimarySalesAndStockService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: sale.PrimarySalesAndStockFilter | None = None,
+        filters: sale.PrimarySalesAndStockListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
         stmt = select(self.model)
@@ -252,23 +268,55 @@ class PrimarySalesAndStockService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.published:
-            stmt = stmt.where(self.model.published)
-        if filters.years:
-            stmt = stmt.where(self.model.year.in_(filters.years))
-        if filters.quarters:
-            stmt = stmt.where(self.model.quarter.in_(filters.quarters))
-        if filters.months:
-            stmt = stmt.where(self.model.month.in_(filters.months))
-        if filters.distributor_ids:
-            stmt = stmt.where(self.model.distributor_id.in_(filters.distributor_ids))
-        if filters.sku_ids:
-            stmt = stmt.where(self.model.sku_id.in_(filters.sku_ids))
+        distributors = filters.distributor_ids
+        brands = filters.brand_ids
+        skus = filters.sku_ids
+        months = filters.months
+        quarters = filters.quarters
+        years = filters.years
+
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.distributor_id, distributors
+        )
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.sku_id, skus)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.month, months)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.quarter, quarters)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.year, years)
+
+        joined_sku = False
+        if brands:
+            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+            joined_sku = True
+            stmt = ListQueryHelper.apply_in_or_null(stmt, SKU.brand_id, brands)
+
         if filters.indicator:
             stmt = stmt.where(self.model.indicator == filters.indicator)
 
-        stmt = stmt.order_by(self.model.created_at.desc())
-        stmt = stmt.limit(filters.limit).offset(filters.offset)
+        if filters.published is not None:
+            stmt = stmt.where(self.model.published == filters.published)
+
+        if filters.sort_by == "brands" and not joined_sku:
+            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+
+        sort_map = {
+            "distributors": self.model.distributor_id,
+            "brands": SKU.brand_id,
+            "skus": self.model.sku_id,
+            "months": self.model.month,
+            "years": self.model.year,
+            "packages": self.model.packages,
+            "amount": self.model.amount,
+            "published": self.model.published,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
 
@@ -276,7 +324,7 @@ class PrimarySalesAndStockService(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Продажи не найдены"
             )
-        return result.scalars().all()
+        return result.unique().scalars().all()
 
     @staticmethod
     async def get_shipment_stock_report(
@@ -370,11 +418,13 @@ class PrimarySalesAndStockService(
         if filters.brand_ids:
             base_stmt = base_stmt.where(Brand.id.in_(filters.brand_ids))
 
-        if filters.group_ids:
-            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.group_ids))
+        if filters.product_group_ids:
+            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.product_group_ids))
 
-        if filters.promo_type_id:
-            base_stmt = base_stmt.where(PromotionType.id == filters.promo_type_id)
+        if filters.promotion_type_ids:
+            base_stmt = base_stmt.where(
+                PromotionType.id.in_(filters.promotion_type_ids)
+            )
 
         if filters.distributor_ids:
             base_stmt = base_stmt.where(Distributor.id.in_(filters.distributor_ids))
@@ -432,6 +482,19 @@ class PrimarySalesAndStockService(
 
         if final_group_by_fields:
             final_stmt = final_stmt.group_by(*final_group_by_fields)
+
+        final_stmt = _apply_optional_sorting(
+            final_stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {
+                "sku": getattr(base_stmt.c, "sku_name", None),
+                "brand": getattr(base_stmt.c, "brand_name", None),
+                "promotion": getattr(base_stmt.c, "promotion_type_name", None),
+                "product_group": getattr(base_stmt.c, "product_group_name", None),
+                "distributor": getattr(base_stmt.c, "distributor_name", None),
+            },
+        )
 
         if filters.limit:
             final_stmt = final_stmt.limit(filters.limit)
@@ -802,12 +865,13 @@ class PrimarySalesAndStockService(
         if filters.brand_ids:
             base_stmt = base_stmt.where(Brand.id.in_(filters.brand_ids))
 
-        if filters.group_ids:
-            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.group_ids))
+        if filters.product_group_ids:
+            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.product_group_ids))
 
-        if filters.promo_type_id:
-            base_stmt = base_stmt.where(PromotionType.id == filters.promo_type_id)
-
+        if filters.promotion_type_ids:
+            base_stmt = base_stmt.where(
+                PromotionType.id.in_(filters.promotion_type_ids)
+            )
         if filters.distributor_ids:
             base_stmt = base_stmt.where(Distributor.id.in_(filters.distributor_ids))
 
@@ -862,6 +926,19 @@ class PrimarySalesAndStockService(
 
         if final_group_by_fields:
             final_stmt = final_stmt.group_by(*final_group_by_fields)
+
+        final_stmt = _apply_optional_sorting(
+            final_stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {
+                "sku": getattr(base_stmt.c, "sku_name", None),
+                "brand": getattr(base_stmt.c, "brand_name", None),
+                "promotion": getattr(base_stmt.c, "promotion_type_name", None),
+                "product_group": getattr(base_stmt.c, "product_group_name", None),
+                "distributor": getattr(base_stmt.c, "distributor_name", None),
+            },
+        )
 
         if filters.limit:
             final_stmt = final_stmt.limit(filters.limit)
@@ -961,12 +1038,13 @@ class PrimarySalesAndStockService(
         if filters.brand_ids:
             base_stmt = base_stmt.where(Brand.id.in_(filters.brand_ids))
 
-        if filters.group_ids:
-            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.group_ids))
+        if filters.product_group_ids:
+            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.product_group_ids))
 
-        if filters.promo_type_id:
-            base_stmt = base_stmt.where(PromotionType.id == filters.promo_type_id)
-
+        if filters.promotion_type_ids:
+            base_stmt = base_stmt.where(
+                PromotionType.id.in_(filters.promotion_type_ids)
+            )
         if filters.distributor_ids:
             base_stmt = base_stmt.where(Distributor.id.in_(filters.distributor_ids))
 
@@ -1077,6 +1155,21 @@ class PrimarySalesAndStockService(
         if final_group_by_fields:
             final_stmt = final_stmt.group_by(*final_group_by_fields)
 
+        final_stmt = _apply_optional_sorting(
+            final_stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {
+                "sku": getattr(with_percentages.c, "sku_name", None),
+                "brand": getattr(with_percentages.c, "brand_name", None),
+                "promotion": getattr(with_percentages.c, "promotion_type_name", None),
+                "product_group": getattr(
+                    with_percentages.c, "product_group_name", None
+                ),
+                "distributor": getattr(with_percentages.c, "distributor_name", None),
+            },
+        )
+
         if filters.limit:
             final_stmt = final_stmt.limit(filters.limit)
         if filters.offset:
@@ -1164,11 +1257,15 @@ class PrimarySalesAndStockService(
         if filters.brand_ids:
             base_stmt = base_stmt.where(SKU.brand_id.in_(filters.brand_ids))
 
-        if filters.group_ids:
-            base_stmt = base_stmt.where(SKU.product_group_id.in_(filters.group_ids))
+        if filters.product_group_ids:
+            base_stmt = base_stmt.where(
+                SKU.product_group_id.in_(filters.product_group_ids)
+            )
 
-        if filters.promo_type_id:
-            base_stmt = base_stmt.where(SKU.promotion_type_id == filters.promo_type_id)
+        if filters.promotion_type_ids:
+            base_stmt = base_stmt.where(
+                PromotionType.id.in_(filters.promotion_type_ids)
+            )
 
         base_stmt = base_stmt.group_by(
             Distributor.id, Distributor.name, period_key
@@ -1441,7 +1538,7 @@ class SecondarySalesService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: sale.SecondaryTertiarySalesFilter | None = None,
+        filters: sale.SecondaryTertiarySalesListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
         stmt = select(self.model)
@@ -1449,19 +1546,69 @@ class SecondarySalesService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.published:
-            stmt = stmt.where(self.model.published)
-        if filters.years:
-            stmt = stmt.where(self.model.year.in_(filters.years))
-        if filters.quarters:
-            stmt = stmt.where(self.model.quarter.in_(filters.quarters))
-        if filters.months:
-            stmt = stmt.where(self.model.month.in_(filters.months))
-        if filters.pharmacy_ids:
-            stmt = stmt.where(self.model.pharmacy_id.in_(filters.pharmacy_ids))
-        if filters.sku_ids:
-            stmt = stmt.where(self.model.sku_id.in_(filters.sku_ids))
-        stmt = stmt.limit(filters.limit).offset(filters.offset)
+        pharmacies = filters.pharmacy_ids
+        distributors = filters.distributor_ids
+        brands = filters.brand_ids
+        skus = filters.sku_ids
+        months = filters.months
+        quarters = filters.quarters
+        years = filters.years
+
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.pharmacy_id, pharmacies
+        )
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.sku_id, skus)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.month, months)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.quarter, quarters)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.year, years)
+
+        joined_pharmacy = False
+        if distributors:
+            stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
+            joined_pharmacy = True
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, Pharmacy.distributor_id, distributors
+            )
+
+        joined_sku = False
+        if brands:
+            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+            joined_sku = True
+            stmt = ListQueryHelper.apply_in_or_null(stmt, SKU.brand_id, brands)
+
+        if filters.indicator:
+            stmt = stmt.where(self.model.indicator == filters.indicator)
+
+        if filters.published is not None:
+            stmt = stmt.where(self.model.published == filters.published)
+
+        if filters.sort_by == "distributors" and not joined_pharmacy:
+            stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
+
+        if filters.sort_by == "brands" and not joined_sku:
+            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+
+        sort_map = {
+            "pharmacies": self.model.pharmacy_id,
+            "distributors": Pharmacy.distributor_id,
+            "brands": SKU.brand_id,
+            "skus": self.model.sku_id,
+            "months": self.model.month,
+            "years": self.model.year,
+            "indicator": self.model.indicator,
+            "packages": self.model.packages,
+            "amount": self.model.amount,
+            "published": self.model.published,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
 
@@ -1469,7 +1616,7 @@ class SecondarySalesService(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Продажи не найдены"
             )
-        return result.scalars().all()
+        return result.unique().scalars().all()
 
     @staticmethod
     async def get_sales_report(
@@ -1567,11 +1714,13 @@ class SecondarySalesService(
         if filters.brand_ids:
             base_stmt = base_stmt.where(Brand.id.in_(filters.brand_ids))
 
-        if filters.group_ids:
-            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.group_ids))
+        if filters.product_group_ids:
+            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.product_group_ids))
 
-        if filters.promo_type_id:
-            base_stmt = base_stmt.where(PromotionType.id == filters.promo_type_id)
+        if filters.promotion_type_ids:
+            base_stmt = base_stmt.where(
+                PromotionType.id.in_(filters.promotion_type_ids)
+            )
 
         if filters.distributor_ids:
             base_stmt = base_stmt.where(Distributor.id.in_(filters.distributor_ids))
@@ -1579,8 +1728,8 @@ class SecondarySalesService(
         if filters.sku_ids:
             base_stmt = base_stmt.where(SKU.id.in_(filters.sku_ids))
 
-        if filters.geo_indicators_ids:
-            base_stmt = base_stmt.where(GeoIndicator.id.in_(filters.geo_indicators_ids))
+        if filters.geo_indicator_ids:
+            base_stmt = base_stmt.where(GeoIndicator.id.in_(filters.geo_indicator_ids))
 
         if filters.search and filters.group_by_dimensions:
             search_term = f"%{filters.search}%"
@@ -1846,6 +1995,20 @@ class SecondarySalesService(
 
         if final_group_by_fields:
             final_stmt = final_stmt.group_by(*final_group_by_fields)
+
+        final_stmt = _apply_optional_sorting(
+            final_stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {
+                "sku": getattr(base_stmt.c, "sku_name", None),
+                "brand": getattr(base_stmt.c, "brand_name", None),
+                "promotion": getattr(base_stmt.c, "promotion_type_name", None),
+                "product_group": getattr(base_stmt.c, "product_group_name", None),
+                "distributor": getattr(base_stmt.c, "distributor_name", None),
+                "geo_indicator": getattr(base_stmt.c, "geo_indicator_name", None),
+            },
+        )
 
         if filters.limit:
             final_stmt = final_stmt.limit(filters.limit)
@@ -2125,7 +2288,7 @@ class TertiarySalesService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: sale.SecondaryTertiarySalesFilter | None = None,
+        filters: sale.SecondaryTertiarySalesListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
         stmt = select(self.model)
@@ -2133,24 +2296,72 @@ class TertiarySalesService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.published:
-            stmt = stmt.where(self.model.published)
-        if filters.years:
-            stmt = stmt.where(self.model.year.in_(filters.years))
-        if filters.quarters:
-            stmt = stmt.where(self.model.quarter.in_(filters.quarters))
-        if filters.months:
-            stmt = stmt.where(self.model.month.in_(filters.months))
-        if filters.pharmacy_ids:
-            stmt = stmt.where(self.model.pharmacy_id.in_(filters.pharmacy_ids))
-        if filters.sku_ids:
-            stmt = stmt.where(self.model.sku_id.in_(filters.sku_ids))
+        pharmacies = filters.pharmacy_ids
+        distributors = filters.distributor_ids
+        brands = filters.brand_ids
+        skus = filters.sku_ids
+        months = filters.months
+        quarters = filters.quarters
+        years = filters.years
+
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.pharmacy_id, pharmacies
+        )
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.sku_id, skus)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.month, months)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.quarter, quarters)
+        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.year, years)
+
+        joined_pharmacy = False
+        if distributors:
+            stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
+            joined_pharmacy = True
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, Pharmacy.distributor_id, distributors
+            )
+
+        joined_sku = False
+        if brands:
+            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+            joined_sku = True
+            stmt = ListQueryHelper.apply_in_or_null(stmt, SKU.brand_id, brands)
+
         if filters.indicator:
             stmt = stmt.where(self.model.indicator == filters.indicator)
-        stmt = stmt.limit(filters.limit).offset(filters.offset)
+
+        if filters.published is not None:
+            stmt = stmt.where(self.model.published == filters.published)
+
+        if filters.sort_by == "distributors" and not joined_pharmacy:
+            stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
+
+        if filters.sort_by == "brands" and not joined_sku:
+            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+
+        sort_map = {
+            "pharmacies": self.model.pharmacy_id,
+            "distributors": Pharmacy.distributor_id,
+            "brands": SKU.brand_id,
+            "skus": self.model.sku_id,
+            "months": self.model.month,
+            "years": self.model.year,
+            "indicator": self.model.indicator,
+            "packages": self.model.packages,
+            "amount": self.model.amount,
+            "published": self.model.published,
+        }
+        sort_payload = (
+            {filters.sort_by: filters.sort_order}
+            if filters.sort_by and filters.sort_order
+            else None
+        )
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
-        return result.scalars().all()
+        return result.unique().scalars().all()
 
     @staticmethod
     async def get_sales_report(
@@ -2250,11 +2461,13 @@ class TertiarySalesService(
         if filters.brand_ids:
             base_stmt = base_stmt.where(Brand.id.in_(filters.brand_ids))
 
-        if filters.group_ids:
-            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.group_ids))
+        if filters.product_group_ids:
+            base_stmt = base_stmt.where(ProductGroup.id.in_(filters.product_group_ids))
 
-        if filters.promo_type_id:
-            base_stmt = base_stmt.where(PromotionType.id == filters.promo_type_id)
+        if filters.promotion_type_ids:
+            base_stmt = base_stmt.where(
+                PromotionType.id.in_(filters.promotion_type_ids)
+            )
 
         if filters.distributor_ids:
             base_stmt = base_stmt.where(Distributor.id.in_(filters.distributor_ids))
@@ -2262,8 +2475,8 @@ class TertiarySalesService(
         if filters.sku_ids:
             base_stmt = base_stmt.where(SKU.id.in_(filters.sku_ids))
 
-        if filters.geo_indicators_ids:
-            base_stmt = base_stmt.where(GeoIndicator.id.in_(filters.geo_indicators_ids))
+        if filters.geo_indicator_ids:
+            base_stmt = base_stmt.where(GeoIndicator.id.in_(filters.geo_indicator_ids))
 
         if filters.search and filters.group_by_dimensions:
             search_term = f"%{filters.search}%"
@@ -2317,6 +2530,20 @@ class TertiarySalesService(
 
         if final_group_by_fields:
             final_stmt = final_stmt.group_by(*final_group_by_fields)
+
+        final_stmt = _apply_optional_sorting(
+            final_stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {
+                "sku": getattr(base_stmt.c, "sku_name", None),
+                "brand": getattr(base_stmt.c, "brand_name", None),
+                "promotion": getattr(base_stmt.c, "promotion_type_name", None),
+                "product_group": getattr(base_stmt.c, "product_group_name", None),
+                "distributor": getattr(base_stmt.c, "distributor_name", None),
+                "geo_indicator": getattr(base_stmt.c, "geo_indicator_name", None),
+            },
+        )
 
         if filters.limit:
             final_stmt = final_stmt.limit(filters.limit)
@@ -2646,6 +2873,20 @@ class TertiarySalesService(
         if final_group_by_fields:
             final_stmt = final_stmt.group_by(*final_group_by_fields)
 
+        final_stmt = _apply_optional_sorting(
+            final_stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {
+                "sku": getattr(base_stmt.c, "sku_name", None),
+                "brand": getattr(base_stmt.c, "brand_name", None),
+                "promotion": None,
+                "product_group": getattr(base_stmt.c, "product_group_name", None),
+                "distributor": getattr(base_stmt.c, "distributor_name", None),
+                "geo_indicator": getattr(base_stmt.c, "geo_indicator_name", None),
+            },
+        )
+
         if filters.limit:
             final_stmt = final_stmt.limit(filters.limit)
         if filters.offset:
@@ -2815,6 +3056,20 @@ class TertiarySalesService(
 
         if final_group_by_fields:
             final_stmt = final_stmt.group_by(*final_group_by_fields)
+
+        final_stmt = _apply_optional_sorting(
+            final_stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {
+                "sku": getattr(base_stmt.c, "sku_name", None),
+                "brand": getattr(base_stmt.c, "brand_name", None),
+                "product_group": getattr(base_stmt.c, "product_group_name", None),
+                "responsible_employee": getattr(
+                    base_stmt.c, "responsible_employee_name", None
+                ),
+            },
+        )
 
         if filters.limit:
             final_stmt = final_stmt.limit(filters.limit)

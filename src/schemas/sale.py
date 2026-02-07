@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from src.schemas.base_filter import SortDirection
 from src.schemas.client import (
     DistributorResponse,
     GeoIndicatorResponse,
@@ -95,11 +96,12 @@ class PublishUnpublishedItem(BaseModel):
 class PrimarySalesAndStockFilter(BaseModel):
     limit: int | None = None
     offset: int = 0
-    distributor_ids: list[int] | None = None
-    sku_ids: list[int] | None = None
-    months: list[int] | None = None
-    quarters: list[int] | None = None
-    years: list[int] | None = None
+    distributors: str | None = None
+    brands: str | None = None
+    skus: str | None = None
+    months: str | None = None
+    quarters: str | None = None
+    years: str | None = None
     indicator: str | None = None
     published: bool | None = None
 
@@ -107,13 +109,71 @@ class PrimarySalesAndStockFilter(BaseModel):
 class SecondaryTertiarySalesFilter(BaseModel):
     limit: int | None = None
     offset: int = 0
-    pharmacy_ids: list[int] | None = None
+    pharmacies: str | None = None
+    distributors: str | None = None
+    brands: str | None = None
+    skus: str | None = None
+    months: str | None = None
+    quarters: str | None = None
+    years: str | None = None
+    indicator: str | None = None
+    published: bool | None = None
+
+
+PrimarySalesSortField = Literal[
+    "distributors",
+    "brands",
+    "skus",
+    "months",
+    "years",
+    "packages",
+    "amount",
+    "published",
+]
+
+SecondaryTertiarySalesSortField = Literal[
+    "pharmacies",
+    "distributors",
+    "brands",
+    "skus",
+    "months",
+    "years",
+    "indicator",
+    "packages",
+    "amount",
+    "published",
+]
+
+
+class PrimarySalesAndStockListRequest(BaseModel):
+    limit: int | None = None
+    offset: int = 0
+    distributor_ids: list[int] | None = None
+    brand_ids: list[int] | None = None
     sku_ids: list[int] | None = None
     months: list[int] | None = None
     quarters: list[int] | None = None
     years: list[int] | None = None
     indicator: str | None = None
     published: bool | None = None
+    sort_by: PrimarySalesSortField | None = None
+    sort_order: SortDirection | None = None
+
+
+class SecondaryTertiarySalesListRequest(BaseModel):
+    limit: int | None = None
+    offset: int = 0
+    pharmacy_ids: list[int] | None = None
+    distributor_ids: list[int] | None = None
+    brand_ids: list[int] | None = None
+    sku_ids: list[int] | None = None
+    months: list[int] | None = None
+    quarters: list[int] | None = None
+    years: list[int] | None = None
+    indicator: str | None = None
+    published: bool | None = None
+    sort_by: SecondaryTertiarySalesSortField | None = None
+    sort_order: SortDirection | None = None
 
 
 class PrimarySalesAndStockResponse(BaseModel):
@@ -170,8 +230,8 @@ class SalesReportFilter(BaseModel):
     years: list[int] = Field(default_factory=lambda: [date.today().year])
     brand_ids: list[int] | None = None
     distributor_ids: list[int] | None = None
-    group_ids: list[int] | None = None
-    promo_type_id: int | None = None
+    product_group_ids: list[int] | None = None
+    promotion_type_ids: list[int] | None = None
     search: str | None = None
     group_by_period: Literal["year", "quarter", "month"] = "month"
     sku_ids: list[int] | None = None
@@ -182,6 +242,10 @@ class DistributorShareFilter(SalesReportFilter):
         list[Literal["sku", "brand", "promotion_type", "product_group", "distributor"]]
         | None
     ) = None
+    sort_by: (
+        Literal["sku", "brand", "promotion", "product_group", "distributor"] | None
+    ) = None
+    sort_order: SortDirection | None = None
 
 
 class StockCoverageFilter(SalesReportFilter):
@@ -189,6 +253,10 @@ class StockCoverageFilter(SalesReportFilter):
         list[Literal["sku", "brand", "promotion_type", "product_group", "distributor"]]
         | None
     ) = None
+    sort_by: (
+        Literal["sku", "brand", "promotion", "product_group", "distributor"] | None
+    ) = None
+    sort_order: SortDirection | None = None
 
 
 class ShipmentStockFilter(SalesReportFilter):
@@ -196,10 +264,14 @@ class ShipmentStockFilter(SalesReportFilter):
         list[Literal["sku", "brand", "promotion_type", "product_group", "distributor"]]
         | None
     ) = None
+    sort_by: (
+        Literal["sku", "brand", "promotion", "product_group", "distributor"] | None
+    ) = None
+    sort_order: SortDirection | None = None
 
 
 class SecTerSalesReportFilter(SalesReportFilter):
-    geo_indicators_ids: list[int] | None = None
+    geo_indicator_ids: list[int] | None = None
     group_by_dimensions: (
         list[
             Literal[
@@ -213,6 +285,18 @@ class SecTerSalesReportFilter(SalesReportFilter):
         ]
         | None
     ) = None
+    sort_by: (
+        Literal[
+            "sku",
+            "brand",
+            "promotion",
+            "product_group",
+            "distributor",
+            "geo_indicator",
+        ]
+        | None
+    ) = None
+    sort_order: SortDirection | None = None
 
 
 class PeriodFilter(BaseModel):
@@ -291,6 +375,18 @@ class NumericDistributionFilter(BaseModel):
         ]
         | None
     ) = None
+    sort_by: (
+        Literal[
+            "sku",
+            "brand",
+            "promotion",
+            "product_group",
+            "distributor",
+            "geo_indicator",
+        ]
+        | None
+    ) = None
+    sort_order: SortDirection | None = None
 
 
 class SalesReportResponse(BaseModel):
@@ -356,6 +452,10 @@ class LowStockLevelFilter(BaseModel):
         ]
         | None
     ) = None
+    sort_by: Literal["sku", "brand", "product_group", "responsible_employee"] | None = (
+        None
+    )
+    sort_order: SortDirection | None = None
 
 
 class LowStockLevelResponse(BaseModel):

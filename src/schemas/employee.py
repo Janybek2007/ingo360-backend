@@ -81,13 +81,16 @@ EmployeeSortField = Literal[
 PositionSortField = Literal["name"]
 
 
-class EmployeeListRequest(BaseModel):
-    filters: EmployeeFilter = Field(default_factory=EmployeeFilter)
+class EmployeeListRequest(BaseFilter):
+    full_name: str | None = None
+    position_ids: list[int] | None = None
+    product_group_ids: list[int] | None = None
+    region_ids: list[int] | None = None
+    district_ids: list[int] | None = None
+    company_ids: list[int] | None = None
     sort_by: EmployeeSortField | None = None
-    sort_order: SortDirection | None = None
 
 
-class PositionListRequest(BaseModel):
-    filters: PositionFilter = Field(default_factory=PositionFilter)
+class PositionListRequest(BaseFilter):
+    name: str | None = None
     sort_by: PositionSortField | None = None
-    sort_order: SortDirection | None = None

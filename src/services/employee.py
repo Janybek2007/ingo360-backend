@@ -1,7 +1,7 @@
 import asyncio
 from typing import TYPE_CHECKING, Any, Sequence
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import UploadFile
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
@@ -26,18 +26,6 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
-    if not value:
-        return None
-    try:
-        return [int(item.strip()) for item in value.split(",") if item.strip()]
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid {field_name}: expected comma-separated integers",
-        ) from exc
-
-
 class EmployeeService(
     BaseService[employees.Employee, employee.EmployeeCreate, employee.EmployeeUpdate]
 ):
@@ -47,32 +35,29 @@ class EmployeeService(
         filters: employee.EmployeeListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[employees.Employee]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.full_name:
-            stmt = stmt.where(
-                self.model.full_name.ilike(f"%{payload_filters.full_name}%")
-            )
+        if filters.full_name:
+            stmt = stmt.where(self.model.full_name.ilike(f"%{filters.full_name}%"))
 
-        positions = _parse_csv_ids(payload_filters.positions, "positions")
-        product_groups = _parse_csv_ids(
-            payload_filters.product_groups, "product_groups"
-        )
-        regions = _parse_csv_ids(payload_filters.regions, "regions")
-        districts = _parse_csv_ids(payload_filters.districts, "districts")
-        companies = _parse_csv_ids(payload_filters.companies, "companies")
-
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.position_id, positions)
         stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.product_group_id, product_groups
+            stmt, self.model.position_id, filters.position_ids
         )
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.region_id, regions)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.district_id, districts)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.product_group_id, filters.product_group_ids
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.region_id, filters.region_ids
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.district_id, filters.district_ids
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.company_id, filters.company_ids
+        )
 
         sort_map = {
             "full_name": self.model.full_name,
@@ -90,9 +75,7 @@ class EmployeeService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, sort_map, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -222,14 +205,13 @@ class PositionService(
         filters: employee.PositionListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[employees.Position]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
         sort_payload = (
             {filters.sort_by: filters.sort_order}
@@ -239,9 +221,7 @@ class PositionService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()

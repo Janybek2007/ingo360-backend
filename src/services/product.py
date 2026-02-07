@@ -38,18 +38,6 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
-    if not value:
-        return None
-    try:
-        return [int(item.strip()) for item in value.split(",") if item.strip()]
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid {field_name}: expected comma-separated integers",
-        ) from exc
-
-
 class BrandService(
     BaseService[products.Brand, product.BrandCreate, product.BrandUpdate]
 ):
@@ -59,33 +47,30 @@ class BrandService(
         filters: product.BrandListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.Brand]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        promotion_types = _parse_csv_ids(
-            payload_filters.promotion_types, "promotion_types"
-        )
-        product_groups = _parse_csv_ids(
-            payload_filters.product_groups, "product_groups"
-        )
-        companies = _parse_csv_ids(payload_filters.companies, "companies")
+        if filters.ims_name:
+            stmt = stmt.where(self.model.ims_name.ilike(f"%{filters.ims_name}%"))
 
         stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.promotion_type_id, promotion_types
+            stmt, self.model.promotion_type_id, filters.promotion_type_ids
         )
         stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.product_group_id, product_groups
+            stmt, self.model.product_group_id, filters.product_group_ids
         )
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.company_id, filters.company_ids
+        )
 
         sort_map = {
             "name": self.model.name,
+            "ims_name": self.model.ims_name,
             "promotion_types": self.model.promotion_type_id,
             "product_groups": self.model.product_group_id,
             "companies": self.model.company_id,
@@ -98,9 +83,7 @@ class BrandService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, sort_map, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -200,14 +183,13 @@ class PromotionTypeService(
         filters: product.PromotionTypeListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.PromotionType]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
         sort_payload = (
             {filters.sort_by: filters.sort_order}
@@ -217,9 +199,7 @@ class PromotionTypeService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -259,14 +239,13 @@ class DosageFormService(
         filters: product.DosageFormListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.DosageForm]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
         sort_payload = (
             {filters.sort_by: filters.sort_order}
@@ -276,9 +255,7 @@ class DosageFormService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -316,14 +293,13 @@ class DosageService(
         filters: product.DosageListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.Dosage]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
         sort_payload = (
             {filters.sort_by: filters.sort_order}
@@ -333,9 +309,7 @@ class DosageService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -373,14 +347,13 @@ class SegmentService(
         filters: product.SegmentListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.Segment]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
         sort_payload = (
             {filters.sort_by: filters.sort_order}
@@ -390,9 +363,7 @@ class SegmentService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -428,40 +399,35 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
         filters: product.SKUListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.SKU]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        brands = _parse_csv_ids(payload_filters.brands, "brands")
-        promotion_types = _parse_csv_ids(
-            payload_filters.promotion_types, "promotion_types"
-        )
-        product_groups = _parse_csv_ids(
-            payload_filters.product_groups, "product_groups"
-        )
-        dosage_forms = _parse_csv_ids(payload_filters.dosage_forms, "dosage_forms")
-        dosages = _parse_csv_ids(payload_filters.dosages, "dosages")
-        segments = _parse_csv_ids(payload_filters.segments, "segments")
-        companies = _parse_csv_ids(payload_filters.companies, "companies")
-
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.brand_id, brands)
         stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.promotion_type_id, promotion_types
+            stmt, self.model.brand_id, filters.brand_ids
         )
         stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.product_group_id, product_groups
+            stmt, self.model.promotion_type_id, filters.promotion_type_ids
         )
         stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.dosage_form_id, dosage_forms
+            stmt, self.model.product_group_id, filters.product_group_ids
         )
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.dosage_id, dosages)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.segment_id, segments)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.dosage_form_id, filters.dosage_form_ids
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.dosage_id, filters.dosage_ids
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.segment_id, filters.segment_ids
+        )
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.company_id, filters.company_ids
+        )
 
         sort_map = {
             "name": self.model.name,
@@ -481,9 +447,7 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, sort_map, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -615,17 +579,17 @@ class ProductGroupService(
         filters: product.ProductGroupListRequest,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.ProductGroup]:
-        payload_filters = filters.filters
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if payload_filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{payload_filters.name}%"))
+        if filters.name:
+            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        companies = _parse_csv_ids(payload_filters.companies, "companies")
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.company_id, companies)
+        stmt = ListQueryHelper.apply_in_or_null(
+            stmt, self.model.company_id, filters.company_ids
+        )
 
         sort_map = {
             "name": self.model.name,
@@ -639,9 +603,7 @@ class ProductGroupService(
         stmt = ListQueryHelper.apply_sorting(
             stmt, sort_payload, sort_map, self.model.created_at.desc()
         )
-        stmt = ListQueryHelper.apply_pagination(
-            stmt, payload_filters.limit, payload_filters.offset
-        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
