@@ -2,9 +2,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.schemas.base_filter import BaseFilter
+from src.schemas.base_filter import BaseReferenceFilter
 
-from .base_filter import BaseFilter, SortDirection
+from .base_filter import BaseReferenceFilter, SortDirection
 from .company import CompanySimpleResponse
 
 
@@ -97,21 +97,21 @@ class DistrictResponse(BaseModel):
     company: CompanySimpleResponse | None
 
 
-class CountryFilter(BaseFilter):
+class CountryFilter(BaseReferenceFilter):
     name: str | None = None
 
 
-class RegionFilter(BaseFilter):
+class RegionFilter(BaseReferenceFilter):
     name: str | None = None
     countries: str | None = None
 
 
-class SettlementFilter(BaseFilter):
+class SettlementFilter(BaseReferenceFilter):
     name: str | None = None
     regions: str | None = None
 
 
-class DistrictFilter(BaseFilter):
+class DistrictFilter(BaseReferenceFilter):
     name: str | None = None
     regions: str | None = None
     settlements: str | None = None
@@ -124,24 +124,24 @@ SettlementSortField = Literal["name", "region"]
 DistrictSortField = Literal["name", "region", "settlement", "company"]
 
 
-class CountryListRequest(BaseFilter):
+class CountryListRequest(BaseReferenceFilter):
     name: str | None = None
     sort_by: CountrySortField | None = None
 
 
-class RegionListRequest(BaseFilter):
+class RegionListRequest(BaseReferenceFilter):
     name: str | None = None
     country_ids: list[int] | None = None
     sort_by: RegionSortField | None = None
 
 
-class SettlementListRequest(BaseFilter):
+class SettlementListRequest(BaseReferenceFilter):
     name: str | None = None
     region_ids: list[int] | None = None
     sort_by: SettlementSortField | None = None
 
 
-class DistrictListRequest(BaseFilter):
+class DistrictListRequest(BaseReferenceFilter):
     name: str | None = None
     region_ids: list[int] | None = None
     settlement_ids: list[int] | None = None

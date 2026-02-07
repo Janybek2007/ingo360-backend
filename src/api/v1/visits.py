@@ -26,14 +26,14 @@ from src.services.visit import visit_service
 router = APIRouter()
 
 
-@router.get(
+@router.post(
     "",
     response_model=list[VisitResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_visits(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: base_filter.BaseFilter,
 ):
     load_options = [
         joinedload(Visit.pharmacy).joinedload(Pharmacy.geo_indicator),
@@ -49,7 +49,7 @@ async def get_visits(
 
 
 @router.post(
-    "", response_model=VisitResponse, dependencies=[Depends(current_operator_user)]
+    "/create", response_model=VisitResponse, dependencies=[Depends(current_operator_user)]
 )
 async def create_visit(
     new_visit: VisitCreate,

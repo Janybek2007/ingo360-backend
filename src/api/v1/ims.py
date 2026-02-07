@@ -24,18 +24,18 @@ if TYPE_CHECKING:
 router = APIRouter()
 
 
-@router.get(
+@router.post(
     "", dependencies=[Depends(current_operator_user)], response_model=list[IMSResponse]
 )
 async def get_all_ims(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[BaseFilter, Query()],
+    filters: BaseFilter,
 ):
     return await ims_service.get_multi(session, filters)
 
 
 @router.post(
-    "", dependencies=[Depends(current_operator_user)], response_model=IMSResponse
+    "create", dependencies=[Depends(current_operator_user)], response_model=IMSResponse
 )
 async def create_ims(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],

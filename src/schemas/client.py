@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.schemas.base_filter import BaseFilter, SortDirection
+from src.schemas.base_filter import BaseReferenceFilter, SortDirection
 from src.schemas.company import CompanySimpleResponse
 from src.schemas.employee import EmployeeSimpleResponse
 from src.schemas.geography import DistrictSimpleResponse, SettlementSimpleResponse
@@ -181,7 +181,7 @@ class PharmacyResponse(BaseModel):
     geo_indicator: GeoIndicatorResponse | None
 
 
-class MedicalFacilityFilter(BaseFilter):
+class MedicalFacilityFilter(BaseReferenceFilter):
     name: str | None = None
     facility_type: str | None = None
     settlements: str | None = None
@@ -189,23 +189,23 @@ class MedicalFacilityFilter(BaseFilter):
     geo_indicators: str | None = None
 
 
-class ClientCategoryFilter(BaseFilter):
+class ClientCategoryFilter(BaseReferenceFilter):
     name: str | None = None
 
 
-class SpecialityFilter(BaseFilter):
+class SpecialityFilter(BaseReferenceFilter):
     name: str | None = None
 
 
-class DistributorFilter(BaseFilter):
+class DistributorFilter(BaseReferenceFilter):
     name: str | None = None
 
 
-class GeoIndicatorFilter(BaseFilter):
+class GeoIndicatorFilter(BaseReferenceFilter):
     name: str | None = None
 
 
-class DoctorFilter(BaseFilter):
+class DoctorFilter(BaseReferenceFilter):
     full_name: str | None = None
     medical_facilities: str | None = None
     responsible_employees: str | None = None
@@ -214,7 +214,7 @@ class DoctorFilter(BaseFilter):
     product_groups: str | None = None
 
 
-class PharmacyFilter(BaseFilter):
+class PharmacyFilter(BaseReferenceFilter):
     name: str | None = None
     companies: str | None = None
     distributors: str | None = None
@@ -226,7 +226,7 @@ class PharmacyFilter(BaseFilter):
     geo_indicators: str | None = None
 
 
-class PharmacyListRequest(BaseFilter):
+class PharmacyListRequest(BaseReferenceFilter):
     name: str | None = None
     company_ids: list[int] | None = None
     distributor_ids: list[int] | None = None
@@ -252,7 +252,7 @@ class PharmacyListRequest(BaseFilter):
     ) = None
 
 
-class DoctorListRequest(BaseFilter):
+class DoctorListRequest(BaseReferenceFilter):
     full_name: str | None = None
     medical_facility_ids: list[int] | None = None
     responsible_employee_ids: list[int] | None = None
@@ -272,28 +272,28 @@ class DoctorListRequest(BaseFilter):
     ) = None
 
 
-class ClientCategoryListRequest(BaseFilter):
+class ClientCategoryListRequest(BaseReferenceFilter):
     name: str | None = None
     sort_by: Literal["name"] | None = None
 
 
-class SpecialityListRequest(BaseFilter):
+class SpecialityListRequest(BaseReferenceFilter):
     name: str | None = None
     sort_by: Literal["name"] | None = None
 
 
-class DistributorListRequest(BaseFilter):
+class DistributorListRequest(BaseReferenceFilter):
     offset: int = 0
     name: str | None = None
     sort_by: Literal["name"] | None = None
 
 
-class GeoIndicatorListRequest(BaseFilter):
+class GeoIndicatorListRequest(BaseReferenceFilter):
     name: str | None = None
     sort_by: Literal["name"] | None = None
 
 
-class MedicalFacilityListRequest(BaseFilter):
+class MedicalFacilityListRequest(BaseReferenceFilter):
     name: str | None = None
     facility_type: str | None = None
     settlement_ids: list[int] | None = None

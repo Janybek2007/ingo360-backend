@@ -2,8 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.schemas.base_filter import BaseFilter
-from .base_filter import BaseFilter, SortDirection
+from src.schemas.base_filter import BaseReferenceFilter
+from .base_filter import BaseReferenceFilter, SortDirection
 from .company import CompanySimpleResponse
 
 
@@ -160,12 +160,12 @@ class SKUResponse(BaseModel):
     company: CompanySimpleResponse | None
 
 
-class ProductGroupFilter(BaseFilter):
+class ProductGroupFilter(BaseReferenceFilter):
     name: str | None = None
     companies: str | None = None
 
 
-class BrandFilter(BaseFilter):
+class BrandFilter(BaseReferenceFilter):
     name: str | None = None
     ims_name: str | None = None
     promotion_types: str | None = None
@@ -173,23 +173,23 @@ class BrandFilter(BaseFilter):
     companies: str | None = None
 
 
-class PromotionTypeFilter(BaseFilter):
+class PromotionTypeFilter(BaseReferenceFilter):
     name: str | None = None
 
 
-class DosageFormFilter(BaseFilter):
+class DosageFormFilter(BaseReferenceFilter):
     name: str | None = None
 
 
-class DosageFilter(BaseFilter):
+class DosageFilter(BaseReferenceFilter):
     name: str | None = None
 
 
-class SegmentFilter(BaseFilter):
+class SegmentFilter(BaseReferenceFilter):
     name: str | None = None
 
 
-class SKUFilter(BaseFilter):
+class SKUFilter(BaseReferenceFilter):
     name: str | None = None
     brands: str | None = None
     promotion_types: str | None = None
@@ -224,13 +224,13 @@ SKUSortField = Literal[
 ]
 
 
-class ProductGroupListRequest(BaseFilter):
+class ProductGroupListRequest(BaseReferenceFilter):
     name: str | None = None
     company_ids: list[int] | None = None
     sort_by: ProductGroupSortField | None = None
 
 
-class BrandListRequest(BaseFilter):
+class BrandListRequest(BaseReferenceFilter):
     name: str | None = None
     ims_name: str | None = None
     promotion_type_ids: list[int] | None = None
@@ -239,27 +239,27 @@ class BrandListRequest(BaseFilter):
     sort_by: BrandSortField | None = None
 
 
-class PromotionTypeListRequest(BaseFilter):
+class PromotionTypeListRequest(BaseReferenceFilter):
     name: str | None = None
     sort_by: PromotionTypeSortField | None = None
 
 
-class DosageFormListRequest(BaseFilter):
+class DosageFormListRequest(BaseReferenceFilter):
     name: str | None = None
     sort_by: DosageFormSortField | None = None
 
 
-class DosageListRequest(BaseFilter):
+class DosageListRequest(BaseReferenceFilter):
     name: str | None = None
     sort_by: DosageSortField | None = None
 
 
-class SegmentListRequest(BaseFilter):
+class SegmentListRequest(BaseReferenceFilter):
     name: str | None = None
     sort_by: SegmentSortField | None = None
 
 
-class SKUListRequest(BaseFilter):
+class SKUListRequest(BaseReferenceFilter):
     name: str | None = None
     brand_ids: list[int] | None = None
     promotion_type_ids: list[int] | None = None
