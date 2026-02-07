@@ -1,4 +1,7 @@
+import os
 import asyncio
+from uuid import uuid4
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 from fastapi import HTTPException, status
@@ -121,13 +124,55 @@ class PrimarySalesAndStockService(
     ]
 ):
     async def import_sales(
-        self,
-        session: "AsyncSession",
-        file: "UploadFile",
-        user_id: int,
-        batch_size: int = 2000,
+            self,
+            session: "AsyncSession",
+            file: "UploadFile",
+            user_id: int,
+            batch_size: int = 2000,
     ):
-        temp = await save_upload_to_temp(file)
+        from src.tasks.sale_imports import import_sales_task
+
+        upload_dir = Path("temp_uploads")
+        upload_dir.mkdir(exist_ok=True)
+        file_id = str(uuid4())
+
+        file_path = upload_dir / f"{file_id}_{file.filename}"
+
+        try:
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+
+            task = import_sales_task.delay(
+                file_path=str(file_path),
+                user_id=user_id,
+                service_path="src.services.sale.PrimarySalesAndStockService",
+                model_path="src.db.models.PrimarySalesAndStock",
+                batch_size=batch_size,
+            )
+
+            return {
+                "task_id": task.id
+            }
+        except Exception as e:
+            if file_path.exists():
+                os.remove(file_path)
+            raise
+
+    async def _import_sales_from_file(
+            self,
+            session: "AsyncSession",
+            file_path: str,
+            user_id: int,
+            batch_size: int = 2000,
+    ):
+
+        with open(file_path, "rb") as f:
+            from tempfile import SpooledTemporaryFile
+            temp = SpooledTemporaryFile(max_size=50 * 1024 * 1024)
+            temp.write(f.read())
+            temp.seek(0)
+
         try:
             distributor_names: set[str] = set()
             sku_names: set[str] = set()
@@ -1399,13 +1444,54 @@ class SecondarySalesService(
     BaseService[SecondarySales, sale.SecondarySalesCreate, sale.SecondarySalesUpdate]
 ):
     async def import_sales(
-        self,
-        session: "AsyncSession",
-        file: "UploadFile",
-        user_id: int,
-        batch_size: int = 2000,
+            self,
+            session: "AsyncSession",
+            file: "UploadFile",
+            user_id: int,
+            batch_size: int = 2000,
     ):
-        temp = await save_upload_to_temp(file)
+        from src.tasks.sale_imports import import_sales_task
+
+        upload_dir = Path("temp_uploads")
+        upload_dir.mkdir(exist_ok=True)
+        file_id = str(uuid4())
+
+        file_path = upload_dir / f"{file_id}_{file.filename}"
+
+        try:
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+
+            task = import_sales_task.delay(
+                file_path=str(file_path),
+                user_id=user_id,
+                service_path="src.services.sale.SecondarySalesService",
+                model_path="src.db.models.SecondarySales",
+                batch_size=batch_size,
+            )
+
+            return {
+                "task_id": task.id
+            }
+        except Exception as e:
+            if file_path.exists():
+                os.remove(file_path)
+            raise
+
+    async def _import_sales_from_file(
+            self,
+            session: "AsyncSession",
+            file_path: str,
+            user_id: int,
+            batch_size: int = 2000,
+    ):
+        with open(file_path, "rb") as f:
+            from tempfile import SpooledTemporaryFile
+            temp = SpooledTemporaryFile(max_size=50 * 1024 * 1024)
+            temp.write(f.read())
+            temp.seek(0)
+
         try:
             pharmacy_names: set[str] = set()
             sku_names: set[str] = set()
@@ -2149,13 +2235,54 @@ class TertiarySalesService(
     ]
 ):
     async def import_sales(
-        self,
-        session: "AsyncSession",
-        file: "UploadFile",
-        user_id: int,
-        batch_size: int = 2000,
+            self,
+            session: "AsyncSession",
+            file: "UploadFile",
+            user_id: int,
+            batch_size: int = 2000,
     ):
-        temp = await save_upload_to_temp(file)
+        from src.tasks.sale_imports import import_sales_task
+
+        upload_dir = Path("temp_uploads")
+        upload_dir.mkdir(exist_ok=True)
+        file_id = str(uuid4())
+
+        file_path = upload_dir / f"{file_id}_{file.filename}"
+
+        try:
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+
+            task = import_sales_task.delay(
+                file_path=str(file_path),
+                user_id=user_id,
+                service_path="src.services.sale.TertiarySalesService",
+                model_path="src.db.models.TertiarySales",
+                batch_size=batch_size,
+            )
+
+            return {
+                "task_id": task.id
+            }
+        except Exception as e:
+            if file_path.exists():
+                os.remove(file_path)
+            raise
+
+    async def _import_sales_from_file(
+            self,
+            session: "AsyncSession",
+            file_path: str,
+            user_id: int,
+            batch_size: int = 2000,
+    ):
+        with open(file_path, "rb") as f:
+            from tempfile import SpooledTemporaryFile
+            temp = SpooledTemporaryFile(max_size=50 * 1024 * 1024)
+            temp.write(f.read())
+            temp.seek(0)
+
         try:
             pharmacy_names: set[str] = set()
             sku_names: set[str] = set()

@@ -8,6 +8,7 @@ services:
       - .:/app
     depends_on:
       - db
+      - redis
     restart: always
     env_file:
       - .env
@@ -23,6 +24,29 @@ services:
       # - postgres_data:/var/lib/postgresql/data
     expose:
       - '5432'
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    expose:
+      - '6379'
+    volumes:
+      - redis:/data
+    command: redis-server --appendonly yes
+
+  celery_worker:
+    build: .
+    command: celery -A src.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+      - ./temp_uploads:/app/temp_uploads
+    depends_on:
+      - db
+      - redis
+    restart: always
+    env_file:
+      - .env
+
   nginx:
     image: nginx:alpine
     ports:
@@ -40,3 +64,4 @@ services:
 volumes:
   postgres:
   # postgres_data:
+  redis:

@@ -1,4 +1,7 @@
+import asyncio
 import logging
+import contextlib
+
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
@@ -14,12 +17,21 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.settings import settings
 from src.api.v1.router import api_router
+from src.websocket.bridge import redis_to_ws_bridge
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    bridge_task = asyncio.create_task(redis_to_ws_bridge())
+    yield
+    bridge_task.cancel()
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    openapi_url=f'{settings.API_VERSION}/openapi.json'
+    openapi_url=f'{settings.API_VERSION}/openapi.json',
+    lifespan=lifespan
 )
 
 app.add_middleware(
