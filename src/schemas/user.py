@@ -64,5 +64,3 @@ class PasswordChange(BaseModel):
 class UserFilter(BaseModel):
     is_active: bool | None = None
     search: str | None = None
-
-

@@ -1,8 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-from src.schemas.base_filter import BaseReferenceFilter, SortDirection
+from src.schemas.base_filter import BaseReferenceFilter
 from src.schemas.company import CompanySimpleResponse
 from src.schemas.geography import DistrictSimpleResponse, RegionSimpleResponse
 from src.schemas.product import ProductGroupSimpleResponse

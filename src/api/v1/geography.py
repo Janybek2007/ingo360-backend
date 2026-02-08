@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from src.api.dependencies.current_user import current_active_user, current_operator_user
 from src.db.models import District, Region, Settlement, User
 from src.db.session import db_session
-from src.schemas import base_filter, geography
+from src.schemas import geography
 from src.services import geography as geography_service
 
 router = APIRouter(dependencies=[Depends(current_operator_user)])

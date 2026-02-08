@@ -1,0 +1,22 @@
+repos:
+  - repo: local
+    hooks:
+      - id: black-docker
+        name: black (docker)
+        entry: docker compose exec -T back black
+        language: system
+        types: [python]
+
+      - id: ruff-docker
+        name: ruff (docker)
+        entry: docker compose exec -T back ruff check --fix
+        language: system
+        types: [python]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-added-large-files

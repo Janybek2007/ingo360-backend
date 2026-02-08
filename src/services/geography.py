@@ -4,18 +4,11 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from src.db.models import (
-    Company,
-    Country,
-    District,
-    ImportLogs,
-    Region,
-    Settlement,
-    geography,
-)
-from src.mapping.geography import district_mapping, region_mapping, settlement_mapping
+from src.db.models import Company, Country, ImportLogs, Region, Settlement, geography
+from src.mapping.geography import district_mapping, region_mapping
 from src.schemas import geography as geography_schema
 from src.utils.excel_parser import parse_excel_file
+from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
 
 from .base import BaseService
@@ -70,13 +63,12 @@ class CountryService(
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
         sort_map = {"name": self.model.name}
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -151,13 +143,12 @@ class RegionService(
             "name": self.model.name,
             "country": self.model.country_id,
         }
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -221,12 +212,11 @@ class SettlementService(
 
         await session.commit()
 
-        return {
-            "imported": len(data_to_insert),
-            "skipped": len(skipped_records),
-            "total": len(records),
-            "skipped_records": skipped_records,
-        }
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
 
     @staticmethod
     def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:
@@ -262,13 +252,12 @@ class SettlementService(
             "name": self.model.name,
             "region": self.model.region_id,
         }
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -383,13 +372,12 @@ class DistrictService(
             "settlement": self.model.settlement_id,
             "company": self.model.company_id,
         }
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 

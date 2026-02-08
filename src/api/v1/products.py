@@ -315,7 +315,7 @@ async def get_dosage_form(
 
 
 @router.post("/dosage-forms/import-excel")
-async def bulk_insert_segments(
+async def bulk_insert_dosage_forms(
     file: UploadFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],

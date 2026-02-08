@@ -23,9 +23,6 @@ from src.db.models import IMS, Brand, Company, ImportLogs
 from src.mapping.ims import ims_mapping
 from src.schemas.ims import (
     IMSCreate,
-    IMSMetricsFilter,
-    IMSMetricsResponse,
-    IMSResponse,
     IMSTableFilter,
     IMSTopFilter,
     IMSUpdate,
@@ -39,10 +36,16 @@ if TYPE_CHECKING:
 
 
 class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
-    async def import_excel(self, session: "AsyncSession", file: "UploadFile", user_id: int, batch_size: int = 2000):
+    async def import_excel(
+        self,
+        session: "AsyncSession",
+        file: "UploadFile",
+        user_id: int,
+        batch_size: int = 2000,
+    ):
         from src.tasks.sale_imports import import_sales_task
 
-        upload_dir = Path("temp_uploads")
+        upload_dir = Path("temp")
         upload_dir.mkdir(exist_ok=True)
         file_path = upload_dir / f"{uuid4()}_{file.filename}"
 
@@ -65,14 +68,15 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
             raise
 
     async def _import_excel_from_file(
-            self,
-            session: "AsyncSession",
-            file_path: str,
-            user_id: int,
-            batch_size: int = 2000
+        self,
+        session: "AsyncSession",
+        file_path: str,
+        user_id: int,
+        batch_size: int = 2000,
     ):
         with open(file_path, "rb") as f:
             from tempfile import SpooledTemporaryFile
+
             temp = SpooledTemporaryFile(max_size=50 * 1024 * 1024)
             temp.write(f.read())
             temp.seek(0)

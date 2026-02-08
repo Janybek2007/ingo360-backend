@@ -1,13 +1,12 @@
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Query, UploadFile
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
 from src.db.session import db_session
 from src.schemas.base_filter import BaseFilter
 from src.schemas.ims import (
     IMSCreate,
-    IMSMetricsFilter,
     IMSResponse,
     IMSTableFilter,
     IMSTopFilter,

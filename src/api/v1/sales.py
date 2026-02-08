@@ -12,7 +12,6 @@ from src.api.dependencies.company import (
 from src.api.dependencies.current_user import current_active_user, current_operator_user
 from src.db.models import (
     SKU,
-    Company,
     Pharmacy,
     PrimarySalesAndStock,
     SecondarySales,
@@ -188,7 +187,7 @@ async def publish_unpublished_primary_sales(
     response_model=sale.PrimarySalesAndStockResponse,
     dependencies=[Depends(current_operator_user)],
 )
-async def get_primary_sales(
+async def get_primary_sale(
     primary_sales_id: int,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):

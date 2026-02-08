@@ -11,11 +11,9 @@ from src.db.session import db_session
 from src.schemas import base_filter
 from src.schemas.visit import (
     DoctorsBySpecialtyResponse,
-    DoctorsBySpecialtyWithVisitResponse,
     DoctorsCountFilter,
     DoctorsCountWithVisitFilter,
     VisitCountFilter,
-    VisitCountPeriodResponse,
     VisitCreate,
     VisitResponse,
     VisitSumForPeriodFilter,
@@ -49,7 +47,9 @@ async def get_visits(
 
 
 @router.post(
-    "/create", response_model=VisitResponse, dependencies=[Depends(current_operator_user)]
+    "/create",
+    response_model=VisitResponse,
+    dependencies=[Depends(current_operator_user)],
 )
 async def create_visit(
     new_visit: VisitCreate,

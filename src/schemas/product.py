@@ -1,9 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from src.schemas.base_filter import BaseReferenceFilter
-from .base_filter import BaseReferenceFilter, SortDirection
 from .company import CompanySimpleResponse
 
 

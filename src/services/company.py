@@ -1,4 +1,4 @@
-from typing import Type, Any, TYPE_CHECKING, Sequence
+from typing import Any, TYPE_CHECKING, Sequence
 
 from sqlalchemy import select, func, insert, update
 from fastapi import UploadFile, HTTPException, status
@@ -6,7 +6,12 @@ from sqlalchemy.exc import IntegrityError
 
 from .base import BaseService, ModelType, FilterSchemaType
 from src.db.models import Company, RegistrationApplication, User, ImportLogs
-from src.schemas.company import CompanyCreate, CompanyUpdate, RegistrationApplicationCreate, RegistrationApplicationUpdate
+from src.schemas.company import (
+    CompanyCreate,
+    CompanyUpdate,
+    RegistrationApplicationCreate,
+    RegistrationApplicationUpdate,
+)
 from src.utils.excel_parser import parse_excel_file
 from src.utils.mapping import map_record
 from src.mapping.companies import company_mapping
@@ -17,15 +22,21 @@ if TYPE_CHECKING:
 
 
 class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
-    async def get(self, session: 'AsyncSession', item_id: int, load_options: list[Any] | None = None) -> ModelType | None:
-        stmt = select(
-            Company,
-            func.count(User.id).filter(User.is_active).label('active_users')
-        ).where(
-            Company.id == item_id
-        ).outerjoin(
-            User, User.company_id == Company.id
-        ).group_by(Company.id)
+    async def get(
+        self,
+        session: "AsyncSession",
+        item_id: int,
+        load_options: list[Any] | None = None,
+    ) -> ModelType | None:
+        stmt = (
+            select(
+                Company,
+                func.count(User.id).filter(User.is_active).label("active_users"),
+            )
+            .where(Company.id == item_id)
+            .outerjoin(User, User.company_id == Company.id)
+            .group_by(Company.id)
+        )
 
         if load_options:
             stmt = stmt.options(*load_options)
@@ -41,10 +52,10 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
         return None
 
     async def get_multi(
-            self,
-            session: 'AsyncSession',
-            filters: FilterSchemaType | None = None,
-            load_options: list[Any] | None = None
+        self,
+        session: "AsyncSession",
+        filters: FilterSchemaType | None = None,
+        load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
         stmt = select(self.model)
         if load_options:
@@ -62,13 +73,11 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
             return []
 
         company_ids = [c.id for c in companies]
-        count_stmt = select(
-            User.company_id,
-            func.count(User.id).label('active_users')
-        ).where(
-            User.company_id.in_(company_ids),
-            User.is_active
-        ).group_by(User.company_id)
+        count_stmt = (
+            select(User.company_id, func.count(User.id).label("active_users"))
+            .where(User.company_id.in_(company_ids), User.is_active)
+            .group_by(User.company_id)
+        )
 
         count_result = await session.execute(count_stmt)
         counts_dict = {row[0]: row[1] for row in count_result.all()}
@@ -78,12 +87,14 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
 
         return companies
 
-    async def import_excel(self, session: 'AsyncSession', file: 'UploadFile', user_id: int):
+    async def import_excel(
+        self, session: "AsyncSession", file: "UploadFile", user_id: int
+    ):
         records = await parse_excel_file(file)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
-            target_table='Компании',
+            target_table="Компании",
             records_count=len(records),
         )
         session.add(import_log)
@@ -92,41 +103,40 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
         data_to_insert = []
         for r in records:
             relation_fields = {
-                'import_log_id': import_log.id,
+                "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, company_mapping, relation_fields))
         await session.execute(insert(self.model), data_to_insert)
         await session.commit()
 
     @staticmethod
-    async def get_active_company_users(session: 'AsyncSession', company_id: int) -> Sequence[int]:
-        stmt = select(User.id).where(
-            User.company_id == company_id,
-            User.is_active
-        )
+    async def get_active_company_users(
+        session: "AsyncSession", company_id: int
+    ) -> Sequence[int]:
+        stmt = select(User.id).where(User.company_id == company_id, User.is_active)
         result = await session.execute(stmt)
         return result.scalars().all()
 
     async def update(
-            self,
-            session: 'AsyncSession',
-            item_id: int,
-            obj_in: CompanyUpdate,
-            load_options: list[Any] | None = None
+        self,
+        session: "AsyncSession",
+        item_id: int,
+        obj_in: CompanyUpdate,
+        load_options: list[Any] | None = None,
     ) -> Company:
 
         company = await self.get_or_404(session, item_id)
         update_data = obj_in.model_dump(exclude_unset=True)
 
         will_deactivate = (
-                'is_active' in update_data
-                and not update_data['is_active']
-                and company.is_active
+            "is_active" in update_data
+            and not update_data["is_active"]
+            and company.is_active
         )
 
         will_activate = (
-            'is_active' in update_data
-            and update_data['is_active']
+            "is_active" in update_data
+            and update_data["is_active"]
             and not company.is_active
         )
 
@@ -163,31 +173,31 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
             await session.rollback()
             error_type = type(e.orig.__cause__).__name__
 
-            if 'ForeignKey' in error_type:
+            if "ForeignKey" in error_type:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail='Связанная запись не найдена'
+                    detail="Связанная запись не найдена",
                 )
-            elif 'Unique' in error_type:
+            elif "Unique" in error_type:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f'{self.model.__name__} с такими данными уже существует'
+                    detail=f"{self.model.__name__} с такими данными уже существует",
                 )
-            elif 'NotNull' in error_type:
+            elif "NotNull" in error_type:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail='Обязательное поле не заполнено'
+                    detail="Обязательное поле не заполнено",
                 )
             else:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail='Ошибка целостности данных'
+                    detail="Ошибка целостности данных",
                 )
         except Exception:
             await session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail='Внутренняя ошибка сервера'
+                detail="Внутренняя ошибка сервера",
             )
 
     @staticmethod
@@ -195,11 +205,11 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
         access_changes = []
 
         access_mapping = {
-            'can_primary_sales': 'primary',
-            'can_secondary_sales': 'secondary',
-            'can_tertiary_sales': 'tertiary',
-            'can_visits': 'visit',
-            'can_market_analysis': 'market'
+            "can_primary_sales": "primary",
+            "can_secondary_sales": "secondary",
+            "can_tertiary_sales": "tertiary",
+            "can_visits": "visit",
+            "can_market_analysis": "market",
         }
 
         for field, display_name in access_mapping.items():
@@ -213,41 +223,44 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
         return access_changes
 
     async def _notify_access_changes(
-            self,
-            session: 'AsyncSession',
-            company_id: int,
-            access_changes: list[str]
+        self, session: "AsyncSession", company_id: int, access_changes: list[str]
     ):
         user_ids = await self.get_active_company_users(session, company_id)
 
         for access_type in access_changes:
             for user_id in user_ids:
-                await connection_manager.send_company_access_revoked(user_id, access_type)
+                await connection_manager.send_company_access_revoked(
+                    user_id, access_type
+                )
 
-    async def _notify_company_deactivation(self, session: 'AsyncSession', company_id: int):
+    async def _notify_company_deactivation(
+        self, session: "AsyncSession", company_id: int
+    ):
         user_ids = await self.get_active_company_users(session, company_id)
 
         await connection_manager.notify_users(
             user_ids,
             notification_type="company_deactivated",
-            message="Ваша компания была деактивирована"
+            message="Ваша компания была деактивирована",
         )
 
     @staticmethod
-    async def _deactivate_company_users(session: 'AsyncSession', company_id: int):
-        stmt = update(User).where(
-            User.company_id == company_id,
-            User.is_active
-        ).values(is_active=False)
+    async def _deactivate_company_users(session: "AsyncSession", company_id: int):
+        stmt = (
+            update(User)
+            .where(User.company_id == company_id, User.is_active)
+            .values(is_active=False)
+        )
 
         await session.execute(stmt)
 
     @staticmethod
-    async def _activate_company_users(session: 'AsyncSession', company_id: int):
-        stmt = update(User).where(
-            User.company_id == company_id,
-            User.is_active.is_(False)
-        ).values(is_active=True)
+    async def _activate_company_users(session: "AsyncSession", company_id: int):
+        stmt = (
+            update(User)
+            .where(User.company_id == company_id, User.is_active.is_(False))
+            .values(is_active=True)
+        )
 
         await session.execute(stmt)
 
@@ -256,11 +269,12 @@ class RegistrationApplicationService(
     BaseService[
         RegistrationApplication,
         RegistrationApplicationCreate,
-        RegistrationApplicationUpdate
+        RegistrationApplicationUpdate,
     ]
-):
-    ...
+): ...
 
 
 company_service = CompanyService(Company)
-registration_application_service = RegistrationApplicationService(RegistrationApplication)
+registration_application_service = RegistrationApplicationService(
+    RegistrationApplication
+)

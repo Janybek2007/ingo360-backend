@@ -1,18 +1,16 @@
 import asyncio
 from typing import TYPE_CHECKING, Any, Sequence
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import UploadFile
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
     Brand,
-    ClientCategory,
     Company,
     Dosage,
     DosageForm,
     ImportLogs,
-    MedicalFacility,
     ProductGroup,
     PromotionType,
     Segment,
@@ -29,6 +27,7 @@ from src.mapping.products import (
 )
 from src.schemas import product
 from src.utils.excel_parser import parse_excel_file
+from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
 
 from .base import BaseService
@@ -75,13 +74,12 @@ class BrandService(
             "product_groups": self.model.product_group_id,
             "companies": self.model.company_id,
         }
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -164,12 +162,11 @@ class BrandService(
             await session.execute(stmt, data_to_insert)
         await session.commit()
 
-        return {
-            "imported": len(data_to_insert),
-            "skipped": len(skipped_records),
-            "total": len(records),
-            "skipped_records": skipped_records,
-        }
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
 
 
 class PromotionTypeService(
@@ -191,13 +188,12 @@ class PromotionTypeService(
         if filters.name:
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {"name": self.model.name},
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -247,13 +243,12 @@ class DosageFormService(
         if filters.name:
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {"name": self.model.name},
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -301,13 +296,12 @@ class DosageService(
         if filters.name:
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {"name": self.model.name},
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -355,13 +349,12 @@ class SegmentService(
         if filters.name:
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {"name": self.model.name},
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -439,13 +432,12 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
             "segments": self.model.segment_id,
             "companies": self.model.company_id,
         }
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -560,12 +552,11 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
 
         await session.commit()
 
-        return {
-            "imported": len(data_to_insert),
-            "skipped": len(skipped_records),
-            "total": len(records),
-            "skipped_records": skipped_records,
-        }
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
 
 
 class ProductGroupService(
@@ -595,13 +586,12 @@ class ProductGroupService(
             "name": self.model.name,
             "companies": self.model.company_id,
         }
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 

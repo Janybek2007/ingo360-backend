@@ -1,8 +1,8 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-from src.schemas.base_filter import BaseReferenceFilter, SortDirection
+from src.schemas.base_filter import BaseReferenceFilter
 from src.schemas.company import CompanySimpleResponse
 from src.schemas.employee import EmployeeSimpleResponse
 from src.schemas.geography import DistrictSimpleResponse, SettlementSimpleResponse

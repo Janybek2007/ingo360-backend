@@ -5,6 +5,23 @@ from sqlalchemy import asc, desc, or_
 
 class ListQueryHelper:
     @staticmethod
+    def build_sort_payload(sort_by: str | None, sort_order: str | None):
+        if sort_by and sort_order:
+            return {sort_by: sort_order}
+        return None
+
+    @staticmethod
+    def apply_sorting_with_default(
+        stmt,
+        sort_by: str | None,
+        sort_order: str | None,
+        sort_map: dict[str, Any],
+        default_sort,
+    ):
+        sort_payload = ListQueryHelper.build_sort_payload(sort_by, sort_order)
+        return ListQueryHelper.apply_sorting(stmt, sort_payload, sort_map, default_sort)
+
+    @staticmethod
     def apply_sorting(
         stmt, sort: dict[str, str] | None, sort_map: dict[str, Any], default_sort
     ):

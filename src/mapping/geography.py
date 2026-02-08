@@ -1,13 +1,11 @@
-
-
 region_mapping = {
-    'название': 'name',
+    "название": "name",
 }
 
 settlement_mapping = {
-    'название': 'name',
+    "название": "name",
 }
 
 district_mapping = {
-    'название': 'name',
+    "название": "name",
 }

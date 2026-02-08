@@ -1,16 +1,15 @@
-import os
 import asyncio
-import json
-import importlib
 import contextlib
+import importlib
+import json
+import os
 from pathlib import Path
 
 import redis
 
 from src.celery_app import celery_app
-from src.db.session import db_session
 from src.core.settings import settings
-
+from src.db.session import db_session
 
 get_async_session_context = contextlib.asynccontextmanager(db_session.get_session)
 
@@ -23,14 +22,32 @@ def import_class(path: str):
     return getattr(module, class_name)
 
 
+def save_import_result(task_id: str, payload: dict) -> str:
+    temp_dir = Path("temp")
+    temp_dir.mkdir(exist_ok=True)
+    file_path = temp_dir / f"task_{task_id}_result.json"
+    with file_path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, default=str)
+    return str(file_path)
+
+
+def _format_error_message(exc: Exception) -> str:
+    raw = str(exc).strip()
+    if not raw:
+        return exc.__class__.__name__
+
+    first_line = raw.splitlines()[0].strip()
+    return first_line[:500]
+
+
 @celery_app.task(bind=True)
 def import_sales_task(
-        self,
-        file_path: str,
-        user_id: int,
-        service_path: str,
-        model_path: str,
-        batch_size: int = 2000,
+    self,
+    file_path: str,
+    user_id: int,
+    service_path: str,
+    model_path: str,
+    batch_size: int = 2000,
 ):
     async def _import():
         service_cls = import_class(service_path)
@@ -47,27 +64,59 @@ def import_sales_task(
             return result
 
     task_id = self.request.id
+    file_name = Path(file_path).name
+    if "_" in file_name:
+        file_name = file_name.split("_", 1)[1]
     try:
         loop = asyncio.get_event_loop()
         result = loop.run_until_complete(_import())
 
-        payload = {
+        full_payload = {
+            "type": "import_status",
             "user_id": user_id,
             "task_id": task_id,
             "status": "completed",
-            "result": result
+            "result": {
+                "file_name": file_name,
+                "import_result": result,
+            },
         }
-        redis_sync.publish("celery_tasks_notifications", json.dumps(payload))
+        _saved_file_path = save_import_result(task_id, full_payload)
+
+        # payload = {
+        #     "user_id": user_id,
+        #     "task_id": task_id,
+        #     "status": "completed",
+        #     "result": {
+        #         "saved_file_path": saved_file_path,
+        #     },
+        # }
+        # redis_sync.publish("celery_tasks_notifications", json.dumps(payload))
         return result
 
     except Exception as e:
-        payload = {
+        full_payload = {
+            "type": "import_status",
             "user_id": user_id,
             "task_id": task_id,
             "status": "failed",
-            "message": str(e)
+            "message": _format_error_message(e),
+            "result": {
+                "file_name": file_name,
+                "import_result": None,
+            },
         }
-        redis_sync.publish("celery_tasks_notifications", json.dumps(payload))
+        _saved_file_path = save_import_result(task_id, full_payload)
+
+        # payload = {
+        #     "user_id": user_id,
+        #     "task_id": task_id,
+        #     "status": "failed",
+        #     "result": {
+        #         "saved_file_path": saved_file_path,
+        #     },
+        # }
+        # redis_sync.publish("celery_tasks_notifications", json.dumps(payload))
         raise
     finally:
         try:

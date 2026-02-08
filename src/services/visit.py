@@ -1,14 +1,13 @@
-import os
 import asyncio
-from uuid import uuid4
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from fastapi import UploadFile
 from sqlalchemy import String, and_, asc, desc, func, insert, or_, select
 
 from src.db.models import (
-    ClientCategory,
     Doctor,
     Employee,
     GeoIndicator,
@@ -22,6 +21,7 @@ from src.db.models import (
 from src.mapping.visits import visit_mapping
 from src.schemas import visit
 from src.utils.excel_parser import iter_excel_records
+from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
 
 from .base import BaseService
@@ -31,10 +31,16 @@ if TYPE_CHECKING:
 
 
 class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
-    async def import_sales(self, session: "AsyncSession", file: "UploadFile", user_id: int, batch_size: int = 2000):
+    async def import_sales(
+        self,
+        session: "AsyncSession",
+        file: "UploadFile",
+        user_id: int,
+        batch_size: int = 2000,
+    ):
         from src.tasks.sale_imports import import_sales_task
 
-        upload_dir = Path("temp_uploads")
+        upload_dir = Path("temp")
         upload_dir.mkdir(exist_ok=True)
         file_path = upload_dir / f"{uuid4()}_{file.filename}"
 
@@ -52,7 +58,8 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             )
             return {"task_id": task.id}
         except Exception:
-            if file_path.exists(): os.remove(file_path)
+            if file_path.exists():
+                os.remove(file_path)
             raise
 
     async def _import_excel_from_file(
@@ -60,10 +67,11 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         session: "AsyncSession",
         file_path: str,
         user_id: int,
-        batch_size: int = 2000
+        batch_size: int = 2000,
     ):
         with open(file_path, "rb") as f:
             from tempfile import SpooledTemporaryFile
+
             temp = SpooledTemporaryFile(max_size=50 * 1024 * 1024)
             temp.write(f.read())
             temp.seek(0)
@@ -78,9 +86,12 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
 
             for _, r in iter_excel_records(temp):
                 total_records += 1
-                if r.get("группа"): product_group_names.add(r["группа"])
-                if r.get("сотрудник"): employee_names.add(r["сотрудник"])
-                if r.get("врач"): doctor_names.add(r["врач"])
+                if r.get("группа"):
+                    product_group_names.add(r["группа"])
+                if r.get("сотрудник"):
+                    employee_names.add(r["сотрудник"])
+                if r.get("врач"):
+                    doctor_names.add(r["врач"])
 
                 if r.get("тип клиента") == "Врач" and r.get("учреждение"):
                     medical_facilities.add(r["учреждение"])
@@ -96,9 +107,23 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             results = await asyncio.gather(
                 self.get_id_map(session, ProductGroup, "name", product_group_names),
                 self.get_id_map(session, Employee, "full_name", employee_names),
-                self.get_id_map(session, Doctor, "full_name", doctor_names) if doctor_names else asyncio.sleep(0, ({}, set())),
-                self.get_id_map(session, MedicalFacility, "name", medical_facilities) if medical_facilities else asyncio.sleep(0, ({}, set())),
-                self.get_id_map(session, Pharmacy, "name", pharmacies) if pharmacies else asyncio.sleep(0, ({}, set())),
+                (
+                    self.get_id_map(session, Doctor, "full_name", doctor_names)
+                    if doctor_names
+                    else asyncio.sleep(0, ({}, set()))
+                ),
+                (
+                    self.get_id_map(
+                        session, MedicalFacility, "name", medical_facilities
+                    )
+                    if medical_facilities
+                    else asyncio.sleep(0, ({}, set()))
+                ),
+                (
+                    self.get_id_map(session, Pharmacy, "name", pharmacies)
+                    if pharmacies
+                    else asyncio.sleep(0, ({}, set()))
+                ),
             )
 
             pg_map, pg_miss = results[0]
@@ -115,9 +140,12 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             for idx, r in iter_excel_records(temp):
                 missing_keys = []
 
-                if r["группа"] in pg_miss: missing_keys.append(f"группа: {r['группа']}")
-                if r["сотрудник"] in emp_miss: missing_keys.append(f"сотрудник: {r['сотрудник']}")
-                if r.get("врач") in doc_miss: missing_keys.append(f"врач: {r['врач']}")
+                if r["группа"] in pg_miss:
+                    missing_keys.append(f"группа: {r['группа']}")
+                if r["сотрудник"] in emp_miss:
+                    missing_keys.append(f"сотрудник: {r['сотрудник']}")
+                if r.get("врач") in doc_miss:
+                    missing_keys.append(f"врач: {r['врач']}")
 
                 m_facility_id = None
                 p_id = None
@@ -157,12 +185,11 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 imported_count += len(data_to_insert)
 
             await session.commit()
-            return {
-                "imported": imported_count,
-                "skipped": len(skipped_records),
-                "total": total_records,
-                "skipped_records": skipped_records,
-            }
+            return build_import_result(
+                total=total_records,
+                imported=imported_count,
+                skipped_records=skipped_records,
+            )
         finally:
             temp.close()
 
@@ -515,8 +542,9 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 "id_label": "medical_facility_id",
                 "name_label": "medical_facility",
                 "join_table": MedicalFacility,
-                "join_condition": lambda: Visit.medical_facility_id
-                == MedicalFacility.id,
+                "join_condition": lambda: (
+                    Visit.medical_facility_id == MedicalFacility.id
+                ),
                 "join_type": "outerjoin",
             },
             "year": {

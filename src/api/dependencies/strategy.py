@@ -10,7 +10,6 @@ from src.db.session import db_session
 from src.websocket import connection_manager as conn
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
     from fastapi_users.authentication.strategy.db import AccessTokenDatabase
     from src.db.models import AccessToken
     from fastapi_users import models
@@ -23,17 +22,17 @@ class SingleSessionDatabaseStrategy(DatabaseStrategy):
     """
 
     def __init__(
-            self,
-            database: 'AccessTokenDatabase[AccessToken]',
-            lifetime_seconds: int,
-            get_session_func,
-            connection_manager: conn.ConnectionManager,
+        self,
+        database: "AccessTokenDatabase[AccessToken]",
+        lifetime_seconds: int,
+        get_session_func,
+        connection_manager: conn.ConnectionManager,
     ):
         super().__init__(database=database, lifetime_seconds=lifetime_seconds)
         self.get_session_func = get_session_func
         self.connection_manager = connection_manager
 
-    async def write_token(self, user: 'models.UP') -> str:
+    async def write_token(self, user: "models.UP") -> str:
         await self.connection_manager.send_token_invalidation(user.id)
 
         await self._delete_user_tokens(user.id)
@@ -51,10 +50,9 @@ class SingleSessionDatabaseStrategy(DatabaseStrategy):
 
 
 def get_database_strategy(
-        access_token_db: Annotated[
-            'AccessTokenDatabase[AccessToken]',
-            Depends(get_access_token_db)
-        ],
+    access_token_db: Annotated[
+        "AccessTokenDatabase[AccessToken]", Depends(get_access_token_db)
+    ],
 ) -> SingleSessionDatabaseStrategy:
     return SingleSessionDatabaseStrategy(
         database=access_token_db,

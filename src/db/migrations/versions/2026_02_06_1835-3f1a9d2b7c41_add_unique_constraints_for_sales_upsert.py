@@ -21,8 +21,7 @@ def upgrade() -> None:
     """Upgrade schema."""
     # Удаляем дубликаты перед созданием UNIQUE.
     # Оставляем самую "свежую" запись в группе (updated_at DESC, id DESC).
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM primary_sales_and_stock p
         USING (
             SELECT ctid
@@ -38,11 +37,9 @@ def upgrade() -> None:
             WHERE t.rn > 1
         ) d
         WHERE p.ctid = d.ctid;
-        """
-    )
+        """)
 
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM secondary_sales s
         USING (
             SELECT ctid
@@ -58,11 +55,9 @@ def upgrade() -> None:
             WHERE t.rn > 1
         ) d
         WHERE s.ctid = d.ctid;
-        """
-    )
+        """)
 
-    op.execute(
-        """
+    op.execute("""
         DELETE FROM tertiary_sales_and_stock tss
         USING (
             SELECT ctid
@@ -78,8 +73,7 @@ def upgrade() -> None:
             WHERE t.rn > 1
         ) d
         WHERE tss.ctid = d.ctid;
-        """
-    )
+        """)
 
     op.create_unique_constraint(
         "uq_primary_sales_business_key",

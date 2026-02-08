@@ -17,6 +17,7 @@ from src.db.models import (
 from src.mapping.employees import employee_mapping, position_mapping
 from src.schemas import employee
 from src.utils.excel_parser import parse_excel_file
+from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
 
 from .base import BaseService
@@ -67,13 +68,12 @@ class EmployeeService(
             "districts": self.model.district_id,
             "companies": self.model.company_id,
         }
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -188,12 +188,11 @@ class EmployeeService(
 
         await session.commit()
 
-        return {
-            "imported": len(data_to_insert),
-            "skipped": len(skipped_records),
-            "total": len(records),
-            "skipped_records": skipped_records,
-        }
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
 
 
 class PositionService(
@@ -213,13 +212,13 @@ class PositionService(
         if filters.name:
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        sort_map = {"name": self.model.name}
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 

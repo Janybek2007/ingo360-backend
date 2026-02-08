@@ -7,7 +7,6 @@ from .base import Base
 
 if TYPE_CHECKING:
     from . import (
-        ClientCategory,
         Doctor,
         Employee,
         MedicalFacility,

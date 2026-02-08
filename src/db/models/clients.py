@@ -14,7 +14,6 @@ if TYPE_CHECKING:
         ImportLogs,
         PrimarySalesAndStock,
         ProductGroup,
-        Region,
         SecondarySales,
         Settlement,
         TertiarySalesAndStock,

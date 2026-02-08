@@ -1,8 +1,7 @@
-import asyncio
 from typing import TYPE_CHECKING, Any, Sequence
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import asc, desc, or_, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
@@ -31,6 +30,7 @@ from src.mapping.clients import (
 )
 from src.schemas import client
 from src.utils.excel_parser import parse_excel_file
+from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
 
 from .base import BaseService
@@ -59,13 +59,12 @@ class ClientCategoryService(
         if filters.name:
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {"name": self.model.name},
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -139,13 +138,12 @@ class DoctorService(
             "client_category": self.model.client_category_id,
             "product_group": self.model.product_group_id,
         }
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -259,12 +257,11 @@ class DoctorService(
 
         await session.commit()
 
-        return {
-            "imported": len(data_to_insert),
-            "skipped": len(skipped_records),
-            "total": len(records),
-            "skipped_records": skipped_records,
-        }
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
 
 
 class PharmacyService(
@@ -293,13 +290,12 @@ class PharmacyService(
             "geo_indicators": self.model.geo_indicator_id,
         }
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.id.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.id.desc(),
         )
 
         if filters.name:
@@ -608,12 +604,11 @@ class PharmacyService(
 
         await session.commit()
 
-        return {
-            "imported": len(data_to_insert),
-            "skipped": len(skipped_records),
-            "total": len(records),
-            "skipped_records": skipped_records,
-        }
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
 
 
 class SpecialityService(
@@ -633,13 +628,12 @@ class SpecialityService(
         if filters.name:
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {"name": self.model.name},
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -712,13 +706,12 @@ class MedicalFacilityService(
             "districts": self.model.district_id,
             "geo_indicators": self.model.geo_indicator_id,
         }
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, sort_map, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -909,12 +902,11 @@ class MedicalFacilityService(
 
         await session.commit()
 
-        return {
-            "imported": len(data_to_insert),
-            "skipped": len(skipped_records),
-            "total": len(records),
-            "skipped_records": skipped_records,
-        }
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
 
 
 class DistributorService(
@@ -934,13 +926,13 @@ class DistributorService(
         if filters.name:
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        sort_map = {"name": self.model.name}
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            self.model.id.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -987,13 +979,12 @@ class GeoIndicatorService(
         if filters.name:
             stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
-        sort_payload = (
-            {filters.sort_by: filters.sort_order}
-            if filters.sort_by and filters.sort_order
-            else None
-        )
-        stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_payload, {"name": self.model.name}, self.model.created_at.desc()
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            {"name": self.model.name},
+            self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 

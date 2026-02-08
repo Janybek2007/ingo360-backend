@@ -1,5 +1,5 @@
 from sqlalchemy import Index
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped
 
 from .base import Base
 

@@ -1,14 +1,10 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field
 
-from src.schemas.base_filter import SortDirection
-from src.schemas.client import (
-    DistributorResponse,
-    GeoIndicatorResponse,
-    PharmacySimpleResponse,
-)
+from src.schemas.base_filter import BaseDbFilter, SortDirection
+from src.schemas.client import DistributorResponse, PharmacySimpleResponse
 from src.schemas.product import SKUSimpleResponse
 
 
@@ -145,9 +141,7 @@ SecondaryTertiarySalesSortField = Literal[
 ]
 
 
-class PrimarySalesAndStockListRequest(BaseModel):
-    limit: int | None = None
-    offset: int = 0
+class PrimarySalesAndStockListRequest(BaseDbFilter):
     distributor_ids: list[int] | None = None
     brand_ids: list[int] | None = None
     sku_ids: list[int] | None = None
@@ -157,12 +151,9 @@ class PrimarySalesAndStockListRequest(BaseModel):
     indicator: str | None = None
     published: bool | None = None
     sort_by: PrimarySalesSortField | None = None
-    sort_order: SortDirection | None = None
 
 
-class SecondaryTertiarySalesListRequest(BaseModel):
-    limit: int | None = None
-    offset: int = 0
+class SecondaryTertiarySalesListRequest(BaseDbFilter):
     pharmacy_ids: list[int] | None = None
     distributor_ids: list[int] | None = None
     brand_ids: list[int] | None = None
@@ -173,7 +164,6 @@ class SecondaryTertiarySalesListRequest(BaseModel):
     indicator: str | None = None
     published: bool | None = None
     sort_by: SecondaryTertiarySalesSortField | None = None
-    sort_order: SortDirection | None = None
 
 
 class PrimarySalesAndStockResponse(BaseModel):
