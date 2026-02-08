@@ -66,5 +66,15 @@ class ConnectionManager:
                 except Exception:
                     pass
 
+    async def send_import_notification(self, user_id: int, task_id: str, status: str, result: dict = None):
+        if user_id in self.active_connections:
+            await self.notify_users(
+                user_ids=[user_id],
+                notification_type="import_status",
+                task_id=task_id,
+                status=status,
+                result=result
+            )
+
 
 connection_manager = ConnectionManager()
