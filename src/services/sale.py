@@ -159,7 +159,7 @@ class PrimarySalesAndStockService(
                 os.remove(file_path)
             raise
 
-    async def _import_sales_from_file(
+    async def _import_excel_from_file(
             self,
             session: "AsyncSession",
             file_path: str,
@@ -1479,7 +1479,7 @@ class SecondarySalesService(
                 os.remove(file_path)
             raise
 
-    async def _import_sales_from_file(
+    async def _import_excel_from_file(
             self,
             session: "AsyncSession",
             file_path: str,
@@ -2270,7 +2270,7 @@ class TertiarySalesService(
                 os.remove(file_path)
             raise
 
-    async def _import_sales_from_file(
+    async def _import_excel_from_file(
             self,
             session: "AsyncSession",
             file_path: str,

@@ -50,7 +50,7 @@ async def ims_import_excel(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
     current_user: Annotated["User", Depends(current_operator_user)],
 ):
-    await ims_service.import_excel(session, file, current_user.id)
+    return await ims_service.import_excel(session, file, current_user.id)
 
 
 @router.get(

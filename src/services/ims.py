@@ -1,4 +1,7 @@
+import os
 import re
+from uuid import uuid4
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, UploadFile, status
@@ -28,7 +31,7 @@ from src.schemas.ims import (
     IMSUpdate,
 )
 from src.services.base import BaseService
-from src.utils.excel_parser import parse_excel_file
+from src.utils.excel_parser import iter_excel_records
 from src.utils.mapping import map_record
 
 if TYPE_CHECKING:
@@ -36,28 +39,79 @@ if TYPE_CHECKING:
 
 
 class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
-    async def import_excel(
-        self, session: "AsyncSession", file: "UploadFile", user_id: int
+    async def import_excel(self, session: "AsyncSession", file: "UploadFile", user_id: int, batch_size: int = 2000):
+        from src.tasks.sale_imports import import_sales_task
+
+        upload_dir = Path("temp_uploads")
+        upload_dir.mkdir(exist_ok=True)
+        file_path = upload_dir / f"{uuid4()}_{file.filename}"
+
+        try:
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+
+            task = import_sales_task.delay(
+                file_path=str(file_path),
+                user_id=user_id,
+                service_path="src.services.ims.IMSMetricsService",
+                model_path="src.db.models.IMS",
+                batch_size=batch_size,
+            )
+            return {"task_id": task.id}
+        except Exception:
+            if file_path.exists():
+                os.remove(file_path)
+            raise
+
+    async def _import_excel_from_file(
+            self,
+            session: "AsyncSession",
+            file_path: str,
+            user_id: int,
+            batch_size: int = 2000
     ):
-        records = await parse_excel_file(file)
+        with open(file_path, "rb") as f:
+            from tempfile import SpooledTemporaryFile
+            temp = SpooledTemporaryFile(max_size=50 * 1024 * 1024)
+            temp.write(f.read())
+            temp.seek(0)
 
-        import_log = ImportLogs(
-            uploaded_by=user_id,
-            target_table="IMS",
-            records_count=len(records),
-        )
-        session.add(import_log)
-        await session.flush()
+        try:
+            total_records = 0
+            for _ in iter_excel_records(temp):
+                total_records += 1
 
-        data_to_insert = []
-        for r in records:
+            temp.seek(0)
 
-            relation_fields = {
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(map_record(r, ims_mapping, relation_fields))
-        await session.execute(insert(self.model), data_to_insert)
-        await session.commit()
+            import_log = ImportLogs(
+                uploaded_by=user_id,
+                target_table="IMS",
+                records_count=total_records,
+            )
+            session.add(import_log)
+            await session.flush()
+
+            data_to_insert = []
+            imported_count = 0
+
+            for _, record in iter_excel_records(temp):
+                relation_fields = {"import_log_id": import_log.id}
+                data_to_insert.append(map_record(record, ims_mapping, relation_fields))
+
+                if len(data_to_insert) >= batch_size:
+                    await session.execute(insert(self.model), data_to_insert)
+                    imported_count += len(data_to_insert)
+                    data_to_insert = []
+
+            if data_to_insert:
+                await session.execute(insert(self.model), data_to_insert)
+                imported_count += len(data_to_insert)
+
+            await session.commit()
+            return {"imported": imported_count, "total": total_records}
+        finally:
+            temp.close()
 
     @staticmethod
     def _format_db_period(year: int, month: int) -> str:

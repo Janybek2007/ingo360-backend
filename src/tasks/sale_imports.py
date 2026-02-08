@@ -38,7 +38,7 @@ def import_sales_task(
 
         async with get_async_session_context() as session:
             service = service_cls(model_cls)
-            result = await service._import_sales_from_file(
+            result = await service._import_excel_from_file(
                 session=session,
                 file_path=file_path,
                 user_id=user_id,

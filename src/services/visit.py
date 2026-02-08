@@ -1,4 +1,7 @@
+import os
 import asyncio
+from uuid import uuid4
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import UploadFile
@@ -18,7 +21,7 @@ from src.db.models import (
 )
 from src.mapping.visits import visit_mapping
 from src.schemas import visit
-from src.utils.excel_parser import parse_excel_file
+from src.utils.excel_parser import iter_excel_records
 from src.utils.mapping import map_record
 
 from .base import BaseService
@@ -28,118 +31,140 @@ if TYPE_CHECKING:
 
 
 class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
-    async def import_sales(
-        self, session: "AsyncSession", file: "UploadFile", user_id: int
+    async def import_sales(self, session: "AsyncSession", file: "UploadFile", user_id: int, batch_size: int = 2000):
+        from src.tasks.sale_imports import import_sales_task
+
+        upload_dir = Path("temp_uploads")
+        upload_dir.mkdir(exist_ok=True)
+        file_path = upload_dir / f"{uuid4()}_{file.filename}"
+
+        try:
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+
+            task = import_sales_task.delay(
+                file_path=str(file_path),
+                user_id=user_id,
+                service_path="src.services.visit.VisitService",
+                model_path="src.db.models.Visit",
+                batch_size=batch_size,
+            )
+            return {"task_id": task.id}
+        except Exception:
+            if file_path.exists(): os.remove(file_path)
+            raise
+
+    async def _import_excel_from_file(
+        self,
+        session: "AsyncSession",
+        file_path: str,
+        user_id: int,
+        batch_size: int = 2000
     ):
-        records = await parse_excel_file(file)
+        with open(file_path, "rb") as f:
+            from tempfile import SpooledTemporaryFile
+            temp = SpooledTemporaryFile(max_size=50 * 1024 * 1024)
+            temp.write(f.read())
+            temp.seek(0)
 
-        import_log = ImportLogs(
-            uploaded_by=user_id,
-            target_table="Визиты",
-            records_count=len(records),
-        )
-        session.add(import_log)
-        await session.flush()
+        try:
+            product_group_names = set()
+            employee_names = set()
+            doctor_names = set()
+            medical_facilities = set()
+            pharmacies = set()
+            total_records = 0
 
-        results = await asyncio.gather(
-            self.get_id_map(
-                session, ProductGroup, "name", {r["группа"] for r in records}
-            ),
-            self.get_id_map(
-                session, Employee, "full_name", {r["сотрудник"] for r in records}
-            ),
-            return_exceptions=True,
-        )
+            for _, r in iter_excel_records(temp):
+                total_records += 1
+                if r.get("группа"): product_group_names.add(r["группа"])
+                if r.get("сотрудник"): employee_names.add(r["сотрудник"])
+                if r.get("врач"): doctor_names.add(r["врач"])
 
-        product_group_map, missing_product_groups = results[0]
-        employee_map, missing_employees = results[1]
+                if r.get("тип клиента") == "Врач" and r.get("учреждение"):
+                    medical_facilities.add(r["учреждение"])
+                elif r.get("тип клиента") == "Аптека" and r.get("учреждение"):
+                    pharmacies.add(r["учреждение"])
 
-        doctor_values = {r["врач"] for r in records if r["врач"] is not None}
-        doctor_map, missing_doctors = (
-            await self.get_id_map(session, Doctor, "full_name", doctor_values)
-            if doctor_values
-            else ({}, set())
-        )
+            import_log = ImportLogs(
+                uploaded_by=user_id, target_table="Визиты", records_count=total_records
+            )
+            session.add(import_log)
+            await session.flush()
 
-        medical_facilities = {
-            r["учреждение"]
-            for r in records
-            if r.get("тип клиента") == "Врач" and r.get("учреждение") is not None
-        }
-        medical_facility_map, missing_medical_facilities = (
-            await self.get_id_map(session, MedicalFacility, "name", medical_facilities)
-            if medical_facilities
-            else ({}, set())
-        )
+            results = await asyncio.gather(
+                self.get_id_map(session, ProductGroup, "name", product_group_names),
+                self.get_id_map(session, Employee, "full_name", employee_names),
+                self.get_id_map(session, Doctor, "full_name", doctor_names) if doctor_names else asyncio.sleep(0, ({}, set())),
+                self.get_id_map(session, MedicalFacility, "name", medical_facilities) if medical_facilities else asyncio.sleep(0, ({}, set())),
+                self.get_id_map(session, Pharmacy, "name", pharmacies) if pharmacies else asyncio.sleep(0, ({}, set())),
+            )
 
-        pharmacies = {
-            r["учреждение"]
-            for r in records
-            if r.get("тип клиента") == "Аптека" and r.get("учреждение") is not None
-        }
-        pharmacy_map, missing_pharmacies = (
-            await self.get_id_map(session, Pharmacy, "name", pharmacies)
-            if pharmacies
-            else ({}, set())
-        )
+            pg_map, pg_miss = results[0]
+            emp_map, emp_miss = results[1]
+            doc_map, doc_miss = results[2]
+            mf_map, mf_miss = results[3]
+            ph_map, ph_miss = results[4]
 
-        skipped_records = []
-        data_to_insert = []
+            skipped_records = []
+            data_to_insert = []
+            imported_count = 0
+            temp.seek(0)
 
-        for idx, r in enumerate(records):
-            missing_keys = []
+            for idx, r in iter_excel_records(temp):
+                missing_keys = []
 
-            if r["группа"] in missing_product_groups:
-                missing_keys.append(f"группа: {r['группа']}")
+                if r["группа"] in pg_miss: missing_keys.append(f"группа: {r['группа']}")
+                if r["сотрудник"] in emp_miss: missing_keys.append(f"сотрудник: {r['сотрудник']}")
+                if r.get("врач") in doc_miss: missing_keys.append(f"врач: {r['врач']}")
 
-            if r["сотрудник"] in missing_employees:
-                missing_keys.append(f"сотрудник: {r['сотрудник']}")
+                m_facility_id = None
+                p_id = None
 
-            if r["врач"] and r["врач"] in missing_doctors:
-                missing_keys.append(f"врач: {r['врач']}")
+                if r.get("тип клиента") == "Врач":
+                    if r.get("учреждение") in mf_miss:
+                        missing_keys.append(f"учреждение (ЛПУ): {r['учреждение']}")
+                    else:
+                        m_facility_id = mf_map.get(r.get("учреждение"))
+                elif r.get("тип клиента") == "Аптека":
+                    if r.get("учреждение") in ph_miss:
+                        missing_keys.append(f"учреждение (Аптека): {r['учреждение']}")
+                    else:
+                        p_id = ph_map.get(r.get("учреждение"))
 
-            medical_facility_id = None
-            pharmacy_id = None
+                if missing_keys:
+                    skipped_records.append({"row": idx, "missing": missing_keys})
+                    continue
 
-            if r.get("тип клиента") == "Врач":
-                if (
-                    r.get("учреждение")
-                    and r["учреждение"] in missing_medical_facilities
-                ):
-                    missing_keys.append(f"учреждение (ЛПУ): {r['учреждение']}")
-                else:
-                    medical_facility_id = medical_facility_map.get(r["учреждение"])
-            elif r.get("тип клиента") == "Аптека":
-                if r.get("учреждение") and r["учреждение"] in missing_pharmacies:
-                    missing_keys.append(f"учреждение (Аптека): {r['учреждение']}")
-                else:
-                    pharmacy_id = pharmacy_map.get(r["учреждение"])
+                relation_fields = {
+                    "product_group_id": pg_map[r["группа"]],
+                    "doctor_id": doc_map.get(r.get("врач")),
+                    "employee_id": emp_map[r["сотрудник"]],
+                    "medical_facility_id": m_facility_id,
+                    "pharmacy_id": p_id,
+                    "import_log_id": import_log.id,
+                }
+                data_to_insert.append(map_record(r, visit_mapping, relation_fields))
 
-            if missing_keys:
-                skipped_records.append({"row": idx + 1, "missing": missing_keys})
-                continue
+                if len(data_to_insert) >= batch_size:
+                    await session.execute(insert(self.model), data_to_insert)
+                    imported_count += len(data_to_insert)
+                    data_to_insert = []
 
-            relation_fields = {
-                "product_group_id": product_group_map[r["группа"]],
-                "doctor_id": doctor_map.get(r["врач"]),
-                "employee_id": employee_map[r["сотрудник"]],
-                "medical_facility_id": medical_facility_id,
-                "import_log_id": import_log.id,
-                "pharmacy_id": pharmacy_id,
+            if data_to_insert:
+                await session.execute(insert(self.model), data_to_insert)
+                imported_count += len(data_to_insert)
+
+            await session.commit()
+            return {
+                "imported": imported_count,
+                "skipped": len(skipped_records),
+                "total": total_records,
+                "skipped_records": skipped_records,
             }
-            data_to_insert.append(map_record(r, visit_mapping, relation_fields))
-
-        if data_to_insert:
-            await session.execute(insert(self.model), data_to_insert)
-
-        await session.commit()
-
-        return {
-            "imported": len(data_to_insert),
-            "skipped": len(skipped_records),
-            "total": len(records),
-            "skipped_records": skipped_records,
-        }
+        finally:
+            temp.close()
 
     @staticmethod
     async def get_doctor_count_by_speciality(
