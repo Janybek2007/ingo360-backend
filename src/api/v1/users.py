@@ -1,29 +1,31 @@
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends, Request, HTTPException, status, Query
-from sqlalchemy.orm import joinedload
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
-from src.schemas.user import (
-    UserRead,
-    UserUpdate,
-    UserCreateWithoutPassword,
-    PasswordSetup,
-    UserAdminUpdate,
-    PasswordChange,
-    UserFilter,
-)
-from src.api.dependencies.user_manager import get_user_manager
-from src.core.auth.user_manager import UserManager
 from src.api.dependencies.current_user import (
-    current_admin_user,
     current_active_user,
     current_admin_or_operator_user,
+    current_admin_user,
     current_superuser,
 )
-from src.db.session import db_session
-from src.db.models.users import User
+from src.api.dependencies.user_manager import get_user_manager
+from src.api.utils.export_excel import export_excel_response
+from src.core.auth.user_manager import UserManager
 from src.db.models import Company
+from src.db.models.users import User
+from src.db.session import db_session
+from src.schemas.export import ExportExcelRequest
+from src.schemas.user import (
+    PasswordChange,
+    PasswordSetup,
+    UserAdminUpdate,
+    UserCreateWithoutPassword,
+    UserFilter,
+    UserRead,
+    UserUpdate,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -110,6 +112,23 @@ async def get_client(
     )
 
 
+@router.post(
+    "/clients/export-excel", dependencies=[Depends(current_admin_or_operator_user)]
+)
+async def export_clients_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    user_manager: Annotated[UserManager, Depends(get_user_manager)],
+):
+    load_options = [joinedload(User.company)]
+
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: user_manager.get_clients(session, load_options=load_options),
+        serialize=lambda u: UserRead.model_validate(u).model_dump(),
+    )
+
+
 @router.get(
     "/admins-operators",
     response_model=list[UserRead],
@@ -118,8 +137,32 @@ async def get_client(
 async def get_admins_operators(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
     user_manager: Annotated[UserManager, Depends(get_user_manager)],
+    filters: Annotated[UserFilter, Query()],
 ):
-    return await user_manager.get_admins_and_operators(session)
+    load_options = [joinedload(User.company)]
+    return await user_manager.get_admins_and_operators(
+        session, filters=filters, load_options=load_options
+    )
+
+
+@router.post(
+    "/admins-operators/export-excel",
+    dependencies=[Depends(current_admin_or_operator_user)],
+)
+async def export_admins_operators_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    user_manager: Annotated[UserManager, Depends(get_user_manager)],
+):
+    load_options = [joinedload(User.company)]
+
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: user_manager.get_admins_and_operators(
+            session, load_options=load_options
+        ),
+        serialize=lambda u: UserRead.model_validate(u).model_dump(),
+    )
 
 
 @router.get("/me", response_model=UserRead)

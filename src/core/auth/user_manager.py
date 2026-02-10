@@ -1,30 +1,31 @@
 import logging
 import secrets
-from typing import Optional, TYPE_CHECKING, Sequence, Any
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
-from fastapi_users import BaseUserManager, IntegerIDMixin, exceptions
 from fastapi import HTTPException, status
+from fastapi_users import BaseUserManager, IntegerIDMixin, exceptions
 from fastapi_users.db import BaseUserDatabase
-from sqlalchemy import select, func, update, or_
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.sql import ColumnElement
 
-from src.db.models import User, Company, PasswordSetupToken
 from src.core.settings import settings
+from src.db.models import Company, PasswordSetupToken, User
 from src.schemas.user import (
-    UserCreate,
-    UserUpdate,
-    UserCreateWithoutPassword,
     UserAdminUpdate,
+    UserCreate,
+    UserCreateWithoutPassword,
+    UserFilter,
+    UserUpdate,
 )
 from src.tasks.email import send_email
 from src.websocket.connection_manager import ConnectionManager
-from src.schemas.user import UserFilter
 
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from fastapi import Request, BackgroundTasks
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from fastapi import BackgroundTasks, Request
     from fastapi_users.password import PasswordHelperProtocol
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
@@ -214,7 +215,9 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
 
     @staticmethod
     async def get_admins_and_operators(
-        session: "AsyncSession", load_options: list[Any] | None = None
+        session: "AsyncSession",
+        filters: UserFilter | None = None,
+        load_options: list[Any] | None = None,
     ) -> Sequence[User]:
         stmt = select(User)
 
@@ -222,6 +225,66 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
             stmt = stmt.options(*load_options)
 
         stmt = stmt.where(or_(User.is_admin, User.is_operator))
+
+        if filters:
+            if filters.is_active is not None:
+                stmt = stmt.where(User.is_active.is_(filters.is_active))
+
+            if filters.search:
+                search_term = f"%{filters.search}%"
+                search_conditions = [
+                    User.first_name.ilike(search_term),
+                    User.patronymic.ilike(search_term),
+                    User.last_name.ilike(search_term),
+                    User.email.ilike(search_term),
+                ]
+                stmt = stmt.where(or_(*search_conditions))
+
+            if filters.full_name:
+                full_name_term = f"%{filters.full_name}%"
+                full_name = func.concat(
+                    User.last_name,
+                    " ",
+                    User.first_name,
+                    " ",
+                    func.coalesce(User.patronymic, ""),
+                )
+                stmt = stmt.where(full_name.ilike(full_name_term))
+
+            if filters.email:
+                stmt = stmt.where(User.email.ilike(f"%{filters.email}%"))
+
+            if filters.role == "admin":
+                stmt = stmt.where(User.is_admin.is_(True))
+            elif filters.role == "operator":
+                stmt = stmt.where(User.is_operator.is_(True))
+
+            if filters.sort_by and filters.sort_order:
+                full_name = func.concat(
+                    User.last_name,
+                    " ",
+                    User.first_name,
+                    " ",
+                    func.coalesce(User.patronymic, ""),
+                )
+                role_value = func.case(
+                    (User.is_admin.is_(True), 2),
+                    (User.is_operator.is_(True), 1),
+                    else_=0,
+                )
+                sort_map: dict[str, ColumnElement] = {
+                    "full_name": full_name,
+                    "role": role_value,
+                    "email": User.email,
+                    "is_active": User.is_active,
+                }
+                sort_column = sort_map.get(filters.sort_by)
+                if sort_column is not None:
+                    stmt = stmt.order_by(
+                        sort_column.asc()
+                        if filters.sort_order == "ASC"
+                        else sort_column.desc()
+                    )
         result = await session.execute(stmt)
 
         return result.unique().scalars().all()
@@ -372,7 +435,7 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
     async def get_all(
         self,
         session: "AsyncSession",
-        filters: UserFilter,
+        filters: UserFilter | None = None,
         load_options: list[Any] | None = None,
     ):
         stmt = select(User)
@@ -380,17 +443,18 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.is_active is not None:
-            stmt = stmt.where(User.is_active.is_(filters.is_active))
+        if filters:
+            if filters.is_active is not None:
+                stmt = stmt.where(User.is_active.is_(filters.is_active))
 
-        if filters.search:
-            search_term = f"%{filters.search}%"
-            search_conditions = [
-                User.first_name.ilike(search_term),
-                User.patronymic.ilike(search_term),
-                User.last_name.ilike(search_term),
-            ]
-            stmt = stmt.where(or_(*search_conditions))
+            if filters.search:
+                search_term = f"%{filters.search}%"
+                search_conditions = [
+                    User.first_name.ilike(search_term),
+                    User.patronymic.ilike(search_term),
+                    User.last_name.ilike(search_term),
+                ]
+                stmt = stmt.where(or_(*search_conditions))
 
         result = await session.execute(stmt)
         return result.scalars().all()
@@ -398,24 +462,83 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
     async def get_clients(
         self,
         session: "AsyncSession",
-        filters: UserFilter,
+        filters: UserFilter | None = None,
         load_options: list[Any] | None = None,
     ):
         stmt = select(User).where(~User.is_admin, ~User.is_operator, ~User.is_superuser)
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.is_active is not None:
-            stmt = stmt.where(User.is_active.is_(filters.is_active))
+        if filters:
+            if filters.is_active is not None:
+                stmt = stmt.where(User.is_active.is_(filters.is_active))
 
-        if filters.search:
-            search_term = f"%{filters.search}%"
-            search_conditions = [
-                User.first_name.ilike(search_term),
-                User.patronymic.ilike(search_term),
-                User.last_name.ilike(search_term),
-            ]
-            stmt = stmt.where(or_(*search_conditions))
+            if filters.search:
+                search_term = f"%{filters.search}%"
+                search_conditions = [
+                    User.first_name.ilike(search_term),
+                    User.patronymic.ilike(search_term),
+                    User.last_name.ilike(search_term),
+                    User.position.ilike(search_term),
+                    User.email.ilike(search_term),
+                ]
+                stmt = stmt.where(or_(*search_conditions))
+
+            if filters.full_name:
+                full_name_term = f"%{filters.full_name}%"
+                full_name = func.concat(
+                    User.last_name,
+                    " ",
+                    User.first_name,
+                    " ",
+                    func.coalesce(User.patronymic, ""),
+                )
+                stmt = stmt.where(full_name.ilike(full_name_term))
+
+            if filters.position:
+                stmt = stmt.where(User.position.ilike(f"%{filters.position}%"))
+
+            if filters.email:
+                stmt = stmt.where(User.email.ilike(f"%{filters.email}%"))
+
+            if filters.company_ids:
+                include_null = 0 in filters.company_ids
+                non_zero_values = [value for value in filters.company_ids if value != 0]
+
+                if include_null and non_zero_values:
+                    stmt = stmt.where(
+                        or_(
+                            User.company_id.in_(non_zero_values),
+                            User.company_id.is_(None),
+                        )
+                    )
+                elif include_null:
+                    stmt = stmt.where(User.company_id.is_(None))
+                else:
+                    stmt = stmt.where(User.company_id.in_(non_zero_values))
+
+            if filters.sort_by and filters.sort_order:
+                full_name = func.concat(
+                    User.last_name,
+                    " ",
+                    User.first_name,
+                    " ",
+                    func.coalesce(User.patronymic, ""),
+                )
+                sort_map: dict[str, ColumnElement] = {
+                    "full_name": full_name,
+                    "position": User.position,
+                    "company": User.company_id,
+                    "email": User.email,
+                    "is_active": User.is_active,
+                }
+                sort_column = sort_map.get(filters.sort_by)
+                if sort_column is not None:
+                    stmt = stmt.order_by(
+                        sort_column.asc()
+                        if filters.sort_order == "ASC"
+                        else sort_column.desc()
+                    )
 
         result = await session.execute(stmt)
         return result.scalars().all()

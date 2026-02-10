@@ -1,10 +1,12 @@
-from typing import Any, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
 from sqlalchemy import select
 
-from .base import BaseService, FilterSchemaType, ModelType
 from src.db.models import ImportLogs, User
-from src.schemas.import_log import ImportLogCreate, ImportLogUpdate, ImportLogResponse
+from src.schemas.import_log import ImportLogCreate, ImportLogResponse, ImportLogUpdate
+from src.services.list_query_helper import ListQueryHelper
+
+from .base import BaseService, FilterSchemaType, ModelType
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +17,6 @@ class ImportLogService(BaseService[ImportLogs, ImportLogCreate, ImportLogUpdate]
         self,
         session: "AsyncSession",
         filters: FilterSchemaType | None = None,
-        load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
         stmt = (
             select(
@@ -30,10 +31,8 @@ class ImportLogService(BaseService[ImportLogs, ImportLogCreate, ImportLogUpdate]
             .order_by(ImportLogs.created_at.desc())
         )
 
-        if filters.limit:
-            stmt = stmt.limit(filters.limit)
-        if filters.offset:
-            stmt = stmt.offset(filters.offset)
+        if filters:
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return [ImportLogResponse(**row) for row in result.mappings().all()]

@@ -1,11 +1,11 @@
-from typing import Any, TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
-from sqlalchemy import select, func, insert, update
-from fastapi import UploadFile, HTTPException, status
+from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from .base import BaseService, ModelType, FilterSchemaType
-from src.db.models import Company, RegistrationApplication, User, ImportLogs
+from src.db.models import Company, ImportLogs, RegistrationApplication, User
+from src.mapping.companies import company_mapping
 from src.schemas.company import (
     CompanyCreate,
     CompanyUpdate,
@@ -14,8 +14,10 @@ from src.schemas.company import (
 )
 from src.utils.excel_parser import parse_excel_file
 from src.utils.mapping import map_record
-from src.mapping.companies import company_mapping
 from src.websocket.connection_manager import connection_manager
+
+from .base import BaseService, FilterSchemaType, ModelType
+from .list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,10 +63,33 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.limit:
-            stmt = stmt.limit(filters.limit)
-        if filters.offset:
-            stmt = stmt.offset(filters.offset)
+        sort_map = {
+            "active_users_limit": self.model.active_users_limit,
+            "contract_number": self.model.contract_number,
+            "ims_name": self.model.ims_name,
+            "name": self.model.name,
+            "status": self.model.is_active,
+        }
+
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
+            sort_map,
+            self.model.id.desc(),
+        )
+        if filters:
+            if filters.search:
+                search_term = f"%{filters.search}%"
+                stmt = stmt.where(
+                    or_(
+                        self.model.name.ilike(search_term),
+                        self.model.ims_name.ilike(search_term),
+                        self.model.contract_number.ilike(search_term),
+                    )
+                )
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         companies = result.scalars().all()

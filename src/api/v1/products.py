@@ -5,9 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.utils.export_excel import export_excel_response
 from src.db.models import SKU, Brand, ProductGroup, User
 from src.db.session import db_session
 from src.schemas import product
+from src.schemas.export import ExportExcelRequest
 from src.services import product as product_serv
 
 router = APIRouter()
@@ -56,6 +58,24 @@ async def get_product_groups(
     load_options = [joinedload(ProductGroup.company)]
     return await product_serv.product_group_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/product-groups/export-excel")
+async def export_regions_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [joinedload(ProductGroup.company)]
+
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: product_serv.product_group_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda pg: product.ProductGroupResponse.model_validate(
+            pg
+        ).model_dump(),
     )
 
 
@@ -133,6 +153,26 @@ async def get_brands(
     ]
     return await product_serv.brand_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/brands/export-excel")
+async def export_brands_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(Brand.promotion_type),
+        joinedload(Brand.product_group),
+        joinedload(Brand.company),
+    ]
+
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: product_serv.brand_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda b: product.BrandResponse.model_validate(b).model_dump(),
     )
 
 
@@ -238,6 +278,20 @@ async def get_promotion_types(
     return await product_serv.promotion_type_service.get_multi(session, filters=filters)
 
 
+@router.post("/promotion-types/export-excel")
+async def export_promotion_types_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: product_serv.promotion_type_service.get_multi(session),
+        serialize=lambda pt: product.PromotionTypeResponse.model_validate(
+            pt
+        ).model_dump(),
+    )
+
+
 @router.get(
     "/promotion-types/{promotion_type_id}",
     response_model=product.PromotionTypeResponse,
@@ -300,6 +354,18 @@ async def get_dosage_forms(
     filters: product.DosageFormListRequest,
 ):
     return await product_serv.dosage_form_service.get_multi(session, filters=filters)
+
+
+@router.post("/dosage-forms/export-excel")
+async def export_dosage_forms_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: product_serv.dosage_form_service.get_multi(session),
+        serialize=lambda df: product.DosageFormResponse.model_validate(df).model_dump(),
+    )
 
 
 @router.get(
@@ -379,6 +445,18 @@ async def get_dosages(
     return await product_serv.dosage_service.get_multi(session, filters=filters)
 
 
+@router.post("/dosages/export-excel")
+async def export_dosages_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: product_serv.dosage_service.get_multi(session),
+        serialize=lambda d: product.DosageResponse.model_validate(d).model_dump(),
+    )
+
+
 @router.post("/dosages/import-excel")
 async def bulk_insert_dosages(
     file: UploadFile,
@@ -448,6 +526,18 @@ async def get_segments(
     filters: product.SegmentListRequest,
 ):
     return await product_serv.segment_service.get_multi(session, filters=filters)
+
+
+@router.post("/segments/export-excel")
+async def export_segments_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: product_serv.segment_service.get_multi(session),
+        serialize=lambda s: product.SegmentResponse.model_validate(s).model_dump(),
+    )
 
 
 @router.post("/segments/import-excel")
@@ -540,6 +630,29 @@ async def get_skus(
     ]
     return await product_serv.sku_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/skus/export-excel")
+async def export_skus_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(SKU.brand),
+        joinedload(SKU.promotion_type),
+        joinedload(SKU.product_group),
+        joinedload(SKU.dosage_form),
+        joinedload(SKU.dosage),
+        joinedload(SKU.segment),
+        joinedload(SKU.company),
+    ]
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: product_serv.sku_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda s: product.SKUResponse.model_validate(s).model_dump(),
     )
 
 

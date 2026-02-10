@@ -33,32 +33,13 @@ class EmployeeService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: employee.EmployeeListRequest,
+        filters: employee.EmployeeListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[employees.Employee]:
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
-
-        if filters.full_name:
-            stmt = stmt.where(self.model.full_name.ilike(f"%{filters.full_name}%"))
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.position_id, filters.position_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.product_group_id, filters.product_group_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.region_id, filters.region_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.district_id, filters.district_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.company_id, filters.company_ids
-        )
 
         sort_map = {
             "full_name": self.model.full_name,
@@ -70,12 +51,33 @@ class EmployeeService(
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+        print(filters)
+
+        if filters:
+            if filters.full_name:
+                stmt = stmt.where(self.model.full_name.ilike(f"%{filters.full_name}%"))
+
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.position_id, filters.position_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.product_group_id, filters.product_group_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.region_id, filters.region_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.district_id, filters.district_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.company_id, filters.company_ids
+            )
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -201,7 +203,7 @@ class PositionService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: employee.PositionListRequest,
+        filters: employee.PositionListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[employees.Position]:
         stmt = select(self.model)
@@ -209,18 +211,19 @@ class PositionService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-        sort_map = {"name": self.model.name}
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
-            sort_map,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
+            {"name": self.model.name},
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()

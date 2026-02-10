@@ -5,9 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.utils.export_excel import export_excel_response
 from src.db.models import Employee, User
 from src.db.session import db_session
 from src.schemas import employee as employee_schema
+from src.schemas.export import ExportExcelRequest
 from src.services import employee as employee_service
 
 router = APIRouter(dependencies=[Depends(current_operator_user)])
@@ -44,6 +46,29 @@ async def get_employees(
     ]
     return await employee_service.employee_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/employees/export-excel")
+async def export_employees_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(Employee.position),
+        joinedload(Employee.product_group),
+        joinedload(Employee.region),
+        joinedload(Employee.district),
+        joinedload(Employee.company),
+    ]
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: employee_service.employee_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda e: employee_schema.EmployeeResponse.model_validate(
+            e
+        ).model_dump(),
     )
 
 
@@ -120,6 +145,20 @@ async def get_positions(
     filters: employee_schema.PositionListRequest,
 ):
     return await employee_service.position_service.get_multi(session, filters=filters)
+
+
+@router.post("/positions/export-excel")
+async def export_positions_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: employee_service.position_service.get_multi(session),
+        serialize=lambda p: employee_schema.PositionResponse.model_validate(
+            p
+        ).model_dump(),
+    )
 
 
 @router.get("/positions/{position_id}", response_model=employee_schema.PositionResponse)

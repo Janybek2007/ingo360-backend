@@ -26,6 +26,7 @@ from src.db.models import (
     Settlement,
     Speciality,
     TertiarySalesAndStock,
+    User,
     Visit,
 )
 from src.schemas.filter_options import FilterOption, ReferencesType, ScopeType
@@ -57,6 +58,7 @@ REFERENCE_ALIASES = {
 ALLOWED_REFERENCES = set(REFERENCE_ALIASES.keys())
 ALLOWED_SCOPES = {
     "all",
+    "clients_clients",
     "sales_primary",
     "sales_secondary",
     "sales_tertiary",
@@ -120,6 +122,19 @@ def find_fk_column(from_model, to_model):
 def apply_scope_filter(stmt, target_ref: ReferencesType, scope_ref: ScopeType):
     if scope_ref == "all" or target_ref == scope_ref:
         return stmt
+
+    if scope_ref == "clients_clients" and target_ref == "companies_companies":
+        company_ids = (
+            select(distinct(User.company_id))
+            .where(
+                User.company_id.is_not(None),
+                ~User.is_admin,
+                ~User.is_operator,
+                ~User.is_superuser,
+            )
+            .scalar_subquery()
+        )
+        return stmt.where(Company.id.in_(company_ids))
 
     if scope_ref in ("sales_primary", "sales_secondary", "sales_tertiary"):
         return apply_sales_scope(stmt, target_ref, scope_ref)

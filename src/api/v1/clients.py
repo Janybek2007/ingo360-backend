@@ -5,9 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_operator_user
+from src.api.utils.export_excel import export_excel_response
 from src.db.models import Doctor, MedicalFacility, Pharmacy, User
 from src.db.session import db_session
 from src.schemas import client
+from src.schemas.export import ExportExcelRequest
 from src.services import client as client_service
 
 router = APIRouter()
@@ -24,6 +26,20 @@ async def get_client_categories(
 ):
     return await client_service.client_category_service.get_multi(
         session, filters=filters
+    )
+
+
+@router.post("/client-categories/export-excel")
+async def export_client_categories_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: client_service.client_category_service.get_multi(session),
+        serialize=lambda cc: client.ClientCategoryResponse.model_validate(
+            cc
+        ).model_dump(),
     )
 
 
@@ -115,6 +131,27 @@ async def get_doctors(
     ]
     return await client_service.doctor_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/doctors/export-excel")
+async def export_doctors_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(Doctor.responsible_employee),
+        joinedload(Doctor.medical_facility),
+        joinedload(Doctor.speciality),
+        joinedload(Doctor.client_category),
+        joinedload(Doctor.product_group),
+    ]
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: client_service.doctor_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda d: client.DoctorResponse.model_validate(d).model_dump(),
     )
 
 
@@ -229,6 +266,31 @@ async def get_pharmacies(
     )
 
 
+@router.post("/pharmacies/export-excel")
+async def export_pharmacies_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(Pharmacy.distributor),
+        joinedload(Pharmacy.responsible_employee),
+        joinedload(Pharmacy.settlement),
+        joinedload(Pharmacy.district),
+        joinedload(Pharmacy.client_category),
+        joinedload(Pharmacy.product_group),
+        joinedload(Pharmacy.company),
+        joinedload(Pharmacy.geo_indicator),
+    ]
+
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: client_service.pharmacy_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda p: client.PharmacyResponse.model_validate(p).model_dump(),
+    )
+
+
 @router.post(
     "/pharmacies/create",
     response_model=client.PharmacyResponse,
@@ -339,6 +401,18 @@ async def get_specialities(
     return await client_service.speciality_service.get_multi(session, filters=filters)
 
 
+@router.post("/specialities/export-excel")
+async def export_specialities_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: client_service.speciality_service.get_multi(session),
+        serialize=lambda s: client.SpecialityResponse.model_validate(s).model_dump(),
+    )
+
+
 @router.post("/specialities/import-excel")
 async def bulk_insert_specialities(
     file: UploadFile,
@@ -420,6 +494,27 @@ async def get_medical_facilities(
     ]
     return await client_service.medical_facility_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/medical-facilities/export-excel")
+async def export_medical_facilities_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(MedicalFacility.settlement),
+        joinedload(MedicalFacility.district),
+        joinedload(MedicalFacility.geo_indicator),
+    ]
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: client_service.medical_facility_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda mf: client.MedicalFacilityResponse.model_validate(
+            mf
+        ).model_dump(),
     )
 
 
@@ -523,6 +618,18 @@ async def get_distributors(
     return await client_service.distributor_service.get_multi(session, filters=filters)
 
 
+@router.post("/distributors/export-excel")
+async def export_distributors_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: client_service.distributor_service.get_multi(session),
+        serialize=lambda d: client.DistributorResponse.model_validate(d).model_dump(),
+    )
+
+
 @router.post(
     "/distributors/create",
     response_model=client.DistributorResponse,
@@ -599,6 +706,20 @@ async def get_geo_indicators(
 ):
     return await client_service.geo_indicator_service.get_multi(
         session, filters=filters
+    )
+
+
+@router.post("/geo-indicators/export-excel")
+async def export_geo_indicators_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: client_service.geo_indicator_service.get_multi(session),
+        serialize=lambda gi: client.GeoIndicatorResponse.model_validate(
+            gi
+        ).model_dump(),
     )
 
 

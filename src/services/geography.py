@@ -51,7 +51,7 @@ class CountryService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: geography_schema.CountryListRequest,
+        filters: geography_schema.CountryListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[geography.Country]:
         stmt = select(self.model)
@@ -59,18 +59,19 @@ class CountryService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
         sort_map = {"name": self.model.name}
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -124,7 +125,7 @@ class RegionService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: geography_schema.RegionListRequest,
+        filters: geography_schema.RegionListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[geography.Region]:
         stmt = select(self.model)
@@ -132,25 +133,26 @@ class RegionService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.country_id, filters.country_ids
-        )
-
         sort_map = {
             "name": self.model.name,
             "country": self.model.country_id,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+        if filters:
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.country_id, filters.country_ids
+            )
+
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -233,7 +235,7 @@ class SettlementService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: geography_schema.SettlementListRequest,
+        filters: geography_schema.SettlementListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[geography.Settlement]:
         stmt = select(self.model)
@@ -241,25 +243,27 @@ class SettlementService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.region_id, filters.region_ids
-        )
-
         sort_map = {
             "name": self.model.name,
             "region": self.model.region_id,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.region_id, filters.region_ids
+            )
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -345,26 +349,13 @@ class DistrictService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: geography_schema.DistrictListRequest,
+        filters: geography_schema.DistrictListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[geography.District]:
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
-
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.region_id, filters.region_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.settlement_id, filters.settlement_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.company_id, filters.company_ids
-        )
 
         sort_map = {
             "name": self.model.name,
@@ -374,12 +365,27 @@ class DistrictService(
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.region_id, filters.region_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.settlement_id, filters.settlement_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.company_id, filters.company_ids
+            )
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()

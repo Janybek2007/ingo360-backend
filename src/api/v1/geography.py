@@ -5,9 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.utils.export_excel import export_excel_response
 from src.db.models import District, Region, Settlement, User
 from src.db.session import db_session
 from src.schemas import geography
+from src.schemas.export import ExportExcelRequest
 from src.services import geography as geography_service
 
 router = APIRouter(dependencies=[Depends(current_operator_user)])
@@ -43,6 +45,18 @@ async def get_countries(
     filters: geography.CountryListRequest,
 ):
     return await geography_service.country_service.get_multi(session, filters=filters)
+
+
+@router.post("/countries/export-excel")
+async def export_countries_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: geography_service.country_service.get_multi(session),
+        serialize=lambda c: geography.CountryResponse.model_validate(c).model_dump(),
+    )
 
 
 @router.get("/countries/{country_id}", response_model=geography.CountryResponse)
@@ -87,6 +101,22 @@ async def get_regions(
     load_options = [joinedload(Region.country)]
     return await geography_service.region_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/regions/export-excel")
+async def export_regions_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [joinedload(Region.country)]
+
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: geography_service.region_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda r: geography.RegionResponse.model_validate(r).model_dump(),
     )
 
 
@@ -154,6 +184,22 @@ async def get_settlements(
     load_options = [joinedload(Settlement.region)]
     return await geography_service.settlement_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/settlements/export-excel")
+async def export_settlements_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [joinedload(Settlement.region)]
+
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: geography_service.settlement_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda s: geography.SettlementResponse.model_validate(s).model_dump(),
     )
 
 
@@ -234,6 +280,26 @@ async def get_districts(
     ]
     return await geography_service.district_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/districts/export-excel")
+async def export_districts_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(District.settlement),
+        joinedload(District.region),
+        joinedload(District.company),
+    ]
+
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: geography_service.district_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda d: geography.DistrictResponse.model_validate(d).model_dump(),
     )
 
 

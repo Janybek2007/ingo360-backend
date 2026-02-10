@@ -35,6 +35,7 @@ ReferencesType = Literal[
 ScopeType: TypeAlias = Union[
     Literal[
         "all",
+        "clients_clients",
         "sales_primary",
         "sales_secondary",
         "sales_tertiary",

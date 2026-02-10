@@ -3,13 +3,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.session import db_session
-from src.schemas import company, base_filter
-from src.services.company import company_service, registration_application_service
 from src.api.dependencies.current_user import (
-    current_admin_user,
     current_admin_or_operator_user,
+    current_admin_user,
 )
+from src.api.utils.export_excel import export_excel_response
+from src.db.session import db_session
+from src.schemas import company, search_filter
+from src.schemas.export import ExportExcelRequest
+from src.services.company import company_service, registration_application_service
 
 router = APIRouter()
 
@@ -21,9 +23,21 @@ router = APIRouter()
 )
 async def get_companies(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[base_filter.BaseFilter, Query()],
+    filters: Annotated[search_filter.SearchFilter, Query()],
 ):
     return await company_service.get_multi(session, filters=filters)
+
+
+@router.post("/export-excel")
+async def export_companies_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: company_service.get_multi(session),
+        serialize=lambda c: company.CompanyResponse.model_validate(c).model_dump(),
+    )
 
 
 @router.post(

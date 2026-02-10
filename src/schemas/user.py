@@ -1,6 +1,9 @@
+from typing import Literal
+
 from fastapi_users import schemas
 from pydantic import BaseModel, EmailStr
 
+from .base_filter import SortDirection
 from .company import CompanySimpleResponse
 
 
@@ -64,3 +67,20 @@ class PasswordChange(BaseModel):
 class UserFilter(BaseModel):
     is_active: bool | None = None
     search: str | None = None
+    full_name: str | None = None
+    position: str | None = None
+    email: str | None = None
+    company_ids: list[int] | None = None
+    role: Literal["admin", "operator"] | None = None
+    sort_by: (
+        Literal[
+            "full_name",
+            "position",
+            "company",
+            "email",
+            "is_active",
+            "role",
+        ]
+        | None
+    ) = None
+    sort_order: SortDirection | None = None

@@ -43,29 +43,13 @@ class BrandService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.BrandListRequest,
+        filters: product.BrandListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.Brand]:
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
-
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-        if filters.ims_name:
-            stmt = stmt.where(self.model.ims_name.ilike(f"%{filters.ims_name}%"))
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.promotion_type_id, filters.promotion_type_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.product_group_id, filters.product_group_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.company_id, filters.company_ids
-        )
 
         sort_map = {
             "name": self.model.name,
@@ -76,12 +60,30 @@ class BrandService(
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            if filters.ims_name:
+                stmt = stmt.where(self.model.ims_name.ilike(f"%{filters.ims_name}%"))
+
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.promotion_type_id, filters.promotion_type_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.product_group_id, filters.product_group_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.company_id, filters.company_ids
+            )
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -177,7 +179,7 @@ class PromotionTypeService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.PromotionTypeListRequest,
+        filters: product.PromotionTypeListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.PromotionType]:
         stmt = select(self.model)
@@ -185,17 +187,18 @@ class PromotionTypeService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             {"name": self.model.name},
             self.model.created_at.desc(),
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -232,7 +235,7 @@ class DosageFormService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.DosageFormListRequest,
+        filters: product.DosageFormListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.DosageForm]:
         stmt = select(self.model)
@@ -240,17 +243,19 @@ class DosageFormService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             {"name": self.model.name},
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -285,7 +290,7 @@ class DosageService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.DosageListRequest,
+        filters: product.DosageListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.Dosage]:
         stmt = select(self.model)
@@ -293,17 +298,18 @@ class DosageService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             {"name": self.model.name},
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -338,7 +344,7 @@ class SegmentService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.SegmentListRequest,
+        filters: product.SegmentListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.Segment]:
         stmt = select(self.model)
@@ -346,17 +352,19 @@ class SegmentService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             {"name": self.model.name},
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -389,38 +397,13 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.SKUListRequest,
+        filters: product.SKUListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.SKU]:
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
-
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.brand_id, filters.brand_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.promotion_type_id, filters.promotion_type_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.product_group_id, filters.product_group_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.dosage_form_id, filters.dosage_form_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.dosage_id, filters.dosage_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.segment_id, filters.segment_ids
-        )
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.company_id, filters.company_ids
-        )
 
         sort_map = {
             "name": self.model.name,
@@ -434,12 +417,39 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.brand_id, filters.brand_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.promotion_type_id, filters.promotion_type_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.product_group_id, filters.product_group_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.dosage_form_id, filters.dosage_form_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.dosage_id, filters.dosage_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.segment_id, filters.segment_ids
+            )
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.company_id, filters.company_ids
+            )
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -567,7 +577,7 @@ class ProductGroupService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.ProductGroupListRequest,
+        filters: product.ProductGroupListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[products.ProductGroup]:
         stmt = select(self.model)
@@ -575,25 +585,28 @@ class ProductGroupService(
         if load_options:
             stmt = stmt.options(*load_options)
 
-        if filters.name:
-            stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.company_id, filters.company_ids
-        )
-
         sort_map = {
             "name": self.model.name,
             "companies": self.model.company_id,
         }
+
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            if filters.name:
+                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.company_id, filters.company_ids
+            )
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()

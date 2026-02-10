@@ -18,6 +18,6 @@ class BaseReferenceFilter(BaseModel):
 
 
 class BaseDbFilter(BaseModel):
-    limit: int | None = None
+    limit: int | None = 100
     offset: int = 0
     sort_order: SortDirection | None = None

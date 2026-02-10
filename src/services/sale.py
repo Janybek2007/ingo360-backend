@@ -344,43 +344,13 @@ class PrimarySalesAndStockService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: sale.PrimarySalesAndStockListRequest,
+        filters: sale.PrimarySalesAndStockListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
-
-        distributors = filters.distributor_ids
-        brands = filters.brand_ids
-        skus = filters.sku_ids
-        months = filters.months
-        quarters = filters.quarters
-        years = filters.years
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.distributor_id, distributors
-        )
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.sku_id, skus)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.month, months)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.quarter, quarters)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.year, years)
-
-        joined_sku = False
-        if brands:
-            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
-            joined_sku = True
-            stmt = ListQueryHelper.apply_in_or_null(stmt, SKU.brand_id, brands)
-
-        if filters.indicator:
-            stmt = stmt.where(self.model.indicator == filters.indicator)
-
-        if filters.published is not None:
-            stmt = stmt.where(self.model.published == filters.published)
-
-        if filters.sort_by == "brands" and not joined_sku:
-            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
 
         sort_map = {
             "distributors": self.model.distributor_id,
@@ -394,12 +364,44 @@ class PrimarySalesAndStockService(
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            distributors = filters.distributor_ids
+            brands = filters.brand_ids
+            skus = filters.sku_ids
+            months = filters.months
+            quarters = filters.quarters
+            years = filters.years
+
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.distributor_id, distributors
+            )
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.sku_id, skus)
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.month, months)
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.quarter, quarters)
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.year, years)
+
+            joined_sku = False
+            if brands:
+                stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+                joined_sku = True
+                stmt = ListQueryHelper.apply_in_or_null(stmt, SKU.brand_id, brands)
+
+            if filters.indicator:
+                stmt = stmt.where(self.model.indicator == filters.indicator)
+
+            if filters.published is not None:
+                stmt = stmt.where(self.model.published == filters.published)
+
+            if filters.sort_by == "brands" and not joined_sku:
+                stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
 
@@ -1697,55 +1699,13 @@ class SecondarySalesService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: sale.SecondaryTertiarySalesListRequest,
+        filters: sale.SecondaryTertiarySalesListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
-
-        pharmacies = filters.pharmacy_ids
-        distributors = filters.distributor_ids
-        brands = filters.brand_ids
-        skus = filters.sku_ids
-        months = filters.months
-        quarters = filters.quarters
-        years = filters.years
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.pharmacy_id, pharmacies
-        )
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.sku_id, skus)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.month, months)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.quarter, quarters)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.year, years)
-
-        joined_pharmacy = False
-        if distributors:
-            stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
-            joined_pharmacy = True
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, Pharmacy.distributor_id, distributors
-            )
-
-        joined_sku = False
-        if brands:
-            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
-            joined_sku = True
-            stmt = ListQueryHelper.apply_in_or_null(stmt, SKU.brand_id, brands)
-
-        if filters.indicator:
-            stmt = stmt.where(self.model.indicator == filters.indicator)
-
-        if filters.published is not None:
-            stmt = stmt.where(self.model.published == filters.published)
-
-        if filters.sort_by == "distributors" and not joined_pharmacy:
-            stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
-
-        if filters.sort_by == "brands" and not joined_sku:
-            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
 
         sort_map = {
             "pharmacies": self.model.pharmacy_id,
@@ -1761,12 +1721,56 @@ class SecondarySalesService(
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            pharmacies = filters.pharmacy_ids
+            distributors = filters.distributor_ids
+            brands = filters.brand_ids
+            skus = filters.sku_ids
+            months = filters.months
+            quarters = filters.quarters
+            years = filters.years
+
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.pharmacy_id, pharmacies
+            )
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.sku_id, skus)
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.month, months)
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.quarter, quarters)
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.year, years)
+
+            joined_pharmacy = False
+            if distributors:
+                stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
+                joined_pharmacy = True
+                stmt = ListQueryHelper.apply_in_or_null(
+                    stmt, Pharmacy.distributor_id, distributors
+                )
+
+            joined_sku = False
+            if brands:
+                stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+                joined_sku = True
+                stmt = ListQueryHelper.apply_in_or_null(stmt, SKU.brand_id, brands)
+
+            if filters.indicator:
+                stmt = stmt.where(self.model.indicator == filters.indicator)
+
+            if filters.published is not None:
+                stmt = stmt.where(self.model.published == filters.published)
+
+            if filters.sort_by == "distributors" and not joined_pharmacy:
+                stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
+
+            if filters.sort_by == "brands" and not joined_sku:
+                stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
 
@@ -2527,55 +2531,13 @@ class TertiarySalesService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: sale.SecondaryTertiarySalesListRequest,
+        filters: sale.SecondaryTertiarySalesListRequest | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
         stmt = select(self.model)
 
         if load_options:
             stmt = stmt.options(*load_options)
-
-        pharmacies = filters.pharmacy_ids
-        distributors = filters.distributor_ids
-        brands = filters.brand_ids
-        skus = filters.sku_ids
-        months = filters.months
-        quarters = filters.quarters
-        years = filters.years
-
-        stmt = ListQueryHelper.apply_in_or_null(
-            stmt, self.model.pharmacy_id, pharmacies
-        )
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.sku_id, skus)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.month, months)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.quarter, quarters)
-        stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.year, years)
-
-        joined_pharmacy = False
-        if distributors:
-            stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
-            joined_pharmacy = True
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, Pharmacy.distributor_id, distributors
-            )
-
-        joined_sku = False
-        if brands:
-            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
-            joined_sku = True
-            stmt = ListQueryHelper.apply_in_or_null(stmt, SKU.brand_id, brands)
-
-        if filters.indicator:
-            stmt = stmt.where(self.model.indicator == filters.indicator)
-
-        if filters.published is not None:
-            stmt = stmt.where(self.model.published == filters.published)
-
-        if filters.sort_by == "distributors" and not joined_pharmacy:
-            stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
-
-        if filters.sort_by == "brands" and not joined_sku:
-            stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
 
         sort_map = {
             "pharmacies": self.model.pharmacy_id,
@@ -2591,12 +2553,56 @@ class TertiarySalesService(
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
-            filters.sort_by,
-            filters.sort_order,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
             sort_map,
             self.model.created_at.desc(),
         )
-        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        if filters:
+            pharmacies = filters.pharmacy_ids
+            distributors = filters.distributor_ids
+            brands = filters.brand_ids
+            skus = filters.sku_ids
+            months = filters.months
+            quarters = filters.quarters
+            years = filters.years
+
+            stmt = ListQueryHelper.apply_in_or_null(
+                stmt, self.model.pharmacy_id, pharmacies
+            )
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.sku_id, skus)
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.month, months)
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.quarter, quarters)
+            stmt = ListQueryHelper.apply_in_or_null(stmt, self.model.year, years)
+
+            joined_pharmacy = False
+            if distributors:
+                stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
+                joined_pharmacy = True
+                stmt = ListQueryHelper.apply_in_or_null(
+                    stmt, Pharmacy.distributor_id, distributors
+                )
+
+            joined_sku = False
+            if brands:
+                stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+                joined_sku = True
+                stmt = ListQueryHelper.apply_in_or_null(stmt, SKU.brand_id, brands)
+
+            if filters.indicator:
+                stmt = stmt.where(self.model.indicator == filters.indicator)
+
+            if filters.published is not None:
+                stmt = stmt.where(self.model.published == filters.published)
+
+            if filters.sort_by == "distributors" and not joined_pharmacy:
+                stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
+
+            if filters.sort_by == "brands" and not joined_sku:
+                stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()

@@ -10,6 +10,7 @@ from src.api.dependencies.company import (
     can_view_tertiary_sales,
 )
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.utils.export_excel import export_excel_response
 from src.db.models import (
     SKU,
     Pharmacy,
@@ -20,6 +21,7 @@ from src.db.models import (
 )
 from src.db.session import db_session
 from src.schemas import sale
+from src.schemas.export import ExportExcelRequest
 from src.services.sale import (
     primary_sales_service,
     secondary_sales_service,
@@ -44,6 +46,26 @@ async def list_primary_sales(
     ]
     return await primary_sales_service.get_multi(
         session, payload, load_options=load_options
+    )
+
+
+@router.post("/primary/export-excel")
+async def export_primary_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(PrimarySalesAndStock.sku).joinedload(SKU.brand),
+        joinedload(PrimarySalesAndStock.distributor),
+    ]
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: primary_sales_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda s: sale.PrimarySalesAndStockResponse.model_validate(
+            s
+        ).model_dump(),
     )
 
 
@@ -248,6 +270,25 @@ async def list_secondary_sales(
     )
 
 
+@router.post("/secondary/export-excel")
+async def export_secondary_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.geo_indicator),
+        joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.distributor),
+        joinedload(SecondarySales.sku).joinedload(SKU.brand),
+    ]
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: secondary_sales_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda s: sale.SecondarySalesResponse.model_validate(s).model_dump(),
+    )
+
+
 @router.post(
     "/secondary/create",
     response_model=sale.SecondarySalesResponse,
@@ -414,6 +455,25 @@ async def list_tertiary_sales(
     ]
     return await tertiary_sales_service.get_multi(
         session, payload, load_options=load_options
+    )
+
+
+@router.post("/tertiary/export-excel")
+async def export_tertiary_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(TertiarySalesAndStock.pharmacy).joinedload(Pharmacy.geo_indicator),
+        joinedload(TertiarySalesAndStock.pharmacy).joinedload(Pharmacy.distributor),
+        joinedload(TertiarySalesAndStock.sku).joinedload(SKU.brand),
+    ]
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: tertiary_sales_service.get_multi(
+            session, load_options=load_options
+        ),
+        serialize=lambda s: sale.TertiarySalesResponse.model_validate(s).model_dump(),
     )
 
 
