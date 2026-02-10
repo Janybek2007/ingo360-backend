@@ -1,8 +1,10 @@
-from typing import Generic, TypeVar, Type, TYPE_CHECKING, Sequence, Any
+from typing import TYPE_CHECKING, Any, Generic, Sequence, Type, TypeVar
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from fastapi import HTTPException, status
+
+from src.utils.list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -180,7 +182,7 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: FilterSchemaType,
+        filters: FilterSchemaType | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
         stmt = select(self.model)
@@ -190,10 +192,8 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         stmt = stmt.order_by(self.model.created_at.desc())
 
-        if filters.limit:
-            stmt = stmt.limit(filters.limit)
-        if filters.offset:
-            stmt = stmt.offset(filters.offset)
+        if filters:
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()

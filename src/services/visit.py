@@ -1,11 +1,11 @@
 import asyncio
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Sequence
 from uuid import uuid4
 
 from fastapi import UploadFile
-from sqlalchemy import String, and_, asc, desc, func, insert, or_, select
+from sqlalchemy import and_, func, insert, or_, select
 
 from src.db.models import (
     Doctor,
@@ -18,8 +18,22 @@ from src.db.models import (
     Speciality,
     Visit,
 )
+from src.mapping.dimension_mapping.visits import (
+    VISITS_DOCTOR_COUNT_DIMENSTIONS_MAPPING,
+    VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING,
+)
 from src.mapping.visits import visit_mapping
 from src.schemas import visit
+from src.schemas.visit import VisitsRequest
+from src.services.base import ModelType
+from src.utils.list_query_helper import (
+    InOrNullSpec,
+    ListQueryHelper,
+    NumberTypedSpec,
+    SearchSpec,
+)
+from src.utils.build_dimensions import build_dimensions
+from src.utils.build_period_key import build_period_key
 from src.utils.excel_parser import iter_excel_records
 from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
@@ -61,6 +75,59 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             if file_path.exists():
                 os.remove(file_path)
             raise
+
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: VisitsRequest | None = None,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[ModelType]:
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        sort_map = {
+            "pharmacy": self.model.pharmacy_id,
+            "employee": self.model.employee_id,
+            "product_group": self.model.product_group_id,
+            "medical_facility": self.model.medical_facility_id,
+            "doctor": self.model.doctor_id,
+            "client_type": self.model.client_type,
+            "month": self.model.month,
+            "year": self.model.year,
+        }
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
+            sort_map,
+            self.model.created_at.desc(),
+        )
+
+        if filters:
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    InOrNullSpec(self.model.pharmacy_id, filters.pharmacy_ids),
+                    InOrNullSpec(self.model.employee_id, filters.employee_ids),
+                    InOrNullSpec(
+                        self.model.product_group_id, filters.product_group_ids
+                    ),
+                    InOrNullSpec(
+                        self.model.medical_facility_id, filters.medical_facility_ids
+                    ),
+                    InOrNullSpec(self.model.doctor_id, filters.doctor_ids),
+                    InOrNullSpec(self.model.client_type, filters.client_type),
+                    InOrNullSpec(self.model.month, filters.months),
+                    NumberTypedSpec(self.model.year, filters.year),
+                ],
+            )
+
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
 
     async def _import_excel_from_file(
         self,
@@ -214,30 +281,17 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             )
         )
 
-        if company_id:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                Employee.company_id == company_id
-            )
-        if filters.speciality_ids:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                Doctor.speciality_id.in_(filters.speciality_ids)
-            )
-        if filters.medical_facility_ids:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                Visit.medical_facility_id.in_(filters.medical_facility_ids)
-            )
-        if filters.quarters:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                quarter_expr.in_(filters.quarters)
-            )
-        if filters.months:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                Visit.month.in_(filters.months),
-            )
-        if filters.years:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                Visit.year.in_(filters.years),
-            )
+        doctors_with_visits_subquery = ListQueryHelper.apply_specs(
+            doctors_with_visits_subquery,
+            [
+                InOrNullSpec(Employee.company_id, [company_id] if company_id else None),
+                InOrNullSpec(Doctor.speciality_id, filters.speciality_ids),
+                InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),
+                InOrNullSpec(quarter_expr, filters.quarters),
+                InOrNullSpec(Visit.month, filters.months),
+                InOrNullSpec(Visit.year, filters.years),
+            ],
+        )
 
         doctors_with_visits_subquery = doctors_with_visits_subquery.group_by(
             Doctor.speciality_id
@@ -266,12 +320,14 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             .where(Doctor.company_id == 3)
         )
 
-        if filters.speciality_ids:
-            stmt = stmt.where(Speciality.id.in_(filters.speciality_ids))
-        if filters.medical_facility_ids:
-            stmt = stmt.where(
-                Doctor.medical_facility_id.in_(filters.medical_facility_ids)
-            )
+        stmt = ListQueryHelper.apply_specs(
+            stmt,
+            [
+                InOrNullSpec(Speciality.id, filters.speciality_ids),
+                InOrNullSpec(Doctor.medical_facility_id, filters.medical_facility_ids),
+            ],
+        )
+
         if filters.search:
             search_term = f"%{filters.search}%"
             stmt = stmt.where(Speciality.name.ilike(search_term))
@@ -292,31 +348,9 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         company_id: int | None,
     ):
 
-        dimension_mapping = {
-            "medical_facility": {
-                "id": MedicalFacility.id.label("medical_facility_id"),
-                "name": MedicalFacility.name.label("medical_facility_name"),
-                "group_fields": [MedicalFacility.id, MedicalFacility.name],
-            },
-            "speciality": {
-                "id": Speciality.id.label("speciality_id"),
-                "name": Speciality.name.label("speciality_name"),
-                "group_fields": [Speciality.id, Speciality.name],
-            },
-            "doctor": {
-                "id": Doctor.id.label("doctor_id"),
-                "name": Doctor.full_name.label("doctor_name"),
-                "group_fields": [Doctor.id, Doctor.full_name],
-            },
-        }
-
-        select_fields = []
-        group_by_fields = []
-
-        for dim in filters.group_by_dimensions:
-            dim_config = dimension_mapping[dim]
-            select_fields.extend([dim_config["id"], dim_config["name"]])
-            group_by_fields.extend(dim_config["group_fields"])
+        select_fields, group_by_fields, search_cols = build_dimensions(
+            VISITS_DOCTOR_COUNT_DIMENSTIONS_MAPPING, filters.group_by_dimensions
+        )
 
         all_doctors_subquery = (
             select(
@@ -328,33 +362,17 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             .join(MedicalFacility, Doctor.medical_facility_id == MedicalFacility.id)
         )
 
-        if filters.speciality_ids:
-            all_doctors_subquery = all_doctors_subquery.where(
-                Speciality.id.in_(filters.speciality_ids)
-            )
-        if filters.medical_facility_ids:
-            all_doctors_subquery = all_doctors_subquery.where(
-                MedicalFacility.id.in_(filters.medical_facility_ids)
-            )
-        if filters.doctor_ids:
-            all_doctors_subquery = all_doctors_subquery.where(
-                Doctor.id.in_(filters.doctor_ids)
-            )
-
-        if filters.search:
-            search_term = f"%{filters.search}%"
-            search_conditions = []
-            if "medical_facility" in filters.group_by_dimensions:
-                search_conditions.append(MedicalFacility.name.ilike(search_term))
-            if "speciality" in filters.group_by_dimensions:
-                search_conditions.append(Speciality.name.ilike(search_term))
-            if "doctor" in filters.group_by_dimensions:
-                search_conditions.append(Doctor.full_name.ilike(search_term))
-
-            if search_conditions:
-                all_doctors_subquery = all_doctors_subquery.where(
-                    or_(*search_conditions)
-                )
+        all_doctors_subquery = ListQueryHelper.apply_specs(
+            all_doctors_subquery,
+            [
+                InOrNullSpec(Speciality.id, filters.speciality_ids),
+                InOrNullSpec(MedicalFacility.id, filters.medical_facility_ids),
+                InOrNullSpec(Doctor.id, filters.doctor_ids),
+                SearchSpec(
+                    filters.search if filters.group_by_dimensions else None, search_cols
+                ),
+            ],
+        )
 
         all_doctors_subquery = all_doctors_subquery.group_by(
             *group_by_fields
@@ -393,22 +411,15 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             )
         )
 
-        if company_id:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                Employee.company_id == company_id
-            )
-        if filters.speciality_ids:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                Speciality.id.in_(filters.speciality_ids)
-            )
-        if filters.medical_facility_ids:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                MedicalFacility.id.in_(filters.medical_facility_ids)
-            )
-        if filters.doctor_ids:
-            doctors_with_visits_subquery = doctors_with_visits_subquery.where(
-                Doctor.id.in_(filters.doctor_ids)
-            )
+        doctors_with_visits_subquery = ListQueryHelper.apply_specs(
+            doctors_with_visits_subquery,
+            [
+                InOrNullSpec(Employee.company_id, [company_id] if company_id else None),
+                InOrNullSpec(Speciality.id, filters.speciality_ids),
+                InOrNullSpec(MedicalFacility.id, filters.medical_facility_ids),
+                InOrNullSpec(Doctor.id, filters.doctor_ids),
+            ],
+        )
 
         if filters.search:
             search_term = f"%{filters.search}%"
@@ -495,27 +506,21 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 doctors_with_visits_subquery.c.doctors_with_visits, 0
             ),
         }
+        default_sort = [
+            getattr(all_doctors_subquery.c, f"{dim}_name")
+            for dim in (filters.group_by_dimensions or [])
+            if getattr(all_doctors_subquery.c, f"{dim}_name", None) is not None
+        ]
 
-        if filters.sort_by and filters.sort_order:
-            sort_column = sort_map.get(filters.sort_by)
-            if sort_column is not None:
-                stmt = stmt.order_by(
-                    asc(sort_column)
-                    if filters.sort_order == "ASC"
-                    else desc(sort_column)
-                )
-        else:
-            order_by_fields = []
-            for dim in filters.group_by_dimensions:
-                order_by_fields.append(getattr(all_doctors_subquery.c, f"{dim}_name"))
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            filters.sort_by,
+            filters.sort_order,
+            sort_map,
+            default_sort=default_sort if default_sort else None,
+        )
 
-            if order_by_fields:
-                stmt = stmt.order_by(*order_by_fields)
-
-        if filters.limit:
-            stmt = stmt.limit(filters.limit)
-        if filters.offset:
-            stmt = stmt.offset(filters.offset)
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.mappings().all()
@@ -526,99 +531,11 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         filters: visit.VisitSumForPeriodFilter,
         company_id: int | None,
     ):
-        dimension_mapping = {
-            "pharmacy": {
-                "id_field": Visit.pharmacy_id,
-                "name_field": Pharmacy.name,
-                "id_label": "pharmacy_id",
-                "name_label": "pharmacy",
-                "join_table": Pharmacy,
-                "join_condition": lambda: Visit.pharmacy_id == Pharmacy.id,
-                "join_type": "outerjoin",
-            },
-            "medical_facility": {
-                "id_field": Visit.medical_facility_id,
-                "name_field": MedicalFacility.name,
-                "id_label": "medical_facility_id",
-                "name_label": "medical_facility",
-                "join_table": MedicalFacility,
-                "join_condition": lambda: (
-                    Visit.medical_facility_id == MedicalFacility.id
-                ),
-                "join_type": "outerjoin",
-            },
-            "year": {
-                "id_field": Visit.year,
-                "name_field": None,
-                "id_label": "year",
-                "name_label": None,
-                "join_table": None,
-                "join_type": None,
-            },
-            "month": {
-                "id_field": Visit.month,
-                "name_field": None,
-                "id_label": "month",
-                "name_label": None,
-                "join_table": None,
-                "join_type": None,
-            },
-            "employee": {
-                "id_field": Visit.employee_id,
-                "name_field": Employee.full_name,
-                "id_label": "employee_id",
-                "name_label": "employee",
-                "join_table": Employee,
-                "join_condition": lambda: Visit.employee_id == Employee.id,
-                "join_type": "join",
-            },
-            "product_group": {
-                "id_field": Visit.product_group_id,
-                "name_field": ProductGroup.name,
-                "id_label": "product_group_id",
-                "name_label": "product_group",
-                "join_table": ProductGroup,
-                "join_condition": lambda: Visit.product_group_id == ProductGroup.id,
-                "join_type": "join",
-            },
-            "geo_indicator": {
-                "id_field": GeoIndicator.id,
-                "name_field": GeoIndicator.name,
-                "id_label": "indicator_id",
-                "name_label": "indicator_name",
-                "join_table": GeoIndicator,
-                "join_condition": lambda: or_(
-                    Pharmacy.geo_indicator_id == GeoIndicator.id,
-                    MedicalFacility.geo_indicator_id == GeoIndicator.id,
-                ),
-                "join_type": "outerjoin",
-            },
-            "speciality": {
-                "id_field": Speciality.id,
-                "name_field": Speciality.name,
-                "id_label": "speciality_id",
-                "name_label": "speciality_name",
-                "join_table": Speciality,
-                "join_condition": lambda: Doctor.speciality_id == Speciality.id,
-                "join_type": "outerjoin",
-                "requires": ["doctor"],
-            },
-            "doctor": {
-                "id_field": None,
-                "name_field": Doctor.full_name,
-                "id_label": None,
-                "name_label": "doctor_name",
-                "join_table": Doctor,
-                "join_condition": lambda: Visit.doctor_id == Doctor.id,
-                "join_type": "outerjoin",
-            },
-        }
-
         select_fields = []
         group_by_fields = []
 
         for dim in filters.group_by_dimensions:
-            dim_config = dimension_mapping[dim]
+            dim_config = VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING[dim]
 
             if dim_config["id_field"] is not None:
                 select_fields.append(
@@ -638,7 +555,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
 
         tables_to_join = set()
         for dim in filters.group_by_dimensions:
-            dim_config = dimension_mapping[dim]
+            dim_config = VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING[dim]
             if dim_config["join_table"] is not None:
                 tables_to_join.add(dim)
                 if "requires" in dim_config:
@@ -657,7 +574,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
 
         for table_name in join_order:
             if table_name in tables_to_join:
-                dim_config = dimension_mapping[table_name]
+                dim_config = VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING[table_name]
                 join_table = dim_config["join_table"]
                 join_condition = dim_config["join_condition"]()
                 join_type = dim_config["join_type"]
@@ -667,26 +584,20 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 else:
                     stmt = stmt.outerjoin(join_table, join_condition)
 
-        if filters.years:
-            stmt = stmt.where(Visit.year.in_(filters.years))
-        if company_id:
-            stmt = stmt.where(Employee.company_id == company_id)
-        if filters.months:
-            stmt = stmt.where(Visit.month.in_(filters.months))
-        if filters.pharmacy_ids:
-            stmt = stmt.where(Visit.pharmacy_id.in_(filters.pharmacy_ids))
-        if filters.employee_ids:
-            stmt = stmt.where(Visit.employee_id.in_(filters.employee_ids))
-        if filters.medical_facility_ids:
-            stmt = stmt.where(
-                Visit.medical_facility_id.in_(filters.medical_facility_ids)
-            )
-        if filters.product_group_ids:
-            stmt = stmt.where(Visit.product_group_id.in_(filters.product_group_ids))
-        if filters.geo_indicator_ids:
-            stmt = stmt.where(GeoIndicator.id.in_(filters.geo_indicator_ids))
-        if filters.speciality_ids:
-            stmt = stmt.where(Speciality.id.in_(filters.speciality_ids))
+        stmt = ListQueryHelper.apply_specs(
+            stmt,
+            [
+                InOrNullSpec(Visit.year, filters.years),
+                InOrNullSpec(Employee.company_id, [company_id] if company_id else None),
+                InOrNullSpec(Visit.month, filters.months),
+                InOrNullSpec(Visit.pharmacy_id, filters.pharmacy_ids),
+                InOrNullSpec(Visit.employee_id, filters.employee_ids),
+                InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),
+                InOrNullSpec(Visit.product_group_id, filters.product_group_ids),
+                InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
+                InOrNullSpec(Speciality.id, filters.speciality_ids),
+            ],
+        )
 
         if filters.search:
             search_term = f"%{filters.search}%"
@@ -711,86 +622,73 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         stmt = stmt.group_by(*group_by_fields)
 
         sort_map = {
-            "medical_facility": (
-                MedicalFacility.name
-                if "medical_facility" in filters.group_by_dimensions
-                else None
-            ),
-            "pharmacy": (
-                Pharmacy.name if "pharmacy" in filters.group_by_dimensions else None
-            ),
-            "employee": (
-                Employee.full_name
-                if "employee" in filters.group_by_dimensions
-                else None
-            ),
-            "group": (
-                ProductGroup.name
-                if "product_group" in filters.group_by_dimensions
-                else None
-            ),
+            "medical_facility": MedicalFacility.name,
+            "pharmacy": Pharmacy.name,
+            "employee": Employee.full_name,
+            "group": ProductGroup.name,
             "employee_visits": func.count(Visit.id),
-            "geo_indicator": (
-                GeoIndicator.name
-                if "geo_indicator" in filters.group_by_dimensions
-                else None
-            ),
+            "geo_indicator": GeoIndicator.name,
         }
 
-        if filters.sort_by and filters.sort_order:
-            sort_column = sort_map.get(filters.sort_by)
-            if sort_column is not None:
-                stmt = stmt.order_by(
-                    asc(sort_column)
-                    if filters.sort_order == "ASC"
-                    else desc(sort_column)
-                )
+        allowed_dim_sorts = {
+            "medical_facility",
+            "pharmacy",
+            "employee",
+            "geo_indicator",
+            "group",
+        }
+        if filters.sort_by in allowed_dim_sorts and filters.sort_by not in (
+            filters.group_by_dimensions or []
+        ):
+            sort_by = None
+            sort_order = None
         else:
-            order_fields = []
-            if "year" in filters.group_by_dimensions:
-                order_fields.append(Visit.year.desc())
-            if "month" in filters.group_by_dimensions:
-                order_fields.append(Visit.month.desc())
-            if "employee" in filters.group_by_dimensions:
-                order_fields.append(Employee.full_name.nulls_last())
-            if "pharmacy" in filters.group_by_dimensions:
-                order_fields.append(Pharmacy.name.nulls_last())
-            if "medical_facility" in filters.group_by_dimensions:
-                order_fields.append(MedicalFacility.name.nulls_last())
+            sort_by = filters.sort_by
+            sort_order = filters.sort_order
 
-            if order_fields:
-                stmt = stmt.order_by(*order_fields)
+        default_sort = []
+        g = set(filters.group_by_dimensions or [])
 
-        if filters.limit:
-            stmt = stmt.limit(filters.limit)
-        if filters.offset:
-            stmt = stmt.offset(filters.offset)
+        if "year" in g:
+            default_sort.append(Visit.year.desc())
+        if "month" in g:
+            default_sort.append(Visit.month.desc())
+        if "employee" in g:
+            default_sort.append(Employee.full_name.nulls_last())
+        if "pharmacy" in g:
+            default_sort.append(Pharmacy.name.nulls_last())
+        if "medical_facility" in g:
+            default_sort.append(MedicalFacility.name.nulls_last())
+
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            sort_by,
+            sort_order,
+            sort_map,
+            default_sort=default_sort if default_sort else None,
+        )
+
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.mappings().all()
 
     @staticmethod
     async def get_visits_by_period(
-        session: "AsyncSession", filters: visit.VisitCountFilter, company_id: int | None
+        session: "AsyncSession",
+        filters: visit.VisitCountFilter | None = None,
+        company_id: int | None = None,
     ):
-
         quarter_expr = func.ceil(Visit.month / 3.0)
 
-        if filters.group_by_period == "year":
-            period_key = func.cast(Visit.year, String).label("period")
-            period_group_fields = [Visit.year]
-        elif filters.group_by_period == "quarter":
-            period_key = func.concat(
-                func.cast(Visit.year, String), "-Q", func.cast(quarter_expr, String)
-            ).label("period")
-            period_group_fields = [Visit.year, quarter_expr]
-        else:
-            period_key = func.concat(
-                func.cast(Visit.year, String),
-                "-",
-                func.lpad(func.cast(Visit.month, String), 2, "0"),
-            ).label("period")
-            period_group_fields = [Visit.year, Visit.month]
+        period_expr, period_group_fields = build_period_key(
+            filters.group_by_period,
+            Visit,
+            with_group_fields=True,
+            quarter_expr=quarter_expr,
+        )
+
+        period_key = period_expr.label("period")
 
         stmt = (
             select(period_key, func.count(Visit.id).label("total_visits"))
@@ -803,20 +701,17 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
 
         if company_id:
             stmt = stmt.where(Employee.company_id == company_id)
-        if filters.months:
-            stmt = stmt.where(Visit.month.in_(filters.months))
-        if filters.quarters:
-            stmt = stmt.where(quarter_expr.in_(filters.quarters))
-        if filters.pharmacy_ids:
-            stmt = stmt.where(Visit.pharmacy_id.in_(filters.pharmacy_ids))
-        if filters.employee_ids:
-            stmt = stmt.where(Visit.employee_id.in_(filters.employee_ids))
-        if filters.medical_facility_ids:
-            stmt = stmt.where(
-                Visit.medical_facility_id.in_(filters.medical_facility_ids)
-            )
-        if filters.product_group_ids:
-            stmt = stmt.where(Visit.product_group_id.in_(filters.product_group_ids))
+        stmt = ListQueryHelper.apply_specs(
+            stmt,
+            [
+                InOrNullSpec(Visit.month, filters.months),
+                InOrNullSpec(quarter_expr, filters.quarters),
+                InOrNullSpec(Visit.pharmacy_id, filters.pharmacy_ids),
+                InOrNullSpec(Visit.employee_id, filters.employee_ids),
+                InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),
+                InOrNullSpec(Visit.product_group_id, filters.product_group_ids),
+            ],
+        )
 
         stmt = stmt.group_by(*period_group_fields)
 
@@ -827,10 +722,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         else:
             stmt = stmt.order_by(Visit.year.desc(), Visit.month.desc())
 
-        if filters.limit:
-            stmt = stmt.limit(filters.limit)
-        if filters.offset:
-            stmt = stmt.offset(filters.offset)
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
 

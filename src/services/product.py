@@ -26,12 +26,13 @@ from src.mapping.products import (
     sku_mapping,
 )
 from src.schemas import product
+from src.utils.list_query_helper import InOrNullSpec, StringTypedSpec
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
 
 from .base import BaseService
-from .list_query_helper import ListQueryHelper
+from ..utils.list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,20 +68,19 @@ class BrandService(
         )
 
         if filters:
-            if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-            if filters.ims_name:
-                stmt = stmt.where(self.model.ims_name.ilike(f"%{filters.ims_name}%"))
-
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.promotion_type_id, filters.promotion_type_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.product_group_id, filters.product_group_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.company_id, filters.company_ids
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    StringTypedSpec(self.model.name, filters.name),
+                    StringTypedSpec(self.model.ims_name, filters.ims_name),
+                    InOrNullSpec(
+                        self.model.promotion_type_id, filters.promotion_type_ids
+                    ),
+                    InOrNullSpec(
+                        self.model.product_group_id, filters.product_group_ids
+                    ),
+                    InOrNullSpec(self.model.company_id, filters.company_ids),
+                ],
             )
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
@@ -198,7 +198,9 @@ class PromotionTypeService(
 
         if filters:
             if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+                stmt = ListQueryHelper.apply_string_typed_filter(
+                    stmt, self.model.name, filters.name
+                )
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
@@ -424,29 +426,22 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
         )
 
         if filters:
-            if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.brand_id, filters.brand_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.promotion_type_id, filters.promotion_type_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.product_group_id, filters.product_group_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.dosage_form_id, filters.dosage_form_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.dosage_id, filters.dosage_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.segment_id, filters.segment_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.company_id, filters.company_ids
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    StringTypedSpec(self.model.name, filters.name),
+                    InOrNullSpec(self.model.brand_id, filters.brand_ids),
+                    InOrNullSpec(
+                        self.model.promotion_type_id, filters.promotion_type_ids
+                    ),
+                    InOrNullSpec(
+                        self.model.product_group_id, filters.product_group_ids
+                    ),
+                    InOrNullSpec(self.model.dosage_form_id, filters.dosage_form_ids),
+                    InOrNullSpec(self.model.dosage_id, filters.dosage_ids),
+                    InOrNullSpec(self.model.segment_id, filters.segment_ids),
+                    InOrNullSpec(self.model.company_id, filters.company_ids),
+                ],
             )
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
@@ -599,11 +594,12 @@ class ProductGroupService(
         )
 
         if filters:
-            if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.company_id, filters.company_ids
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    StringTypedSpec(self.model.name, filters.name),
+                    InOrNullSpec(self.model.company_id, filters.company_ids),
+                ],
             )
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)

@@ -1,15 +1,13 @@
 import os
 import re
-from uuid import uuid4
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Sequence
+from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import (
     and_,
-    asc,
     case,
-    desc,
     distinct,
     func,
     insert,
@@ -23,11 +21,18 @@ from src.db.models import IMS, Brand, Company, ImportLogs
 from src.mapping.ims import ims_mapping
 from src.schemas.ims import (
     IMSCreate,
+    IMSRequest,
     IMSTableFilter,
     IMSTopFilter,
     IMSUpdate,
 )
-from src.services.base import BaseService
+from src.services.base import BaseService, ModelType
+from src.utils.list_query_helper import (
+    InOrNullSpec,
+    ListQueryHelper,
+    NumberTypedSpec,
+    StringTypedSpec,
+)
 from src.utils.excel_parser import iter_excel_records
 from src.utils.mapping import map_record
 
@@ -66,6 +71,56 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
             if file_path.exists():
                 os.remove(file_path)
             raise
+
+    async def get_multi(
+        self,
+        session: "AsyncSession",
+        filters: IMSRequest | None = None,
+        load_options: list[Any] | None = None,
+    ) -> Sequence[ModelType]:
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        sort_map = {
+            "company": self.model.company,
+            "brand": self.model.brand,
+            "segment": self.model.segment,
+            "dosage": self.model.dosage,
+            "dosage_form": self.model.dosage_form,
+            "molecule": self.model.molecule,
+            "period": self.model.period,
+            "amount": self.model.amount,
+            "packages": self.model.packages,
+        }
+        stmt = ListQueryHelper.apply_sorting_with_default(
+            stmt,
+            getattr(filters, "sort_by", None),
+            getattr(filters, "sort_order", None),
+            sort_map,
+            self.model.created_at.desc(),
+        )
+
+        if filters:
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    StringTypedSpec(self.model.company, filters.company),
+                    StringTypedSpec(self.model.brand, filters.brand),
+                    StringTypedSpec(self.model.segment, filters.segment),
+                    StringTypedSpec(self.model.molecule, filters.molecule),
+                    StringTypedSpec(self.model.dosage, filters.dosage),
+                    StringTypedSpec(self.model.dosage_form, filters.dosage_form),
+                    StringTypedSpec(self.model.period, filters.period),
+                    NumberTypedSpec(self.model.amount, filters.amount),
+                    NumberTypedSpec(self.model.packages, filters.packages),
+                ],
+            )
+            stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
 
     async def _import_excel_from_file(
         self,
@@ -214,21 +269,21 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
         end_month, year = self._parse_month_year(period)
         return [self._format_db_period(year, m) for m in range(1, end_month + 1)]
 
-    def parse_period(self, period: str, type_period: str) -> list[str]:
-        if type_period == "Month":
+    def parse_period(self, period: str, group_by_period: str) -> list[str]:
+        if group_by_period == "Month":
             return self._parse_single_month(period)
-        elif type_period == "Quarter":
+        elif group_by_period == "Quarter":
             return self._parse_quarter(period)
-        elif type_period == "Year":
+        elif group_by_period == "Year":
             return self._parse_year(period)
-        elif type_period == "MAT":
+        elif group_by_period == "MAT":
             return self._parse_mat_simple(period)
-        elif type_period == "YTD":
+        elif group_by_period == "YTD":
             return self._parse_ytd_simple(period)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Неизвестный тип периода: {type_period}",
+                detail=f"Неизвестный тип периода: {group_by_period}",
             )
 
     async def get_entities_with_metrics(
@@ -239,7 +294,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
     ):
         periods = []
         for period in filters.periods:
-            periods.extend(self.parse_period(period, filters.type_period))
+            periods.extend(self.parse_period(period, filters.group_by_period))
 
         if filters.group_column == "company":
             group_column = IMS.company
@@ -389,7 +444,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
         response = {"entities": entities}
 
         previous_periods = self._get_previous_periods(
-            filters.periods, filters.type_period
+            filters.periods, filters.group_by_period
         )
 
         if filters.segment_name and filters.group_column == "segment":
@@ -472,11 +527,13 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
 
         return response
 
-    def _get_previous_periods(self, periods: list[str], type_period: str) -> list[str]:
+    def _get_previous_periods(
+        self, periods: list[str], group_by_period: str
+    ) -> list[str]:
         previous_periods = []
 
         for period in periods:
-            if type_period == "Month":
+            if group_by_period == "Month":
                 month, year = self._parse_month_year(period)
                 prev_month = month - 1
                 prev_year = year
@@ -486,10 +543,10 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                     prev_year -= 1
 
                 prev_period_str = f"{prev_month}-{prev_year % 100:02d}"
-                prev_periods = self.parse_period(prev_period_str, type_period)
+                prev_periods = self.parse_period(prev_period_str, group_by_period)
                 previous_periods.extend(prev_periods)
 
-            elif type_period == "Quarter":
+            elif group_by_period == "Quarter":
                 match = re.match(r"^q([1-4])-(\d{2,4})$", period.lower())
                 if not match:
                     continue
@@ -505,17 +562,17 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                     prev_year -= 1
 
                 prev_period_str = f"q{prev_quarter}-{prev_year % 100:02d}"
-                prev_periods = self.parse_period(prev_period_str, type_period)
+                prev_periods = self.parse_period(prev_period_str, group_by_period)
                 previous_periods.extend(prev_periods)
 
-            elif type_period == "Year":
+            elif group_by_period == "Year":
                 year = self._normalize_year(int(period))
                 prev_year = year - 1
 
-                prev_periods = self.parse_period(str(prev_year), type_period)
+                prev_periods = self.parse_period(str(prev_year), group_by_period)
                 previous_periods.extend(prev_periods)
 
-            elif type_period == "MAT":
+            elif group_by_period == "MAT":
                 month, year = self._parse_month_year(period)
                 prev_year = year - 1
 
@@ -523,7 +580,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                 prev_periods = self.parse_period(prev_period_str, "MAT")
                 previous_periods.extend(prev_periods)
 
-            elif type_period == "YTD":
+            elif group_by_period == "YTD":
                 month, year = self._parse_month_year(period)
                 prev_year = year - 1
 
@@ -559,7 +616,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
 
         if "periods" in filters.model_fields_set:
             for period in filters.periods:
-                db_periods = self.parse_period(period, filters.type_period)
+                db_periods = self.parse_period(period, filters.group_by_period)
 
                 period_amount = func.round(
                     func.sum(case((IMS.period.in_(db_periods), IMS.amount), else_=0))
@@ -576,15 +633,6 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                 period_columns.append(period_json)
 
         stmt = select(*select_fields, *period_columns).group_by(*group_by_fields)
-
-        if filters.company_names:
-            stmt = stmt.where(IMS.company.in_(filters.company_names))
-        if filters.brand_names:
-            stmt = stmt.where(IMS.brand.in_(filters.brand_names))
-        if filters.segment_names:
-            stmt = stmt.where(IMS.segment.in_(filters.segment_names))
-        if filters.dosage_form_names:
-            stmt = stmt.where(IMS.dosage_form.in_(filters.dosage_form_names))
 
         if filters.search:
             search_term = f"%{filters.search}%"
@@ -606,27 +654,31 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
             if search_conditions:
                 stmt = stmt.where(or_(*search_conditions))
 
-        if filters.sort_by and filters.sort_order:
-            dimension_mapping = {
-                "company": IMS.company,
-                "brand": IMS.brand,
-                "segment": IMS.segment,
-                "dosage_form": IMS.dosage_form,
-                "dosage": IMS.dosage,
-                "molecule": IMS.molecule,
-            }
-            sort_column = dimension_mapping.get(filters.sort_by)
-            if sort_column is not None:
-                stmt = stmt.order_by(
-                    asc(sort_column)
-                    if filters.sort_order == "ASC"
-                    else desc(sort_column)
-                )
+        stmt = ListQueryHelper.apply_specs(
+            stmt,
+            [
+                InOrNullSpec(IMS.company, filters.company_names),
+                InOrNullSpec(IMS.brand, filters.brand_names),
+                InOrNullSpec(IMS.segment, filters.segment_names),
+                InOrNullSpec(IMS.dosage_form, filters.dosage_form_names),
+                InOrNullSpec(IMS.dosage, getattr(filters, "dosage_names", None)),
+                InOrNullSpec(IMS.molecule, getattr(filters, "molecule_names", None)),
+            ],
+        )
 
-        if filters.limit:
-            stmt = stmt.limit(filters.limit)
-        if filters.offset:
-            stmt = stmt.offset(filters.offset)
+        sort_map = {
+            "company": IMS.company,
+            "brand": IMS.brand,
+            "segment": IMS.segment,
+            "dosage_form": IMS.dosage_form,
+            "dosage": IMS.dosage,
+            "molecule": IMS.molecule,
+        }
+
+        stmt = ListQueryHelper.apply_sorting(
+            stmt, sort_map.get(filters.sort_by), filters.sort_order
+        )
+        stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
         return result.mappings().all()

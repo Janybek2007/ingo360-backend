@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.schemas.base_filter import SortDirection
+from src.schemas.base_filter import BaseDbFilter, SortDirection
 from src.schemas.client import (
     DoctorSimpleResponse,
     MedicalFacilitySimpleResponse,
@@ -33,6 +33,30 @@ class VisitUpdate(BaseModel):
     doctor_id: int | None = None
     medical_facility_id: int | None = None
     pharmacy_id: int | None = None
+
+
+class VisitsRequest(BaseDbFilter):
+    pharmacy_ids: list[int] | None = None
+    employee_ids: list[int] | None = None
+    product_group_ids: list[int] | None = None
+    medical_facility_ids: list[int] | None = None
+    doctor_ids: list[int] | None = None
+    client_type: str | None = None
+    months: list[int] | None = None
+    year: str | None = None
+    sort_by: (
+        Literal[
+            "pharmacy",
+            "employee",
+            "product_group",
+            "medical_facility",
+            "doctor",
+            "client_type",
+            "month",
+            "year",
+        ]
+        | None
+    ) = None
 
 
 class VisitResponse(BaseModel):

@@ -116,41 +116,30 @@ class SecondaryTertiarySalesFilter(BaseModel):
     published: bool | None = None
 
 
-PrimarySalesSortField = Literal[
-    "distributors",
-    "brands",
-    "skus",
-    "months",
-    "years",
-    "packages",
-    "amount",
-    "published",
-]
-
-SecondaryTertiarySalesSortField = Literal[
-    "pharmacies",
-    "distributors",
-    "brands",
-    "skus",
-    "months",
-    "years",
-    "indicator",
-    "packages",
-    "amount",
-    "published",
-]
-
-
 class PrimarySalesAndStockListRequest(BaseDbFilter):
     distributor_ids: list[int] | None = None
     brand_ids: list[int] | None = None
     sku_ids: list[int] | None = None
     months: list[int] | None = None
     quarters: list[int] | None = None
-    years: list[int] | None = None
+    year: str | None = None
     indicator: str | None = None
-    published: bool | None = None
-    sort_by: PrimarySalesSortField | None = None
+    published: list[str] | None = None
+    amount: str | None = None
+    packages: str | None = None
+    sort_by: (
+        Literal[
+            "distributor",
+            "brand",
+            "sku",
+            "month",
+            "year",
+            "packages",
+            "amount",
+            "published",
+        ]
+        | None
+    ) = None
 
 
 class SecondaryTertiarySalesListRequest(BaseDbFilter):
@@ -160,10 +149,26 @@ class SecondaryTertiarySalesListRequest(BaseDbFilter):
     sku_ids: list[int] | None = None
     months: list[int] | None = None
     quarters: list[int] | None = None
-    years: list[int] | None = None
+    year: str | None = None
     indicator: str | None = None
-    published: bool | None = None
-    sort_by: SecondaryTertiarySalesSortField | None = None
+    published: list[str] | None = None
+    amount: str | None = None
+    packages: str | None = None
+    sort_by: (
+        Literal[
+            "pharmacy",
+            "distributor",
+            "brand",
+            "sku",
+            "month",
+            "year",
+            "indicator",
+            "packages",
+            "amount",
+            "published",
+        ]
+        | None
+    ) = None
 
 
 class PrimarySalesAndStockResponse(BaseModel):
@@ -215,6 +220,7 @@ class TertiarySalesResponse(BaseModel):
 class SalesReportFilter(BaseModel):
     limit: int | None = None
     offset: int = 0
+    period_values: list[str] | None = None
     months: list[int] | None = None
     quarters: list[int] | None = None
     years: list[int] = Field(default_factory=lambda: [date.today().year])
@@ -293,6 +299,7 @@ class PeriodFilter(BaseModel):
     years: list[int] = Field(default_factory=lambda: [date.today().year])
     quarters: list[int] | None = None
     months: list[int] | None = None
+    period_values: list[str] | None = None
     distributor_ids: list[int] | None = None
     brand_ids: list[int] | None = None
     product_group_ids: list[int] | None = None

@@ -29,12 +29,13 @@ from src.mapping.clients import (
     speciality_mapping,
 )
 from src.schemas import client
+from src.utils.list_query_helper import InOrNullSpec, StringTypedSpec
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
 
 from .base import BaseService
-from .list_query_helper import ListQueryHelper
+from ..utils.list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,8 +66,9 @@ class ClientCategoryService(
         )
         if filters:
             if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
+                stmt = ListQueryHelper.apply_string_typed_filter(
+                    stmt, self.model.name, filters.name
+                )
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
@@ -128,25 +130,25 @@ class DoctorService(
         )
 
         if filters:
-            if filters.full_name:
-                stmt = stmt.where(self.model.full_name.ilike(f"%{filters.full_name}%"))
-
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.medical_facility_id, filters.medical_facility_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
+            stmt = ListQueryHelper.apply_specs(
                 stmt,
-                self.model.responsible_employee_id,
-                filters.responsible_employee_ids,
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.speciality_id, filters.speciality_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.client_category_id, filters.client_category_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.product_group_id, filters.product_group_ids
+                [
+                    StringTypedSpec(self.model.full_name, filters.full_name),
+                    InOrNullSpec(
+                        self.model.medical_facility_id, filters.medical_facility_ids
+                    ),
+                    InOrNullSpec(
+                        self.model.responsible_employee_id,
+                        filters.responsible_employee_ids,
+                    ),
+                    InOrNullSpec(self.model.speciality_id, filters.speciality_ids),
+                    InOrNullSpec(
+                        self.model.client_category_id, filters.client_category_ids
+                    ),
+                    InOrNullSpec(
+                        self.model.product_group_id, filters.product_group_ids
+                    ),
+                ],
             )
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
@@ -303,34 +305,30 @@ class PharmacyService(
         )
 
         if filters:
-            if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.company_id, filters.company_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.distributor_id, filters.distributor_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
+            stmt = ListQueryHelper.apply_specs(
                 stmt,
-                self.model.responsible_employee_id,
-                filters.responsible_employee_ids,
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.settlement_id, filters.settlement_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.district_id, filters.district_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.client_category_id, filters.client_category_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.product_group_id, filters.product_group_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.geo_indicator_id, filters.geo_indicator_ids
+                [
+                    StringTypedSpec(self.model.name, filters.name),
+                    InOrNullSpec(self.model.company_id, filters.company_ids),
+                    InOrNullSpec(
+                        stmt, self.model.distributor_id, filters.distributor_ids
+                    ),
+                    InOrNullSpec(
+                        self.model.responsible_employee_id,
+                        filters.responsible_employee_ids,
+                    ),
+                    InOrNullSpec(self.model.settlement_id, filters.settlement_ids),
+                    InOrNullSpec(self.model.district_id, filters.district_ids),
+                    InOrNullSpec(
+                        self.model.client_category_id, filters.client_category_ids
+                    ),
+                    InOrNullSpec(
+                        self.model.product_group_id, filters.product_group_ids
+                    ),
+                    InOrNullSpec(
+                        self.model.geo_indicator_id, filters.geo_indicator_ids
+                    ),
+                ],
             )
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
@@ -641,8 +639,9 @@ class SpecialityService(
         )
         if filters:
             if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
+                stmt = ListQueryHelper.apply_string_typed_filter(
+                    stmt, self.model.name, filters.name
+                )
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
@@ -705,22 +704,17 @@ class MedicalFacilityService(
         )
 
         if filters:
-            if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-            if filters.facility_type:
-                stmt = stmt.where(
-                    self.model.facility_type.ilike(f"%{filters.facility_type}%")
-                )
-
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.settlement_id, filters.settlement_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.district_id, filters.district_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.geo_indicator_id, filters.geo_indicator_ids
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    StringTypedSpec(self.model.name, filters.name),
+                    StringTypedSpec(self.model.facility_type, filters.facility_type),
+                    InOrNullSpec(self.model.settlement_id, filters.settlement_ids),
+                    InOrNullSpec(self.model.district_id, filters.district_ids),
+                    InOrNullSpec(
+                        self.model.geo_indicator_id, filters.geo_indicator_ids
+                    ),
+                ],
             )
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
@@ -944,8 +938,9 @@ class DistributorService(
 
         if filters:
             if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
+                stmt = ListQueryHelper.apply_string_typed_filter(
+                    stmt, self.model.name, filters.name
+                )
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)

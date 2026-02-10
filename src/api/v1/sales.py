@@ -114,7 +114,7 @@ async def get_primary_stock(
 ):
     return await primary_sales_service.get_shipment_stock_report(
         session,
-        filters,
+        filters=filters,
         indicator="Остаток на складе",
         company_id=current_user.company_id,
     )
@@ -128,7 +128,7 @@ async def get_primary_sales(
 ):
     return await primary_sales_service.get_shipment_stock_report(
         session,
-        filters,
+        filters=filters,
         indicator="Первичная продажа",
         company_id=current_user.company_id,
     )
@@ -342,7 +342,7 @@ async def get_secondary_sales_report(
     current_user: Annotated[User, Depends(current_active_user)],
 ):
     return await secondary_sales_service.get_sales_report(
-        session, filters, company_id=current_user.company_id
+        session, filters=filters, company_id=current_user.company_id
     )
 
 
@@ -515,7 +515,7 @@ async def get_tertiary_sales_report(
     current_user: Annotated[User, Depends(current_active_user)],
 ):
     return await tertiary_sales_service.get_sales_report(
-        session, filters, company_id=current_user.company_id
+        session, filters=filters, company_id=current_user.company_id
     )
 
 

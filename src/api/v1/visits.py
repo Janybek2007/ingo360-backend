@@ -6,9 +6,10 @@ from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.company import can_view_visits
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.utils.export_excel import export_excel_response
 from src.db.models import MedicalFacility, Pharmacy, User, Visit
 from src.db.session import db_session
-from src.schemas import base_filter
+from src.schemas.export import ExportExcelRequest
 from src.schemas.visit import (
     DoctorsBySpecialtyResponse,
     DoctorsCountFilter,
@@ -16,6 +17,7 @@ from src.schemas.visit import (
     VisitCountFilter,
     VisitCreate,
     VisitResponse,
+    VisitsRequest,
     VisitSumForPeriodFilter,
     VisitUpdate,
 )
@@ -31,7 +33,7 @@ router = APIRouter()
 )
 async def get_visits(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: base_filter.BaseFilter,
+    filters: VisitsRequest,
 ):
     load_options = [
         joinedload(Visit.pharmacy).joinedload(Pharmacy.geo_indicator),
@@ -43,6 +45,26 @@ async def get_visits(
     ]
     return await visit_service.get_multi(
         session, load_options=load_options, filters=filters
+    )
+
+
+@router.post("/export-excel")
+async def export_visits_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    load_options = [
+        joinedload(Visit.pharmacy).joinedload(Pharmacy.geo_indicator),
+        joinedload(Visit.pharmacy).joinedload(Pharmacy.distributor),
+        joinedload(Visit.doctor),
+        joinedload(Visit.product_group),
+        joinedload(Visit.employee),
+        joinedload(Visit.medical_facility).joinedload(MedicalFacility.geo_indicator),
+    ]
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: visit_service.get_multi(session, load_options=load_options),
+        serialize=lambda v: VisitResponse.model_validate(v).model_dump(),
     )
 
 

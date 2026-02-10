@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.schemas.base_filter import SortDirection
+from src.schemas.base_filter import BaseDbFilter, SortDirection
 
 
 class IMSCreate(BaseModel):
@@ -45,12 +45,38 @@ class IMSResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class IMSRequest(BaseDbFilter):
+    company: str | None = None
+    brand: str | None = None
+    segment: str | None = None
+    molecule: str | None = None
+    dosage: str | None = None
+    dosage_form: str | None = None
+    period: str | None = None
+    amount: str | None = None
+    packages: str | None = None
+    sort_by: (
+        Literal[
+            "company",
+            "brand",
+            "segment",
+            "dosage",
+            "dosage_form",
+            "molecule",
+            "period",
+            "amount",
+            "packages",
+        ]
+        | None
+    ) = None
+
+
 class IMSTopFilter(BaseModel):
     group_column: Literal["company", "brand", "segment"] = "company"
     periods: list[str] = Field(
         default_factory=lambda: [datetime.now().strftime("%-m-%y")]
     )
-    type_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
+    group_by_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
     segment_name: str | None = None
     brand_name: str | None = None
 
@@ -59,7 +85,7 @@ class IMSMetricsFilter(BaseModel):
     periods: list[str] = Field(
         default_factory=lambda: [datetime.now().strftime("%-m-%y")]
     )
-    type_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
+    group_by_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
 
 
 class IMSMetricsResponse(BaseModel):
@@ -80,7 +106,7 @@ class IMSTableFilter(BaseModel):
     periods: list[str] = Field(
         default_factory=lambda: [f"6-{datetime.now().year % 100 - i}" for i in range(3)]
     )
-    type_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
+    group_by_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
     limit: int | None = None
     offset: int = 0
     group_by_dimensions: list[

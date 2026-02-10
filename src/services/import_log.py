@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from src.db.models import ImportLogs, User
 from src.schemas.import_log import ImportLogCreate, ImportLogResponse, ImportLogUpdate
-from src.services.list_query_helper import ListQueryHelper
+from src.utils.list_query_helper import ListQueryHelper
 
 from .base import BaseService, FilterSchemaType, ModelType
 

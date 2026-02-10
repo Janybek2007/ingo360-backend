@@ -17,7 +17,7 @@ from src.utils.mapping import map_record
 from src.websocket.connection_manager import connection_manager
 
 from .base import BaseService, FilterSchemaType, ModelType
-from .list_query_helper import ListQueryHelper
+from ..utils.list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

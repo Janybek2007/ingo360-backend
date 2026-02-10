@@ -16,12 +16,13 @@ from src.db.models import (
 )
 from src.mapping.employees import employee_mapping, position_mapping
 from src.schemas import employee
+from src.utils.list_query_helper import InOrNullSpec, StringTypedSpec
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
 
 from .base import BaseService
-from .list_query_helper import ListQueryHelper
+from ..utils.list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,24 +60,20 @@ class EmployeeService(
         print(filters)
 
         if filters:
-            if filters.full_name:
-                stmt = stmt.where(self.model.full_name.ilike(f"%{filters.full_name}%"))
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    StringTypedSpec(self.model.full_name, filters.full_name),
+                    StringTypedSpec(self.model.position_id, filters.position_ids),
+                    InOrNullSpec(
+                        self.model.product_group_id, filters.product_group_ids
+                    ),
+                    InOrNullSpec(self.model.region_id, filters.region_ids),
+                    InOrNullSpec(self.model.district_id, filters.district_ids),
+                    InOrNullSpec(self.model.company_id, filters.company_ids),
+                ],
+            )
 
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.position_id, filters.position_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.product_group_id, filters.product_group_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.region_id, filters.region_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.district_id, filters.district_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.company_id, filters.company_ids
-            )
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
@@ -221,8 +218,9 @@ class PositionService(
 
         if filters:
             if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
+                stmt = ListQueryHelper.apply_string_typed_filter(
+                    stmt, self.model.name, filters.name
+                )
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)

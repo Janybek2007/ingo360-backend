@@ -7,12 +7,13 @@ from sqlalchemy.dialects.postgresql import insert
 from src.db.models import Company, Country, ImportLogs, Region, Settlement, geography
 from src.mapping.geography import district_mapping, region_mapping
 from src.schemas import geography as geography_schema
+from src.utils.list_query_helper import InOrNullSpec, StringTypedSpec
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.mapping import map_record
 
 from .base import BaseService
-from .list_query_helper import ListQueryHelper
+from ..utils.list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,7 +70,9 @@ class CountryService(
         )
         if filters:
             if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
+                stmt = ListQueryHelper.apply_string_typed_filter(
+                    stmt, self.model.name, filters.name
+                )
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
@@ -145,13 +148,13 @@ class RegionService(
             self.model.created_at.desc(),
         )
         if filters:
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.country_id, filters.country_ids
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    StringTypedSpec(self.model.name, filters.name),
+                    InOrNullSpec(self.model.country_id, filters.country_ids),
+                ],
             )
-
-            if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
@@ -256,11 +259,12 @@ class SettlementService(
         )
 
         if filters:
-            if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.region_id, filters.region_ids
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    StringTypedSpec(self.model.name, filters.name),
+                    InOrNullSpec(self.model.region_id, filters.region_ids),
+                ],
             )
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
@@ -372,17 +376,14 @@ class DistrictService(
         )
 
         if filters:
-            if filters.name:
-                stmt = stmt.where(self.model.name.ilike(f"%{filters.name}%"))
-
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.region_id, filters.region_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.settlement_id, filters.settlement_ids
-            )
-            stmt = ListQueryHelper.apply_in_or_null(
-                stmt, self.model.company_id, filters.company_ids
+            stmt = ListQueryHelper.apply_specs(
+                stmt,
+                [
+                    StringTypedSpec(self.model.name, filters.name),
+                    InOrNullSpec(self.model.region_id, filters.region_ids),
+                    InOrNullSpec(self.model.settlement_id, filters.settlement_ids),
+                    InOrNullSpec(self.model.company_id, filters.company_ids),
+                ],
             )
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)

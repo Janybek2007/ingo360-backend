@@ -3,10 +3,12 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Depends, Query, UploadFile
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.utils.export_excel import export_excel_response
 from src.db.session import db_session
-from src.schemas.base_filter import BaseFilter
+from src.schemas.export import ExportExcelRequest
 from src.schemas.ims import (
     IMSCreate,
+    IMSRequest,
     IMSResponse,
     IMSTableFilter,
     IMSTopFilter,
@@ -28,9 +30,21 @@ router = APIRouter()
 )
 async def get_all_ims(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: BaseFilter,
+    filters: IMSRequest,
 ):
     return await ims_service.get_multi(session, filters)
+
+
+@router.post("/export-excel")
+async def export_visits_excel(
+    payload: ExportExcelRequest,
+    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+):
+    return await export_excel_response(
+        payload=payload,
+        get_rows=lambda: ims_service.get_multi(session),
+        serialize=lambda i: IMSResponse.model_validate(i).model_dump(),
+    )
 
 
 @router.post(
