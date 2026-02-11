@@ -73,10 +73,10 @@ class IMSRequest(BaseDbFilter):
 
 class IMSTopFilter(BaseModel):
     group_column: Literal["company", "brand", "segment"] = "company"
-    periods: list[str] = Field(
+    period_values: list[str] = Field(
         default_factory=lambda: [datetime.now().strftime("%-m-%y")]
     )
-    group_by_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
+    group_by_period: Literal["month", "quarter", "year", "mat", "ytd"] = "ytd"
     segment_name: str | None = None
     brand_name: str | None = None
 
@@ -85,7 +85,7 @@ class IMSMetricsFilter(BaseModel):
     periods: list[str] = Field(
         default_factory=lambda: [datetime.now().strftime("%-m-%y")]
     )
-    group_by_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
+    group_by_period: Literal["month", "quarter", "year", "mat", "ytd"] = "ytd"
 
 
 class IMSMetricsResponse(BaseModel):
@@ -103,10 +103,10 @@ class IMSTableFilter(BaseModel):
     segment_names: list[str] | None = None
     dosage_form_names: list[str] | None = None
     search: str | None = None
-    periods: list[str] = Field(
-        default_factory=lambda: [f"6-{datetime.now().year % 100 - i}" for i in range(3)]
+    period_values: list[str] = Field(
+        default_factory=lambda: [datetime.now().strftime("%-m-%y")]
     )
-    group_by_period: Literal["Month", "Quarter", "Year", "MAT", "YTD"] = "YTD"
+    group_by_period: Literal["month", "quarter", "year", "mat", "ytd"] = "ytd"
     limit: int | None = None
     offset: int = 0
     group_by_dimensions: list[

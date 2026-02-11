@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
 from uuid import uuid4
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from sqlalchemy import and_, func, insert, or_, select
 
 from src.db.models import (
@@ -28,6 +28,7 @@ from src.schemas.visit import VisitsRequest
 from src.services.base import ModelType
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
+from src.utils.build_period_values import build_period_values
 from src.utils.excel_parser import iter_excel_records
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import (
@@ -297,6 +298,9 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         company_id: int | None,
     ) -> list[visit.DoctorsBySpecialtyResponse]:
         quarter_expr = func.ceil(Visit.month / 3.0)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         doctors_with_visits_subquery = (
             select(
@@ -317,10 +321,15 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 InOrNullSpec(Employee.company_id, [company_id] if company_id else None),
                 InOrNullSpec(Doctor.speciality_id, filters.speciality_ids),
                 InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),
-                InOrNullSpec(quarter_expr, filters.quarters),
-                InOrNullSpec(Visit.month, filters.months),
-                InOrNullSpec(Visit.year, filters.years),
             ],
+        )
+
+        doctors_with_visits_subquery = ListQueryHelper.apply_period_values(
+            doctors_with_visits_subquery,
+            period_values,
+            year_col=Visit.year,
+            month_col=Visit.month,
+            quarter_col=quarter_expr,
         )
 
         doctors_with_visits_subquery = doctors_with_visits_subquery.group_by(
@@ -377,6 +386,11 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         filters: visit.DoctorsCountWithVisitFilter,
         company_id: int | None,
     ):
+
+        quarter_expr = func.ceil(Visit.month / 3.0)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         select_fields, group_by_fields, search_cols = build_dimensions(
             VISITS_DOCTOR_COUNT_DIMENSTIONS_MAPPING, filters.group_by_dimensions
@@ -435,8 +449,6 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             .join(Speciality, Doctor.speciality_id == Speciality.id)
             .join(MedicalFacility, Doctor.medical_facility_id == MedicalFacility.id)
             .where(
-                Visit.month.in_(filters.months),
-                Visit.year.in_(filters.years),
                 Visit.doctor_id.is_not(None),
             )
         )
@@ -449,6 +461,14 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 InOrNullSpec(MedicalFacility.id, filters.medical_facility_ids),
                 InOrNullSpec(Doctor.id, filters.doctor_ids),
             ],
+        )
+
+        doctors_with_visits_subquery = ListQueryHelper.apply_period_values(
+            doctors_with_visits_subquery,
+            period_values,
+            year_col=Visit.year,
+            month_col=Visit.month,
+            quarter_col=quarter_expr,
         )
 
         if filters.search:
@@ -561,6 +581,10 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         filters: visit.VisitSumForPeriodFilter,
         company_id: int | None,
     ):
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
+        quarter_expr = func.ceil(Visit.month / 3.0)
         select_fields = []
         group_by_fields = []
 
@@ -578,6 +602,14 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                     dim_config["name_field"].label(dim_config["name_label"])
                 )
                 group_by_fields.append(dim_config["name_field"])
+
+        if "year" not in (filters.group_by_dimensions or []):
+            select_fields.append(Visit.year.label("year"))
+            group_by_fields.append(Visit.year)
+
+        if "month" not in (filters.group_by_dimensions or []):
+            select_fields.append(Visit.month.label("month"))
+            group_by_fields.append(Visit.month)
 
         select_fields.append(func.count(Visit.id).label("employee_visits"))
 
@@ -617,9 +649,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         stmt = ListQueryHelper.apply_specs(
             stmt,
             [
-                InOrNullSpec(Visit.year, filters.years),
                 InOrNullSpec(Employee.company_id, [company_id] if company_id else None),
-                InOrNullSpec(Visit.month, filters.months),
                 InOrNullSpec(Visit.pharmacy_id, filters.pharmacy_ids),
                 InOrNullSpec(Visit.employee_id, filters.employee_ids),
                 InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),
@@ -627,6 +657,14 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
                 InOrNullSpec(Speciality.id, filters.speciality_ids),
             ],
+        )
+
+        stmt = ListQueryHelper.apply_period_values(
+            stmt,
+            period_values,
+            year_col=Visit.year,
+            month_col=Visit.month,
+            quarter_col=quarter_expr,
         )
 
         if filters.search:
@@ -709,6 +747,15 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         filters: visit.VisitCountFilter | None = None,
         company_id: int | None = None,
     ):
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
+        if period_values is None:
+            raise HTTPException(
+                status_code=400,
+                detail="period_values обязательны",
+            )
+
         quarter_expr = func.ceil(Visit.month / 3.0)
 
         period_expr, period_group_fields = build_period_key(
@@ -724,9 +771,6 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             select(period_key, func.count(Visit.id).label("total_visits"))
             .select_from(Visit)
             .join(Employee, Visit.employee_id == Employee.id)
-            .where(
-                Visit.year.in_(filters.years),
-            )
         )
 
         if company_id:
@@ -734,8 +778,30 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         stmt = ListQueryHelper.apply_specs(
             stmt,
             [
-                InOrNullSpec(Visit.month, filters.months),
-                InOrNullSpec(quarter_expr, filters.quarters),
+                InOrNullSpec(
+                    Visit.month,
+                    (
+                        [month for _, month in (period_values.months or [])]
+                        if period_values.months
+                        else None
+                    ),
+                ),
+                InOrNullSpec(
+                    Visit.year,
+                    (
+                        [year for year, _ in (period_values.months or [])]
+                        if period_values.months
+                        else period_values.years
+                    ),
+                ),
+                InOrNullSpec(
+                    quarter_expr,
+                    (
+                        [quarter for _, quarter in (period_values.quarters or [])]
+                        if period_values.quarters
+                        else None
+                    ),
+                ),
                 InOrNullSpec(Visit.pharmacy_id, filters.pharmacy_ids),
                 InOrNullSpec(Visit.employee_id, filters.employee_ids),
                 InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),

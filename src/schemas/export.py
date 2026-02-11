@@ -7,3 +7,4 @@ class ExportExcelRequest(BaseModel):
     boolean_map: dict[str, list[str]] | None = None
     custom_map: dict[str, dict[str, str]] | None = None
     file_name: str
+    is_period: bool | None = False

@@ -94,9 +94,8 @@ class DoctorsCountFilter(BaseModel):
     medical_facility_ids: list[int] | None = None
     speciality_ids: list[int] | None = None
     search: str | None = None
-    months: list[int] | None = None
-    quarters: list[int] | None = None
-    years: list[int] = Field(default_factory=lambda: [date.today().year])
+    period_values: list[str] | None = None
+    group_by_period: Literal["month", "quarter", "year"] = "month"
     limit: int | None = None
     offset: int = 0
     # group_by_period: Literal["month", "quarter", "year"] = "month"
@@ -107,8 +106,10 @@ class DoctorsCountWithVisitFilter(BaseModel):
     speciality_ids: list[int] | None = None
     doctor_ids: list[int] | None = None
     search: str | None = None
+    period_values: list[str] | None = None
     months: list[int] = Field(default_factory=lambda: [date.today().month])
     years: list[int] = Field(default_factory=lambda: [date.today().year])
+    group_by_period: Literal["month", "quarter", "year"] = "month"
     limit: int | None = None
     offset: int = 0
     group_by_dimensions: list[Literal["medical_facility", "speciality", "doctor"]] = (
@@ -135,9 +136,7 @@ class VisitCountFilter(BaseModel):
     medical_facility_ids: list[int] | None = None
     employee_ids: list[int] | None = None
     search: str | None = None
-    months: list[int] | None = None
-    quarters: list[int] | None = None
-    years: list[int] = Field(default_factory=lambda: [date.today().year])
+    period_values: list[str] | None = None
     geo_indicator_ids: list[int] | None = None
     speciality_ids: list[int] | None = None
     group_by_period: Literal["month", "quarter", "year"] = "month"
@@ -151,9 +150,11 @@ class VisitSumForPeriodFilter(BaseModel):
     medical_facility_ids: list[int] | None = None
     employee_ids: list[int] | None = None
     search: str | None = None
+    period_values: list[str] | None = None
     months: list[int] | None = None
     years: list[int] | None = None
-    geo_indicator_ids: list[int] | None = None
+    group_by_period: Literal["month", "quarter", "year"] = "month"
+    geo_indicator_ids: list[int] | None = Field(default=None, alias="indicator_ids")
     speciality_ids: list[int] | None = None
     group_by_dimensions: list[
         Literal[

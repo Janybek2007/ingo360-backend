@@ -17,6 +17,7 @@ from src.schemas.ims import (
     IMSUpdate,
 )
 from src.services.base import BaseService, ModelType
+from src.utils.build_period_values import build_period_values
 from src.utils.excel_parser import iter_excel_records
 from src.utils.list_query_helper import (
     InOrNullSpec,
@@ -290,15 +291,15 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
         return [self._format_db_period(year, m) for m in range(1, end_month + 1)]
 
     def parse_period(self, period: str, group_by_period: str) -> list[str]:
-        if group_by_period == "Month":
+        if group_by_period == "month":
             return self._parse_single_month(period)
-        elif group_by_period == "Quarter":
+        elif group_by_period == "quarter":
             return self._parse_quarter(period)
-        elif group_by_period == "Year":
+        elif group_by_period == "year":
             return self._parse_year(period)
-        elif group_by_period == "MAT":
+        elif group_by_period == "mat":
             return self._parse_mat_simple(period)
-        elif group_by_period == "YTD":
+        elif group_by_period == "ytd":
             return self._parse_ytd_simple(period)
         else:
             raise HTTPException(
@@ -306,15 +307,135 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                 detail=f"Неизвестный тип периода: {group_by_period}",
             )
 
+    def _format_short_period(self, year: int, month: int) -> str:
+        return f"{month}-{year % 100:02d}"
+
+    def _expand_mat_period(self, year: int, month: int) -> list[str]:
+        return self._parse_mat_simple(self._format_short_period(year, month))
+
+    def _expand_ytd_period(self, year: int, month: int) -> list[str]:
+        return self._parse_ytd_simple(self._format_short_period(year, month))
+
+    def _expand_period_values(self, period_values, group_by_period: str) -> list[str]:
+        group = (group_by_period or "month").strip().lower()
+
+        if group == "year":
+            years = period_values.years or []
+            periods: list[str] = []
+            for year in years:
+                periods.extend(self._parse_year(str(year)))
+            return periods
+
+        if group == "quarter":
+            periods: list[str] = []
+            for year, quarter in period_values.quarters or []:
+                periods.extend(self._parse_quarter(f"q{quarter}-{year % 100:02d}"))
+            return periods
+
+        if group == "mat":
+            periods: list[str] = []
+            for year, month in period_values.months or []:
+                periods.extend(self._expand_mat_period(year, month))
+            return periods
+
+        if group == "ytd":
+            periods: list[str] = []
+            for year, month in period_values.months or []:
+                periods.extend(self._expand_ytd_period(year, month))
+            return periods
+
+        periods: list[str] = []
+        for year, month in period_values.months or []:
+            periods.extend(
+                self._parse_single_month(self._format_short_period(year, month))
+            )
+        return periods
+
+    def _get_previous_periods_from_values(
+        self, period_values, group_by_period: str
+    ) -> list[str]:
+        group = (group_by_period or "month").strip().lower()
+
+        if group == "year":
+            prev_values = [year - 1 for year in (period_values.years or [])]
+            return self._expand_period_values(
+                build_period_values("year", [str(year) for year in prev_values]),
+                "year",
+            )
+
+        if group == "quarter":
+            prev_quarters = []
+            for year, quarter in period_values.quarters or []:
+                prev_quarter = quarter - 1
+                prev_year = year
+                if prev_quarter < 1:
+                    prev_quarter = 4
+                    prev_year -= 1
+                prev_quarters.append(f"q-{prev_year}-{prev_quarter}")
+            prev_values = build_period_values("quarter", prev_quarters)
+            if prev_values is None:
+                return []
+            return self._expand_period_values(prev_values, "quarter")
+
+        if group == "mat":
+            prev_periods = []
+            for year, month in period_values.months or []:
+                prev_periods.extend(self._expand_mat_period(year - 1, month))
+            return prev_periods
+
+        if group == "ytd":
+            prev_periods = []
+            for year, month in period_values.months or []:
+                prev_periods.extend(self._expand_ytd_period(year - 1, month))
+            return prev_periods
+
+        prev_periods = []
+        for year, month in period_values.months or []:
+            prev_month = month - 1
+            prev_year = year
+            if prev_month < 1:
+                prev_month = 12
+                prev_year -= 1
+            prev_periods.extend(
+                self._parse_single_month(
+                    self._format_short_period(prev_year, prev_month)
+                )
+            )
+        return prev_periods
+
+    def _format_period_label(self, period_values, group_by_period: str) -> str:
+        group = (group_by_period or "month").strip().lower()
+
+        if group == "year" and period_values.years:
+            return str(period_values.years[0])
+
+        if group == "quarter" and period_values.quarters:
+            year, quarter = period_values.quarters[0]
+            return f"{year}-Q{quarter}"
+
+        if period_values.months:
+            year, month = period_values.months[0]
+            return f"{year}-{month:02d}"
+
+        return period_values.base_periods[0] if period_values.base_periods else ""
+
     async def get_entities_with_metrics(
         self,
         session: "AsyncSession",
         filters: IMSTopFilter,
         company_id: int | None,
     ):
-        periods = []
-        for period in filters.periods:
-            periods.extend(self.parse_period(period, filters.group_by_period))
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
+        if period_values is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="period_values обязательны",
+            )
+
+        group_by_period = (filters.group_by_period or "month").strip().lower()
+        periods = self._expand_period_values(period_values, group_by_period)
 
         if filters.group_column == "company":
             group_column = IMS.company
@@ -463,8 +584,8 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
 
         response = {"entities": entities}
 
-        previous_periods = self._get_previous_periods(
-            filters.periods, filters.group_by_period
+        previous_periods = self._get_previous_periods_from_values(
+            period_values, group_by_period
         )
 
         if filters.segment_name and filters.group_column == "segment":
@@ -547,69 +668,6 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
 
         return response
 
-    def _get_previous_periods(
-        self, periods: list[str], group_by_period: str
-    ) -> list[str]:
-        previous_periods = []
-
-        for period in periods:
-            if group_by_period == "Month":
-                month, year = self._parse_month_year(period)
-                prev_month = month - 1
-                prev_year = year
-
-                if prev_month < 1:
-                    prev_month = 12
-                    prev_year -= 1
-
-                prev_period_str = f"{prev_month}-{prev_year % 100:02d}"
-                prev_periods = self.parse_period(prev_period_str, group_by_period)
-                previous_periods.extend(prev_periods)
-
-            elif group_by_period == "Quarter":
-                match = re.match(r"^q([1-4])-(\d{2,4})$", period.lower())
-                if not match:
-                    continue
-
-                quarter = int(match.group(1))
-                year = self._normalize_year(int(match.group(2)))
-
-                prev_quarter = quarter - 1
-                prev_year = year
-
-                if prev_quarter < 1:
-                    prev_quarter = 4
-                    prev_year -= 1
-
-                prev_period_str = f"q{prev_quarter}-{prev_year % 100:02d}"
-                prev_periods = self.parse_period(prev_period_str, group_by_period)
-                previous_periods.extend(prev_periods)
-
-            elif group_by_period == "Year":
-                year = self._normalize_year(int(period))
-                prev_year = year - 1
-
-                prev_periods = self.parse_period(str(prev_year), group_by_period)
-                previous_periods.extend(prev_periods)
-
-            elif group_by_period == "MAT":
-                month, year = self._parse_month_year(period)
-                prev_year = year - 1
-
-                prev_period_str = f"{month}-{prev_year % 100:02d}"
-                prev_periods = self.parse_period(prev_period_str, "MAT")
-                previous_periods.extend(prev_periods)
-
-            elif group_by_period == "YTD":
-                month, year = self._parse_month_year(period)
-                prev_year = year - 1
-
-                prev_period_str = f"{month}-{prev_year % 100:02d}"
-                prev_periods = self.parse_period(prev_period_str, "YTD")
-                previous_periods.extend(prev_periods)
-
-        return previous_periods
-
     async def get_table_data(
         self,
         session: "AsyncSession",
@@ -633,10 +691,18 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
             group_by_fields.append(column)
 
         period_columns = []
+        group_by_period = (filters.group_by_period or "month").strip().lower()
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
-        if "periods" in filters.model_fields_set:
-            for period in filters.periods:
-                db_periods = self.parse_period(period, filters.group_by_period)
+        if period_values and period_values.base_periods:
+            for period in period_values.base_periods:
+                single_values = build_period_values(group_by_period, [period])
+                if single_values is None:
+                    continue
+                db_periods = self._expand_period_values(single_values, group_by_period)
+                period_label = self._format_period_label(single_values, group_by_period)
 
                 period_amount = func.round(
                     func.sum(case((IMS.period.in_(db_periods), IMS.amount), else_=0))
@@ -648,7 +714,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
 
                 period_json = func.json_build_object(
                     "amount", period_amount, "packages", period_packages
-                ).label(period)
+                ).label(period_label)
 
                 period_columns.append(period_json)
 

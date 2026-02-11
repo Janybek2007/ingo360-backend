@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends, Query, UploadFile
+from fastapi import APIRouter, Depends, UploadFile
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
 from src.db.session import db_session
@@ -112,10 +112,10 @@ async def delete_ims(
     await ims_service.delete(session, ims_id)
 
 
-@router.get("/reports/top")
+@router.post("/reports/top")
 async def get_top(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    filters: Annotated[IMSTopFilter, Query()],
+    filters: IMSTopFilter,
     current_user: Annotated["User", Depends(current_active_user)],
 ):
     return await ims_service.get_entities_with_metrics(

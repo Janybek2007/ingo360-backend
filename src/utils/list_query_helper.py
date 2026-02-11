@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Iterable, Tuple
 
-from sqlalchemy import asc, desc, or_
+from sqlalchemy import and_, asc, desc, or_
 
 
 @dataclass(frozen=True)
@@ -237,6 +237,43 @@ class ListQueryHelper:
             return stmt.where(column.is_(None))
 
         return stmt.where(column.in_(non_zero_values))
+
+    @staticmethod
+    def apply_period_values(
+        stmt,
+        period_values,
+        *,
+        year_col,
+        month_col=None,
+        quarter_col=None,
+    ):
+        if period_values is None:
+            return stmt
+
+        group_by_period = (period_values.group_by_period or "month").strip().lower()
+
+        if group_by_period == "year":
+            if period_values.years:
+                return stmt.where(year_col.in_(period_values.years))
+            return stmt
+
+        if group_by_period == "quarter":
+            if not period_values.quarters or quarter_col is None:
+                return stmt
+            clauses = [
+                and_(year_col == year, quarter_col == quarter)
+                for year, quarter in period_values.quarters
+            ]
+            return stmt.where(or_(*clauses))
+
+        if not period_values.months or month_col is None:
+            return stmt
+
+        clauses = [
+            and_(year_col == year, month_col == month)
+            for year, month in period_values.months
+        ]
+        return stmt.where(or_(*clauses))
 
     @staticmethod
     def apply_pagination(stmt, limit: int | None, offset: int | None):

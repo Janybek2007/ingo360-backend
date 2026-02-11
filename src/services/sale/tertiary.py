@@ -29,6 +29,7 @@ from src.schemas import sale
 from src.services.base import BaseService, ModelType
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
+from src.utils.build_period_values import build_period_values
 from src.utils.excel_parser import iter_excel_records
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import (
@@ -386,6 +387,9 @@ class TertiarySalesService(
         company_id: int | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         select_fields, group_by_fields, search_cols = build_dimensions(
             BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR, filters.group_by_dimensions
@@ -408,7 +412,6 @@ class TertiarySalesService(
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
                 TertiarySalesAndStock.indicator == "Третичные продажи",
-                TertiarySalesAndStock.year.in_(filters.years),
             )
         )
 
@@ -418,8 +421,6 @@ class TertiarySalesService(
         base_stmt = ListQueryHelper.apply_specs(
             base_stmt,
             [
-                InOrNullSpec(TertiarySalesAndStock.month, filters.months),
-                InOrNullSpec(TertiarySalesAndStock.quarter, filters.quarters),
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
@@ -430,6 +431,14 @@ class TertiarySalesService(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
             ],
+        )
+
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=TertiarySalesAndStock.year,
+            month_col=TertiarySalesAndStock.month,
+            quarter_col=TertiarySalesAndStock.quarter,
         )
 
         group_by_fields.append(period_key)
@@ -498,6 +507,9 @@ class TertiarySalesService(
         period_key, period_columns = build_period_key(
             filters.group_by_period, TertiarySalesAndStock, with_group_fields=True
         )
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         sales_packages = func.sum(
             case(
@@ -526,9 +538,6 @@ class TertiarySalesService(
             )
             .select_from(TertiarySalesAndStock)
             .join(SKU, TertiarySalesAndStock.sku_id == SKU.id)
-            .where(
-                TertiarySalesAndStock.year.in_(filters.years),
-            )
         )
 
         if company_id is not None:
@@ -542,8 +551,6 @@ class TertiarySalesService(
         stmt = ListQueryHelper.apply_specs(
             stmt,
             [
-                InOrNullSpec(TertiarySalesAndStock.month, filters.months),
-                InOrNullSpec(TertiarySalesAndStock.quarter, filters.quarters),
                 (
                     InOrNullSpec(Pharmacy.distributor_id, filters.distributor_ids)
                     if need_pharmacy_join
@@ -558,6 +565,14 @@ class TertiarySalesService(
                 InOrNullSpec(SKU.product_group_id, filters.product_group_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
             ],
+        )
+
+        stmt = ListQueryHelper.apply_period_values(
+            stmt,
+            period_values,
+            year_col=TertiarySalesAndStock.year,
+            month_col=TertiarySalesAndStock.month,
+            quarter_col=TertiarySalesAndStock.quarter,
         )
 
         stmt = (
@@ -576,6 +591,9 @@ class TertiarySalesService(
         company_id: int | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
         total_pharmacies_cte = (
             select(
                 period_key.label("period"),
@@ -587,15 +605,14 @@ class TertiarySalesService(
             )
             .select_from(TertiarySalesAndStock)
             .join(Pharmacy, TertiarySalesAndStock.pharmacy_id == Pharmacy.id)
-            .where(TertiarySalesAndStock.year.in_(filters.years))
         )
 
-        total_pharmacies_cte = ListQueryHelper.apply_specs(
+        total_pharmacies_cte = ListQueryHelper.apply_period_values(
             total_pharmacies_cte,
-            [
-                InOrNullSpec(TertiarySalesAndStock.month, filters.months),
-                InOrNullSpec(TertiarySalesAndStock.quarter, filters.quarters),
-            ],
+            period_values,
+            year_col=TertiarySalesAndStock.year,
+            month_col=TertiarySalesAndStock.month,
+            quarter_col=TertiarySalesAndStock.quarter,
         )
 
         total_pharmacies_cte = total_pharmacies_cte.group_by(
@@ -654,7 +671,6 @@ class TertiarySalesService(
             )
             .where(
                 TertiarySalesAndStock.indicator == "Остаток",
-                TertiarySalesAndStock.year.in_(filters.years),
                 TertiarySalesAndStock.packages > 0,
             )
         )
@@ -665,8 +681,6 @@ class TertiarySalesService(
         base_stmt = ListQueryHelper.apply_specs(
             base_stmt,
             [
-                InOrNullSpec(TertiarySalesAndStock.month, filters.months),
-                InOrNullSpec(TertiarySalesAndStock.quarter, filters.quarters),
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(Segment.id, filters.segment_ids),
@@ -677,6 +691,14 @@ class TertiarySalesService(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
             ],
+        )
+
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=TertiarySalesAndStock.year,
+            month_col=TertiarySalesAndStock.month,
+            quarter_col=TertiarySalesAndStock.quarter,
         )
 
         group_by_fields.extend(
@@ -751,6 +773,9 @@ class TertiarySalesService(
         filters: sale.LowStockLevelFilter | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         select_fields, group_by_fields, search_cols = build_dimensions(
             LOW_STOCK_DIMENSTIONS_MAPPING, filters.group_by_dimensions
@@ -773,7 +798,6 @@ class TertiarySalesService(
             .outerjoin(Employee, Pharmacy.responsible_employee_id == Employee.id)
             .where(
                 TertiarySalesAndStock.indicator == "Остаток",
-                TertiarySalesAndStock.year.in_(filters.years),
             )
         )
 
@@ -783,8 +807,6 @@ class TertiarySalesService(
         base_stmt = ListQueryHelper.apply_specs(
             base_stmt,
             [
-                InOrNullSpec(TertiarySalesAndStock.month, filters.months),
-                InOrNullSpec(TertiarySalesAndStock.quarter, filters.quarters),
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
@@ -794,6 +816,14 @@ class TertiarySalesService(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
             ],
+        )
+
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=TertiarySalesAndStock.year,
+            month_col=TertiarySalesAndStock.month,
+            quarter_col=TertiarySalesAndStock.quarter,
         )
 
         group_by_fields.append(period_key)

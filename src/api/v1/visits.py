@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -206,10 +206,10 @@ async def get_visits_summary(
     )
 
 
-@router.get("/reports/visits-by-period", dependencies=[Depends(can_view_visits)])
+@router.post("/reports/visits-by-period", dependencies=[Depends(can_view_visits)])
 async def get_visit_by_period(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: Annotated[VisitCountFilter, Query()],
+    filters: VisitCountFilter,
     current_user: Annotated[User, Depends(current_active_user)],
 ):
     return await visit_service.get_visits_by_period(

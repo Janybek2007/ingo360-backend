@@ -1,4 +1,3 @@
-from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -221,9 +220,6 @@ class SalesReportFilter(BaseModel):
     limit: int | None = None
     offset: int = 0
     period_values: list[str] | None = None
-    months: list[int] | None = None
-    quarters: list[int] | None = None
-    years: list[int] = Field(default_factory=lambda: [date.today().year])
     brand_ids: list[int] | None = None
     distributor_ids: list[int] | None = None
     product_group_ids: list[int] | None = None
@@ -296,9 +292,6 @@ class SecTerSalesReportFilter(SalesReportFilter):
 
 
 class PeriodFilter(BaseModel):
-    years: list[int] = Field(default_factory=lambda: [date.today().year])
-    quarters: list[int] | None = None
-    months: list[int] | None = None
     period_values: list[str] | None = None
     distributor_ids: list[int] | None = None
     brand_ids: list[int] | None = None
@@ -320,9 +313,7 @@ class SalesByDistributorFilter(BaseModel):
     limit: int | None = None
     offset: int = 0
     group_by_period: Literal["year", "quarter", "month"] = "month"
-    years: list[int] = Field(default_factory=lambda: [date.today().year])
-    months: list[int] | None = None
-    quarters: list[int] | None = None
+    period_values: list[str] | None = None
     search: str | None = None
     distributor_ids: list[int] | None = None
     brand_ids: list[int] | None = None
@@ -335,10 +326,8 @@ class SalesByDistributorFilter(BaseModel):
 
 class ChartSalesByDistributorFilter(BaseModel):
     group_by_period: Literal["year", "quarter", "month"] = "month"
-    years: list[int] = Field(default_factory=lambda: [date.today().year])
-    months: list[int] | None = None
-    quarters: list[int] | None = None
     search: str | None = None
+    period_values: list[str] | None = None
     distributor_ids: list[int] | None = None
     brand_ids: list[int] | None = None
     product_group_ids: list[int] | None = None
@@ -348,9 +337,7 @@ class ChartSalesByDistributorFilter(BaseModel):
 class NumericDistributionFilter(BaseModel):
     limit: int | None = None
     offset: int = 0
-    months: list[int] | None = None
-    quarters: list[int] | None = None
-    years: list[int] = Field(default_factory=lambda: [date.today().year])
+    period_values: list[str] | None = None
     brand_ids: list[int] | None = None
     segment_ids: list[int] | None = None
     product_group_ids: list[int] | None = None
@@ -439,9 +426,7 @@ class LowStockLevelFilter(BaseModel):
     responsible_employee_ids: list[int] | None = None
     pharmacy_ids: list[int] | None = None
     search: str | None = None
-    years: list[int] = Field(default_factory=lambda: [date.today().year])
-    months: list[int] | None = None
-    quarters: list[int] | None = None
+    period_values: list[str] | None = None
     group_by_period: Literal["year", "quarter", "month"] = "month"
     group_by_dimensions: (
         list[

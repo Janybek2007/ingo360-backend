@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import String, cast, func, or_, select, update
+from sqlalchemy import func, or_, select, update
 
 from src.db.models import (
     SKU,
@@ -25,6 +25,7 @@ from src.schemas import sale
 from src.services.base import BaseService, ModelType
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
+from src.utils.build_period_values import build_period_values
 from src.utils.excel_parser import iter_excel_records
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import (
@@ -380,6 +381,9 @@ class SecondarySalesService(
         filters: sale.SecTerSalesReportFilter | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, SecondarySales)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         select_fields, group_by_fields, search_cols = build_dimensions(
             BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR, filters.group_by_dimensions
@@ -402,7 +406,6 @@ class SecondarySalesService(
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
                 SecondarySales.indicator == "Вторичные продажи",
-                SecondarySales.year.in_(filters.years),
             )
         )
 
@@ -412,8 +415,6 @@ class SecondarySalesService(
         base_stmt = ListQueryHelper.apply_specs(
             base_stmt,
             [
-                InOrNullSpec(SecondarySales.month, filters.months),
-                InOrNullSpec(SecondarySales.quarter, filters.quarters),
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
@@ -424,6 +425,14 @@ class SecondarySalesService(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
             ],
+        )
+
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=SecondarySales.year,
+            month_col=SecondarySales.month,
+            quarter_col=SecondarySales.quarter,
         )
 
         group_by_fields.append(period_key)
@@ -492,6 +501,9 @@ class SecondarySalesService(
         period_key, period_columns = build_period_key(
             filters.group_by_period, SecondarySales, with_group_fields=True
         )
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
         stmt = (
             select(
                 period_key.label("period"),
@@ -502,7 +514,6 @@ class SecondarySalesService(
             .join(SKU, SecondarySales.sku_id == SKU.id)
             .where(
                 SecondarySales.indicator == "Вторичные продажи",
-                SecondarySales.year.in_(filters.years),
             )
         )
 
@@ -512,14 +523,20 @@ class SecondarySalesService(
         stmt = ListQueryHelper.apply_specs(
             stmt,
             [
-                InOrNullSpec(SecondarySales.month, filters.months),
-                InOrNullSpec(SecondarySales.quarter, filters.quarters),
                 InOrNullSpec(SKU.brand_id, filters.brand_ids),
                 InOrNullSpec(SKU.product_group_id, filters.product_group_ids),
                 InOrNullSpec(Pharmacy.distributor_id, filters.distributor_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
                 InOrNullSpec(Pharmacy.geo_indicator_id, filters.geo_indicator_ids),
             ],
+        )
+
+        stmt = ListQueryHelper.apply_period_values(
+            stmt,
+            period_values,
+            year_col=SecondarySales.year,
+            month_col=SecondarySales.month,
+            quarter_col=SecondarySales.quarter,
         )
 
         stmt = stmt.group_by(*period_columns).order_by(period_key.desc())
@@ -533,20 +550,10 @@ class SecondarySalesService(
         company_id: int | None,
         filters: sale.SalesByDistributorFilter,
     ):
-        if filters.group_by_period == "year":
-            period_key = cast(SecondarySales.year, String)
-        elif filters.group_by_period == "quarter":
-            period_key = func.concat(
-                cast(SecondarySales.year, String),
-                "-Q",
-                cast(SecondarySales.quarter, String),
-            )
-        else:
-            period_key = func.concat(
-                cast(SecondarySales.year, String),
-                "-",
-                func.lpad(cast(SecondarySales.month, String), 2, "0"),
-            )
+        period_key = build_period_key(filters.group_by_period, SecondarySales)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         dimension_mapping = {
             "distributor": {
@@ -588,19 +595,18 @@ class SecondarySalesService(
             .join(SKU, SecondarySales.sku_id == SKU.id)
             .join(Brand, SKU.brand_id == Brand.id)
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
-            .where(
-                SecondarySales.year.in_(filters.years),
-            )
         )
 
         if company_id is not None:
             base_stmt = base_stmt.where(SKU.company_id == company_id)
 
-        if filters.months:
-            base_stmt = base_stmt.where(SecondarySales.month.in_(filters.months))
-
-        if filters.quarters:
-            base_stmt = base_stmt.where(SecondarySales.quarter.in_(filters.quarters))
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=SecondarySales.year,
+            month_col=SecondarySales.month,
+            quarter_col=SecondarySales.quarter,
+        )
 
         if filters.distributor_ids:
             base_stmt = base_stmt.where(Distributor.id.in_(filters.distributor_ids))
@@ -691,6 +697,9 @@ class SecondarySalesService(
         filters: sale.ChartSalesByDistributorFilter | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, SecondarySales)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         base_stmt = (
             select(
@@ -704,21 +713,24 @@ class SecondarySalesService(
             .join(Pharmacy, SecondarySales.pharmacy_id == Pharmacy.id)
             .join(Distributor, Pharmacy.distributor_id == Distributor.id)
             .join(SKU, SecondarySales.sku_id == SKU.id)
-            .where(
-                SecondarySales.year.in_(filters.years),
-            )
         )
 
         base_stmt = ListQueryHelper.apply_specs(
             base_stmt,
             [
-                InOrNullSpec(SecondarySales.month, filters.months),
-                InOrNullSpec(SecondarySales.quarter, filters.quarters),
                 InOrNullSpec(SKU.brand_id, filters.brand_ids),
                 InOrNullSpec(SKU.product_group_id, filters.product_group_ids),
                 InOrNullSpec(Distributor.id, filters.distributor_ids),
                 InOrNullSpec(Pharmacy.geo_indicator_id, filters.geo_indicator_ids),
             ],
+        )
+
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=SecondarySales.year,
+            month_col=SecondarySales.month,
+            quarter_col=SecondarySales.quarter,
         )
 
         base_stmt = base_stmt.group_by(

@@ -21,6 +21,7 @@ from src.schemas import sale
 from src.services.base import BaseService, ModelType
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
+from src.utils.build_period_values import build_period_values
 from src.utils.excel_parser import iter_excel_records
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import (
@@ -373,6 +374,9 @@ class PrimarySalesAndStockService(
         filters: sale.ShipmentStockFilter | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         select_fields, group_by_fields, search_cols = build_dimensions(
             BASE_SALE_DIMENSTION_MAPPING, filters.group_by_dimensions
@@ -393,7 +397,6 @@ class PrimarySalesAndStockService(
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .where(
                 PrimarySalesAndStock.indicator == indicator,
-                PrimarySalesAndStock.year.in_(filters.years),
             )
         )
 
@@ -403,8 +406,6 @@ class PrimarySalesAndStockService(
         base_stmt = ListQueryHelper.apply_specs(
             base_stmt,
             [
-                InOrNullSpec(PrimarySalesAndStock.month, filters.months),
-                InOrNullSpec(PrimarySalesAndStock.quarter, filters.quarters),
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
@@ -414,6 +415,14 @@ class PrimarySalesAndStockService(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
             ],
+        )
+
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=PrimarySalesAndStock.year,
+            month_col=PrimarySalesAndStock.month,
+            quarter_col=PrimarySalesAndStock.quarter,
         )
 
         group_by_fields.append(period_key)
@@ -481,6 +490,9 @@ class PrimarySalesAndStockService(
         company_id: int | None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         if filters.group_by_period == "quarter":
             sales_divisor = func.nullif(
@@ -617,8 +629,7 @@ class PrimarySalesAndStockService(
             .where(
                 PrimarySalesAndStock.indicator.in_(
                     ["Остаток на складе", "Первичная продажа"]
-                ),
-                PrimarySalesAndStock.year.in_(filters.years),
+                )
             )
         )
 
@@ -628,8 +639,6 @@ class PrimarySalesAndStockService(
         stmt = ListQueryHelper.apply_specs(
             stmt,
             [
-                InOrNullSpec(PrimarySalesAndStock.month, filters.months),
-                InOrNullSpec(PrimarySalesAndStock.quarter, filters.quarters),
                 InOrNullSpec(SKU.brand_id, filters.brand_ids),
                 InOrNullSpec(SKU.product_group_id, filters.product_group_ids),
                 InOrNullSpec(
@@ -637,6 +646,14 @@ class PrimarySalesAndStockService(
                 ),
                 InOrNullSpec(SKU.id, filters.sku_ids),
             ],
+        )
+
+        stmt = ListQueryHelper.apply_period_values(
+            stmt,
+            period_values,
+            year_col=PrimarySalesAndStock.year,
+            month_col=PrimarySalesAndStock.month,
+            quarter_col=PrimarySalesAndStock.quarter,
         )
 
         stmt = stmt.group_by(period_key).order_by(period_key.desc())
@@ -690,6 +707,9 @@ class PrimarySalesAndStockService(
         company_id: int | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         select_fields, group_by_fields, search_cols = build_dimensions(
             BASE_SALE_DIMENSTION_MAPPING, filters.group_by_dimensions
@@ -752,7 +772,6 @@ class PrimarySalesAndStockService(
                 PrimarySalesAndStock.indicator.in_(
                     ["Остаток на складе", "Первичная продажа"]
                 ),
-                PrimarySalesAndStock.year.in_(filters.years),
             )
         )
 
@@ -762,8 +781,6 @@ class PrimarySalesAndStockService(
         base_stmt = ListQueryHelper.apply_specs(
             base_stmt,
             [
-                InOrNullSpec(PrimarySalesAndStock.month, filters.months),
-                InOrNullSpec(PrimarySalesAndStock.quarter, filters.quarters),
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
@@ -773,6 +790,14 @@ class PrimarySalesAndStockService(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
             ],
+        )
+
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=PrimarySalesAndStock.year,
+            month_col=PrimarySalesAndStock.month,
+            quarter_col=PrimarySalesAndStock.quarter,
         )
 
         group_by_fields.append(period_key)
@@ -832,6 +857,9 @@ class PrimarySalesAndStockService(
         company_id: int | None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         select_fields, group_by_fields, search_cols = build_dimensions(
             BASE_SALE_DIMENSTION_MAPPING, filters.group_by_dimensions
@@ -851,7 +879,6 @@ class PrimarySalesAndStockService(
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .where(
                 PrimarySalesAndStock.indicator == "Первичная продажа",
-                PrimarySalesAndStock.year.in_(filters.years),
             )
         )
 
@@ -861,8 +888,6 @@ class PrimarySalesAndStockService(
         base_stmt = ListQueryHelper.apply_specs(
             base_stmt,
             [
-                InOrNullSpec(PrimarySalesAndStock.month, filters.months),
-                InOrNullSpec(PrimarySalesAndStock.quarter, filters.quarters),
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
@@ -872,6 +897,14 @@ class PrimarySalesAndStockService(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
             ],
+        )
+
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=PrimarySalesAndStock.year,
+            month_col=PrimarySalesAndStock.month,
+            quarter_col=PrimarySalesAndStock.quarter,
         )
 
         group_by_fields.append(period_key)
@@ -985,6 +1018,9 @@ class PrimarySalesAndStockService(
         company_id: int | None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)
+        period_values = build_period_values(
+            filters.group_by_period, filters.period_values
+        )
 
         period_totals = (
             select(
@@ -993,18 +1029,15 @@ class PrimarySalesAndStockService(
             )
             .select_from(PrimarySalesAndStock)
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
-            .where(
-                PrimarySalesAndStock.indicator == "Первичная продажа",
-                PrimarySalesAndStock.year.in_(filters.years),
-            )
+            .where(PrimarySalesAndStock.indicator == "Первичная продажа")
         )
 
-        period_totals = ListQueryHelper.apply_specs(
+        period_totals = ListQueryHelper.apply_period_values(
             period_totals,
-            [
-                InOrNullSpec(PrimarySalesAndStock.month, filters.months),
-                InOrNullSpec(PrimarySalesAndStock.quarter, filters.quarters),
-            ],
+            period_values,
+            year_col=PrimarySalesAndStock.year,
+            month_col=PrimarySalesAndStock.month,
+            quarter_col=PrimarySalesAndStock.quarter,
         )
 
         period_totals = period_totals.group_by(period_key).cte("period_totals")
@@ -1019,10 +1052,7 @@ class PrimarySalesAndStockService(
             .select_from(PrimarySalesAndStock)
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
-            .where(
-                PrimarySalesAndStock.indicator == "Первичная продажа",
-                PrimarySalesAndStock.year.in_(filters.years),
-            )
+            .where(PrimarySalesAndStock.indicator == "Первичная продажа")
         )
 
         if company_id is not None:
@@ -1031,12 +1061,18 @@ class PrimarySalesAndStockService(
         base_stmt = ListQueryHelper.apply_specs(
             base_stmt,
             [
-                InOrNullSpec(PrimarySalesAndStock.month, filters.months),
-                InOrNullSpec(PrimarySalesAndStock.quarter, filters.quarters),
                 InOrNullSpec(SKU.brand_id, filters.brand_ids),
                 InOrNullSpec(SKU.product_group_id, filters.product_group_ids),
                 InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
             ],
+        )
+
+        base_stmt = ListQueryHelper.apply_period_values(
+            base_stmt,
+            period_values,
+            year_col=PrimarySalesAndStock.year,
+            month_col=PrimarySalesAndStock.month,
+            quarter_col=PrimarySalesAndStock.quarter,
         )
 
         base_stmt = base_stmt.group_by(
