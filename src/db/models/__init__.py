@@ -1,31 +1,32 @@
+from .access_token import AccessToken
+from .base import Base
 from .clients import (
     ClientCategory,
+    Distributor,
     Doctor,
+    GeoIndicator,
+    MedicalFacility,
     Pharmacy,
     Speciality,
-    MedicalFacility,
-    Distributor,
-    GeoIndicator,
-)
-from .employees import Employee, Position
-from .geography import Country, Region, Settlement, District
-from .products import (
-    SKU,
-    Dosage,
-    DosageForm,
-    Segment,
-    PromotionType,
-    Brand,
-    ProductGroup,
 )
 from .companies import Company, RegistrationApplication
-from .access_token import AccessToken
-from .users import User, PasswordSetupToken
-from .base import Base
-from .visits import Visit
-from .sales import PrimarySalesAndStock, SecondarySales, TertiarySalesAndStock
+from .employees import Employee, Position
+from .excel_tasks import ExcelTask
+from .geography import Country, District, Region, Settlement
 from .import_logs import ImportLogs
 from .ims import IMS
+from .products import (
+    SKU,
+    Brand,
+    Dosage,
+    DosageForm,
+    ProductGroup,
+    PromotionType,
+    Segment,
+)
+from .sales import PrimarySalesAndStock, SecondarySales, TertiarySalesAndStock
+from .users import PasswordSetupToken, User
+from .visits import Visit
 
 __all__ = [
     "Base",
@@ -60,4 +61,5 @@ __all__ = [
     "ImportLogs",
     "IMS",
     "GeoIndicator",
+    "ExcelTask",
 ]

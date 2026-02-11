@@ -1,31 +1,10 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from sqlalchemy import select
 
+from src.api.utils.get_user_from_token import get_user_from_token
+from src.services.websocket import build_tasks_payload, soft_delete_task
 from src.websocket.connection_manager import connection_manager
-from src.db.models import AccessToken, User
-from src.db.session import db_session
 
 router = APIRouter()
-
-
-async def get_user_from_token(token: str) -> User | None:
-    async for session in db_session.get_session():
-        access_token_db = AccessToken.get_db(session)
-        access_token = await access_token_db.get_by_token(token)
-
-        if not access_token:
-
-            return None
-
-        result = await session.execute(
-            select(User).where(User.id == access_token.user_id)
-        )
-        user = result.scalar_one_or_none()
-
-        if not user:
-            return None
-
-        return user
 
 
 @router.websocket("/ws/notifications")
@@ -39,12 +18,26 @@ async def websocket_notifications_endpoint(websocket: WebSocket, token: str):
             return
 
         await connection_manager.connect(user.id, websocket)
+        await websocket.send_json(await build_tasks_payload(user.id))
 
         try:
             while True:
                 data = await websocket.receive_text()
                 if data == "ping":
                     await websocket.send_json({"type": "pong"})
+                    continue
+
+                if data.startswith("task_remove:"):
+                    task_id = data.split(":", 1)[1]
+                    removed = await soft_delete_task(user.id, task_id)
+                    await websocket.send_json(
+                        {
+                            "type": "task_removed",
+                            "task_id": task_id,
+                            "ok": removed,
+                        }
+                    )
+                    continue
         except WebSocketDisconnect:
             pass
 

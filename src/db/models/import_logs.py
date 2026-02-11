@@ -1,36 +1,36 @@
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import mapped_column, Mapped, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
 if TYPE_CHECKING:
     from . import (
-        User,
-        Pharmacy,
-        PrimarySalesAndStock,
-        SecondarySales,
-        TertiarySalesAndStock,
-        District,
-        Settlement,
-        Region,
-        MedicalFacility,
-        Doctor,
-        Employee,
-        Brand,
         SKU,
-        Speciality,
-        Distributor,
-        Company,
-        Position,
-        GeoIndicator,
+        Brand,
         ClientCategory,
+        Company,
         Country,
-        DosageForm,
+        Distributor,
+        District,
+        Doctor,
         Dosage,
-        Segment,
+        DosageForm,
+        Employee,
+        GeoIndicator,
+        MedicalFacility,
+        Pharmacy,
+        Position,
+        PrimarySalesAndStock,
         ProductGroup,
+        Region,
+        SecondarySales,
+        Segment,
+        Settlement,
+        Speciality,
+        TertiarySalesAndStock,
+        User,
     )
 
 

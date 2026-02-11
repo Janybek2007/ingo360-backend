@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
-from src.api.utils.export_excel import export_excel_response
 from src.db.models import Employee, User
 from src.db.session import db_session
 from src.schemas import employee as employee_schema
@@ -52,24 +51,36 @@ async def get_employees(
 @router.post("/employees/export-excel")
 async def export_employees_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    load_options = [
-        joinedload(Employee.position),
-        joinedload(Employee.product_group),
-        joinedload(Employee.region),
-        joinedload(Employee.district),
-        joinedload(Employee.company),
-    ]
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: employee_service.employee_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda e: employee_schema.EmployeeResponse.model_validate(
-            e
-        ).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.employee.EmployeeService",
+        model_path="src.db.models.Employee",
+        serializer_path="src.schemas.employee.EmployeeResponse",
+        load_options_paths=[
+            "position",
+            "product_group",
+            "region",
+            "district",
+            "company",
+        ],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.get("/employees/{employee_id}", response_model=employee_schema.EmployeeResponse)
@@ -150,15 +161,29 @@ async def get_positions(
 @router.post("/positions/export-excel")
 async def export_positions_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: employee_service.position_service.get_multi(session),
-        serialize=lambda p: employee_schema.PositionResponse.model_validate(
-            p
-        ).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.employee.PositionService",
+        model_path="src.db.models.Position",
+        serializer_path="src.schemas.employee.PositionResponse",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.get("/positions/{position_id}", response_model=employee_schema.PositionResponse)

@@ -1,15 +1,15 @@
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import Depends, BackgroundTasks
+from fastapi import BackgroundTasks, Depends
 
-from src.core.auth.user_manager import UserManager
-from src.api.dependencies.users import get_user_db
 from src.api.dependencies.password_helper import get_password_helper
+from src.api.dependencies.users import get_user_db
+from src.core.auth.user_manager import UserManager
 from src.websocket.connection_manager import connection_manager
 
 if TYPE_CHECKING:
-    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
     from fastapi_users.password import PasswordHelperProtocol
+    from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 
 
 async def get_user_manager(

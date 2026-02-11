@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies.current_user import current_operator_user
-from src.api.utils.export_excel import export_excel_response
+from src.db.models import User
 from src.db.session import db_session
 from src.schemas import base_filter
 from src.schemas.export import ExportExcelRequest
@@ -39,13 +39,29 @@ async def get_import_logs(
 @router.post("/export-excel")
 async def export_distributors_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated["User", Depends(current_operator_user)],
 ):
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: import_log_service.get_multi(session),
-        serialize=lambda il: ImportLogResponse.model_validate(il).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.import_log.ImportLogService",
+        model_path="src.db.models.ImportLogs",
+        serializer_path="src.schemas.import_log.ImportLogResponse",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.delete("/{import_log_id}")

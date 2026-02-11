@@ -10,7 +10,6 @@ from src.api.dependencies.company import (
     can_view_tertiary_sales,
 )
 from src.api.dependencies.current_user import current_active_user, current_operator_user
-from src.api.utils.export_excel import export_excel_response
 from src.db.models import (
     SKU,
     Pharmacy,
@@ -52,21 +51,30 @@ async def list_primary_sales(
 @router.post("/primary/export-excel")
 async def export_primary_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    load_options = [
-        joinedload(PrimarySalesAndStock.sku).joinedload(SKU.brand),
-        joinedload(PrimarySalesAndStock.distributor),
-    ]
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: primary_sales_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda s: sale.PrimarySalesAndStockResponse.model_validate(
-            s
-        ).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.sale.PrimarySalesAndStockService",
+        model_path="src.db.models.PrimarySalesAndStock",
+        serializer_path="src.schemas.sale.PrimarySalesAndStockResponse",
+        load_options_paths=["sku.brand", "distributor"],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(
@@ -273,20 +281,34 @@ async def list_secondary_sales(
 @router.post("/secondary/export-excel")
 async def export_secondary_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    load_options = [
-        joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.geo_indicator),
-        joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.distributor),
-        joinedload(SecondarySales.sku).joinedload(SKU.brand),
-    ]
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: secondary_sales_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda s: sale.SecondarySalesResponse.model_validate(s).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.sale.SecondarySalesService",
+        model_path="src.db.models.SecondarySales",
+        serializer_path="src.schemas.sale.SecondarySalesResponse",
+        load_options_paths=[
+            "pharmacy.geo_indicator",
+            "pharmacy.distributor",
+            "sku.brand",
+        ],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(
@@ -461,20 +483,34 @@ async def list_tertiary_sales(
 @router.post("/tertiary/export-excel")
 async def export_tertiary_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    load_options = [
-        joinedload(TertiarySalesAndStock.pharmacy).joinedload(Pharmacy.geo_indicator),
-        joinedload(TertiarySalesAndStock.pharmacy).joinedload(Pharmacy.distributor),
-        joinedload(TertiarySalesAndStock.sku).joinedload(SKU.brand),
-    ]
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: tertiary_sales_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda s: sale.TertiarySalesResponse.model_validate(s).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.sale.TertiarySalesService",
+        model_path="src.db.models.TertiarySalesAndStock",
+        serializer_path="src.schemas.sale.TertiarySalesResponse",
+        load_options_paths=[
+            "pharmacy.geo_indicator",
+            "pharmacy.distributor",
+            "sku.brand",
+        ],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(

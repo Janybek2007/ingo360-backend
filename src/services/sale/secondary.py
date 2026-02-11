@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -22,20 +22,19 @@ from src.mapping.dimension_mapping.sale import (
 )
 from src.mapping.sales import secondary_sales_mapping
 from src.schemas import sale
-from src.utils.list_query_helper import (
-    BoolListSpec,
-    InOrNullSpec,
-    NumberTypedSpec,
-    SearchSpec,
-)
+from src.services.base import BaseService, ModelType
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.excel_parser import iter_excel_records
 from src.utils.import_result import build_import_result
+from src.utils.list_query_helper import (
+    BoolListSpec,
+    InOrNullSpec,
+    ListQueryHelper,
+    NumberTypedSpec,
+    SearchSpec,
+)
 from src.utils.mapping import map_record
-
-from src.services.base import BaseService, ModelType
-from src.utils.list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from fastapi import UploadFile
@@ -54,7 +53,8 @@ class SecondarySalesService(
         user_id: int,
         batch_size: int = 2000,
     ):
-        from src.tasks.sale_imports import import_sales_task
+        from src.db.models.excel_tasks import ExcelTaskType
+        from src.tasks.sale_imports import create_excel_task_record, import_sales_task
 
         upload_dir = Path("temp")
         upload_dir.mkdir(exist_ok=True)
@@ -73,6 +73,13 @@ class SecondarySalesService(
                 service_path="src.services.sale.SecondarySalesService",
                 model_path="src.db.models.SecondarySales",
                 batch_size=batch_size,
+            )
+
+            await create_excel_task_record(
+                task_id=task.id,
+                started_by=user_id,
+                file_path="",
+                task_type=ExcelTaskType.IMPORT,
             )
 
             return {"task_id": task.id}
@@ -343,6 +350,28 @@ class SecondarySalesService(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Продажи не найдены"
             )
         return result.unique().scalars().all()
+
+    async def iter_multi(
+        self,
+        session: "AsyncSession",
+        load_options: list[Any] | None = None,
+        chunk_size: int = 1000,
+    ) -> AsyncIterator[ModelType]:
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        stmt = ListQueryHelper.apply_sorting_with_created(
+            stmt,
+            self.model.created_at.desc(),
+        )
+
+        stream = await session.stream_scalars(
+            stmt.execution_options(yield_per=chunk_size)
+        )
+        async for item in stream:
+            yield item
 
     @staticmethod
     async def get_sales_report(

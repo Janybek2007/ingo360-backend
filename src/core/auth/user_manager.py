@@ -17,8 +17,8 @@ from src.schemas.user import (
     UserFilter,
     UserUpdate,
 )
-from src.utils.list_query_helper import ListQueryHelper, SearchSpec, StringTypedSpec
 from src.tasks.email import send_email
+from src.utils.list_query_helper import ListQueryHelper, SearchSpec, StringTypedSpec
 from src.websocket.connection_manager import ConnectionManager
 
 log = logging.getLogger(__name__)

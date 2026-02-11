@@ -1,17 +1,19 @@
 repos:
   - repo: local
     hooks:
+      - id: ruff-fix-docker
+        name: ruff remove unused imports (docker)
+        entry: docker compose exec -T back ruff check . --select F401,I --fix
+        language: system
+        types: [python]
+        pass_filenames: false
+
       - id: black-docker
         name: black (docker)
-        entry: docker compose exec -T back black
+        entry: docker compose exec -T back black .
         language: system
         types: [python]
-
-      - id: ruff-docker
-        name: ruff (docker)
-        entry: docker compose exec -T back ruff check --fix
-        language: system
-        types: [python]
+        pass_filenames: false
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0

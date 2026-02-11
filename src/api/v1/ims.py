@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Depends, Query, UploadFile
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
-from src.api.utils.export_excel import export_excel_response
 from src.db.session import db_session
 from src.schemas.export import ExportExcelRequest
 from src.schemas.ims import (
@@ -38,13 +37,29 @@ async def get_all_ims(
 @router.post("/export-excel")
 async def export_visits_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated["User", Depends(current_active_user)],
 ):
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: ims_service.get_multi(session),
-        serialize=lambda i: IMSResponse.model_validate(i).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.ims.IMSMetricsService",
+        model_path="src.db.models.IMS",
+        serializer_path="src.schemas.ims.IMSResponse",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(

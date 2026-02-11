@@ -194,6 +194,13 @@ class ListQueryHelper:
         return ListQueryHelper.apply_sorting(stmt, sort_payload, sort_map, default_sort)
 
     @staticmethod
+    def apply_sorting_with_created(
+        stmt,
+        created_sort,
+    ):
+        return stmt.order_by(created_sort)
+
+    @staticmethod
     def apply_sorting(
         stmt, sort: dict[str, str] | None, sort_map: dict[str, Any], default_sort=None
     ):
@@ -206,7 +213,7 @@ class ListQueryHelper:
                     asc(column) if direction == "ASC" else desc(column)
                 )
 
-        # ✅ поддержка default_sort как списка/кортежа
+        #  default_sort как список/кортеж
         if default_sort is not None:
             if isinstance(default_sort, (list, tuple)):
                 stmt = stmt.order_by(*default_sort)

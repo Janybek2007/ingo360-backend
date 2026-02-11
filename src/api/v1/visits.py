@@ -6,7 +6,6 @@ from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.company import can_view_visits
 from src.api.dependencies.current_user import current_active_user, current_operator_user
-from src.api.utils.export_excel import export_excel_response
 from src.db.models import MedicalFacility, Pharmacy, User, Visit
 from src.db.session import db_session
 from src.schemas.export import ExportExcelRequest
@@ -51,21 +50,37 @@ async def get_visits(
 @router.post("/export-excel")
 async def export_visits_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    load_options = [
-        joinedload(Visit.pharmacy).joinedload(Pharmacy.geo_indicator),
-        joinedload(Visit.pharmacy).joinedload(Pharmacy.distributor),
-        joinedload(Visit.doctor),
-        joinedload(Visit.product_group),
-        joinedload(Visit.employee),
-        joinedload(Visit.medical_facility).joinedload(MedicalFacility.geo_indicator),
-    ]
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: visit_service.get_multi(session, load_options=load_options),
-        serialize=lambda v: VisitResponse.model_validate(v).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.visit.VisitService",
+        model_path="src.db.models.Visit",
+        serializer_path="src.schemas.visit.VisitResponse",
+        load_options_paths=[
+            "pharmacy.geo_indicator",
+            "pharmacy.distributor",
+            "doctor",
+            "product_group",
+            "employee",
+            "medical_facility.geo_indicator",
+        ],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(

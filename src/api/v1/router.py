@@ -5,6 +5,7 @@ from src.api.v1 import (
     clients,
     companies,
     employees,
+    exports,
     filter_options,
     geography,
     health,
@@ -34,4 +35,5 @@ api_router.include_router(
 )
 api_router.include_router(ims.router, prefix="/ims", tags=["ims"])
 api_router.include_router(filter_options.router, tags=["filter options"])
+api_router.include_router(exports.router, tags=["exports"])
 api_router.include_router(websocket.router)

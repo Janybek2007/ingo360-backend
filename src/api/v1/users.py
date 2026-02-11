@@ -11,7 +11,6 @@ from src.api.dependencies.current_user import (
     current_superuser,
 )
 from src.api.dependencies.user_manager import get_user_manager
-from src.api.utils.export_excel import export_excel_response
 from src.core.auth.user_manager import UserManager
 from src.db.models import Company
 from src.db.models.users import User
@@ -118,15 +117,29 @@ async def get_client(
 async def export_clients_excel(
     payload: ExportExcelRequest,
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    user_manager: Annotated[UserManager, Depends(get_user_manager)],
+    current_user: Annotated["User", Depends(current_admin_or_operator_user)],
 ):
-    load_options = [joinedload(User.company)]
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
 
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: user_manager.get_clients(session, load_options=load_options),
-        serialize=lambda u: UserRead.model_validate(u).model_dump(),
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.user_exports.UserClientsExportService",
+        model_path="src.db.models.User",
+        serializer_path="src.schemas.user.UserRead",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.get(
@@ -152,17 +165,29 @@ async def get_admins_operators(
 async def export_admins_operators_excel(
     payload: ExportExcelRequest,
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
-    user_manager: Annotated[UserManager, Depends(get_user_manager)],
+    current_user: Annotated["User", Depends(current_admin_or_operator_user)],
 ):
-    load_options = [joinedload(User.company)]
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
 
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: user_manager.get_admins_and_operators(
-            session, load_options=load_options
-        ),
-        serialize=lambda u: UserRead.model_validate(u).model_dump(),
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.user_exports.UserAdminsOperatorsExportService",
+        model_path="src.db.models.User",
+        serializer_path="src.schemas.user.UserRead",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.get("/me", response_model=UserRead)

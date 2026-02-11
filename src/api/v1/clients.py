@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_operator_user
-from src.api.utils.export_excel import export_excel_response
 from src.db.models import Doctor, MedicalFacility, Pharmacy, User
 from src.db.session import db_session
 from src.schemas import client
@@ -32,15 +31,29 @@ async def get_client_categories(
 @router.post("/client-categories/export-excel")
 async def export_client_categories_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: client_service.client_category_service.get_multi(session),
-        serialize=lambda cc: client.ClientCategoryResponse.model_validate(
-            cc
-        ).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.client.client_category.ClientCategoryService",
+        model_path="src.db.models.clients.ClientCategory",
+        serializer_path="src.schemas.client.ClientCategoryResponse",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(
@@ -137,22 +150,36 @@ async def get_doctors(
 @router.post("/doctors/export-excel")
 async def export_doctors_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    load_options = [
-        joinedload(Doctor.responsible_employee),
-        joinedload(Doctor.medical_facility),
-        joinedload(Doctor.speciality),
-        joinedload(Doctor.client_category),
-        joinedload(Doctor.product_group),
-    ]
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: client_service.doctor_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda d: client.DoctorResponse.model_validate(d).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.client.doctor.DoctorService",
+        model_path="src.db.models.clients.Doctor",
+        serializer_path="src.schemas.client.DoctorResponse",
+        load_options_paths=[
+            "responsible_employee",
+            "medical_facility",
+            "speciality",
+            "client_category",
+            "product_group",
+        ],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(
@@ -269,26 +296,39 @@ async def get_pharmacies(
 @router.post("/pharmacies/export-excel")
 async def export_pharmacies_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    load_options = [
-        joinedload(Pharmacy.distributor),
-        joinedload(Pharmacy.responsible_employee),
-        joinedload(Pharmacy.settlement),
-        joinedload(Pharmacy.district),
-        joinedload(Pharmacy.client_category),
-        joinedload(Pharmacy.product_group),
-        joinedload(Pharmacy.company),
-        joinedload(Pharmacy.geo_indicator),
-    ]
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
 
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: client_service.pharmacy_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda p: client.PharmacyResponse.model_validate(p).model_dump(),
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.client.pharmacy.PharmacyService",
+        model_path="src.db.models.clients.Pharmacy",
+        serializer_path="src.schemas.client.PharmacyResponse",
+        load_options_paths=[
+            "distributor",
+            "responsible_employee",
+            "settlement",
+            "district",
+            "client_category",
+            "product_group",
+            "company",
+            "geo_indicator",
+        ],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(
@@ -404,13 +444,29 @@ async def get_specialities(
 @router.post("/specialities/export-excel")
 async def export_specialities_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: client_service.speciality_service.get_multi(session),
-        serialize=lambda s: client.SpecialityResponse.model_validate(s).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.client.speciality.SpecialityService",
+        model_path="src.db.models.clients.Speciality",
+        serializer_path="src.schemas.client.SpecialityResponse",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post("/specialities/import-excel")
@@ -500,22 +556,30 @@ async def get_medical_facilities(
 @router.post("/medical-facilities/export-excel")
 async def export_medical_facilities_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    load_options = [
-        joinedload(MedicalFacility.settlement),
-        joinedload(MedicalFacility.district),
-        joinedload(MedicalFacility.geo_indicator),
-    ]
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: client_service.medical_facility_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda mf: client.MedicalFacilityResponse.model_validate(
-            mf
-        ).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.client.medical_facility.MedicalFacilityService",
+        model_path="src.db.models.clients.MedicalFacility",
+        serializer_path="src.schemas.client.MedicalFacilityResponse",
+        load_options_paths=["settlement", "district", "geo_indicator"],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(
@@ -621,13 +685,29 @@ async def get_distributors(
 @router.post("/distributors/export-excel")
 async def export_distributors_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: client_service.distributor_service.get_multi(session),
-        serialize=lambda d: client.DistributorResponse.model_validate(d).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.client.distributor.DistributorService",
+        model_path="src.db.models.clients.Distributor",
+        serializer_path="src.schemas.client.DistributorResponse",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(
@@ -712,15 +792,29 @@ async def get_geo_indicators(
 @router.post("/geo-indicators/export-excel")
 async def export_geo_indicators_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: client_service.geo_indicator_service.get_multi(session),
-        serialize=lambda gi: client.GeoIndicatorResponse.model_validate(
-            gi
-        ).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.client.geo_indicator.GeoIndicatorService",
+        model_path="src.db.models.GeoIndicator",
+        serializer_path="src.schemas.client.GeoIndicatorResponse",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(

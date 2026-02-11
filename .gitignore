@@ -207,3 +207,5 @@ postgres/
 .vscode
 commit.txt
 data/
+temp/
+temp_uploads/

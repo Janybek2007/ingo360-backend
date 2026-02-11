@@ -1,16 +1,16 @@
-import os
 import asyncio
 import contextlib
 import logging
+import os
 
 from dotenv import load_dotenv
-from fastapi_users.exceptions import UserAlreadyExists
 from fastapi import BackgroundTasks
+from fastapi_users.exceptions import UserAlreadyExists
 
-from src.db.session import db_session
 from src.api.dependencies.user_manager import get_user_manager
 from src.api.dependencies.users import get_user_db
 from src.core.auth.user_manager import UserManager
+from src.db.session import db_session
 from src.schemas.user import UserCreate
 
 load_dotenv(".env.scripts")

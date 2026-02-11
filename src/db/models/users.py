@@ -1,15 +1,16 @@
-from typing import TYPE_CHECKING, Optional
 from datetime import datetime
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import String, ForeignKey, Integer, Boolean
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTable, SQLAlchemyUserDatabase
+from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-    from . import Company, ImportLogs
+
+    from . import Company, ExcelTask, ImportLogs
 
 
 class User(Base, SQLAlchemyBaseUserTable[int]):
@@ -27,6 +28,7 @@ class User(Base, SQLAlchemyBaseUserTable[int]):
     )
     company: Mapped[Optional["Company"]] = relationship(back_populates="users")
     import_logs: Mapped[list["ImportLogs"]] = relationship(back_populates="user")
+    excel_tasks: Mapped[list["ExcelTask"]] = relationship(back_populates="user")
     position: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     @classmethod

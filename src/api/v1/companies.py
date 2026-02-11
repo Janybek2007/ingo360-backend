@@ -7,7 +7,7 @@ from src.api.dependencies.current_user import (
     current_admin_or_operator_user,
     current_admin_user,
 )
-from src.api.utils.export_excel import export_excel_response
+from src.db.models import User
 from src.db.session import db_session
 from src.schemas import company, search_filter
 from src.schemas.export import ExportExcelRequest
@@ -31,13 +31,29 @@ async def get_companies(
 @router.post("/export-excel")
 async def export_companies_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated["User", Depends(current_admin_or_operator_user)],
 ):
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: company_service.get_multi(session),
-        serialize=lambda c: company.CompanyResponse.model_validate(c).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.company.CompanyService",
+        model_path="src.db.models.Company",
+        serializer_path="src.schemas.company.CompanyResponse",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post(

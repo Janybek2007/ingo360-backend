@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from src.schemas.base_filter import BaseReferenceFilter
+
 from .company import CompanySimpleResponse
 
 

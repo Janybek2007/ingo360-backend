@@ -1,5 +1,6 @@
-from sqlalchemy import String, cast, func
 from typing import Any
+
+from sqlalchemy import String, cast, func
 
 
 def build_period_key(

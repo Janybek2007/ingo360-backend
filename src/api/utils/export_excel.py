@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
 from fastapi.responses import StreamingResponse
@@ -9,10 +9,8 @@ from fastapi.responses import StreamingResponse
 from src.schemas.export import ExportExcelRequest
 from src.utils.export_excel import export_excel
 
-T = TypeVar("T")
-
-RowsGetter = Callable[[], Awaitable[list[T]]]
-Serializer = Callable[[T], dict]
+RowsGetter = Callable[[], Awaitable[list[Any]]]
+Serializer = Callable[[Any], dict]
 
 
 def _excel_stream(bytes_: bytes, file_name: str) -> StreamingResponse:
@@ -30,8 +28,8 @@ def _excel_stream(bytes_: bytes, file_name: str) -> StreamingResponse:
 async def export_excel_response(
     *,
     payload: ExportExcelRequest,
-    get_rows: RowsGetter[T],
-    serialize: Serializer[T],
+    get_rows: RowsGetter,
+    serialize: Serializer,
 ) -> StreamingResponse:
     items = await get_rows()
     rows = [serialize(item) for item in items]

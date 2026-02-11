@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from src.core.auth.fastapi_users import fastapi_users
 from src.api.dependencies.backend import authentication_backend
+from src.core.auth.fastapi_users import fastapi_users
 
 router = APIRouter()
 

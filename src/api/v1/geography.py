@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
-from src.api.utils.export_excel import export_excel_response
 from src.db.models import District, Region, Settlement, User
 from src.db.session import db_session
 from src.schemas import geography
@@ -50,13 +49,29 @@ async def get_countries(
 @router.post("/countries/export-excel")
 async def export_countries_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: geography_service.country_service.get_multi(session),
-        serialize=lambda c: geography.CountryResponse.model_validate(c).model_dump(),
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
+
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.geography.country.CountryService",
+        model_path="src.db.models.geography.Country",
+        serializer_path="src.schemas.geography.CountryResponse",
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.get("/countries/{country_id}", response_model=geography.CountryResponse)
@@ -107,17 +122,30 @@ async def get_regions(
 @router.post("/regions/export-excel")
 async def export_regions_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    load_options = [joinedload(Region.country)]
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
 
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: geography_service.region_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda r: geography.RegionResponse.model_validate(r).model_dump(),
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.geography.region.RegionService",
+        model_path="src.db.models.geography.Region",
+        serializer_path="src.schemas.geography.RegionResponse",
+        load_options_paths=["country"],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post("/regions/import-excel")
@@ -190,17 +218,30 @@ async def get_settlements(
 @router.post("/settlements/export-excel")
 async def export_settlements_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    load_options = [joinedload(Settlement.region)]
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
 
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: geography_service.settlement_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda s: geography.SettlementResponse.model_validate(s).model_dump(),
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.geography.settlement.SettlementService",
+        model_path="src.db.models.geography.Settlement",
+        serializer_path="src.schemas.geography.SettlementResponse",
+        load_options_paths=["region"],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post("/settlements/import-excel")
@@ -286,21 +327,30 @@ async def get_districts(
 @router.post("/districts/export-excel")
 async def export_districts_excel(
     payload: ExportExcelRequest,
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
+    current_user: Annotated[User, Depends(current_active_user)],
 ):
-    load_options = [
-        joinedload(District.settlement),
-        joinedload(District.region),
-        joinedload(District.company),
-    ]
+    from src.tasks.export_excel import create_export_task_record, export_excel_task
 
-    return await export_excel_response(
-        payload=payload,
-        get_rows=lambda: geography_service.district_service.get_multi(
-            session, load_options=load_options
-        ),
-        serialize=lambda d: geography.DistrictResponse.model_validate(d).model_dump(),
+    task = export_excel_task.delay(
+        user_id=current_user.id,
+        file_name=payload.file_name,
+        service_path="src.services.geography.district.DistrictService",
+        model_path="src.db.models.geography.District",
+        serializer_path="src.schemas.geography.DistrictResponse",
+        load_options_paths=["settlement", "region", "company"],
+        header_map=payload.header_map,
+        fields_map=payload.fields_map,
+        boolean_map=payload.boolean_map,
+        custom_map=payload.custom_map,
     )
+
+    await create_export_task_record(
+        task_id=task.id,
+        started_by=current_user.id,
+        file_path="",
+    )
+
+    return {"task_id": task.id}
 
 
 @router.post("/districts/import-excel")

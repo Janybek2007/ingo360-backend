@@ -10,9 +10,10 @@ from src.db.session import db_session
 from src.websocket import connection_manager as conn
 
 if TYPE_CHECKING:
-    from fastapi_users.authentication.strategy.db import AccessTokenDatabase
-    from src.db.models import AccessToken
     from fastapi_users import models
+    from fastapi_users.authentication.strategy.db import AccessTokenDatabase
+
+    from src.db.models import AccessToken
 
 
 class SingleSessionDatabaseStrategy(DatabaseStrategy):

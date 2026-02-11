@@ -1,5 +1,5 @@
 import asyncio
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
 
 from fastapi import UploadFile
 from sqlalchemy import select
@@ -16,13 +16,12 @@ from src.db.models import (
 )
 from src.mapping.employees import employee_mapping, position_mapping
 from src.schemas import employee
-from src.utils.list_query_helper import InOrNullSpec, StringTypedSpec
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
+from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
 
 from .base import BaseService
-from ..utils.list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,6 +77,28 @@ class EmployeeService(
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
+
+    async def iter_multi(
+        self,
+        session: "AsyncSession",
+        load_options: list[Any] | None = None,
+        chunk_size: int = 1000,
+    ) -> AsyncIterator[employees.Employee]:
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        stmt = ListQueryHelper.apply_sorting_with_created(
+            stmt,
+            self.model.created_at.desc(),
+        )
+
+        stream = await session.stream_scalars(
+            stmt.execution_options(yield_per=chunk_size)
+        )
+        async for item in stream:
+            yield item
 
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
@@ -225,6 +246,28 @@ class PositionService(
 
         result = await session.execute(stmt)
         return result.unique().scalars().all()
+
+    async def iter_multi(
+        self,
+        session: "AsyncSession",
+        load_options: list[Any] | None = None,
+        chunk_size: int = 1000,
+    ) -> AsyncIterator[employees.Position]:
+        stmt = select(self.model)
+
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        stmt = ListQueryHelper.apply_sorting_with_created(
+            stmt,
+            self.model.created_at.desc(),
+        )
+
+        stream = await session.stream_scalars(
+            stmt.execution_options(yield_per=chunk_size)
+        )
+        async for item in stream:
+            yield item
 
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int

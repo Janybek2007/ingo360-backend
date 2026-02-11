@@ -9,8 +9,9 @@ current_active_user = fastapi_users.current_user(active=True)
 current_superuser = fastapi_users.current_user(active=True, superuser=True)
 
 if TYPE_CHECKING:
-    from src.db.models.users import User
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from src.db.models.users import User
 
 
 async def current_active_user_with_company(

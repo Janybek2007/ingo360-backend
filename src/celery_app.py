@@ -1,4 +1,5 @@
 from celery import Celery
+
 from .core.settings import settings
 
 celery_app = Celery(
@@ -6,4 +7,6 @@ celery_app = Celery(
 )
 
 
-celery_app.autodiscover_tasks(["src.tasks"])
+celery_app.autodiscover_tasks(
+    ["src.tasks.sale_imports", "src.tasks.export_excel", "src.tasks.email"]
+)

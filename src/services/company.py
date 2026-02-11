@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import func, insert, or_, select, update
@@ -13,11 +13,11 @@ from src.schemas.company import (
     RegistrationApplicationUpdate,
 )
 from src.utils.excel_parser import parse_excel_file
+from src.utils.list_query_helper import ListQueryHelper
 from src.utils.mapping import map_record
 from src.websocket.connection_manager import connection_manager
 
 from .base import BaseService, FilterSchemaType, ModelType
-from ..utils.list_query_helper import ListQueryHelper
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,6 +111,27 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
             company.active_users = counts_dict.get(company.id, 0)
 
         return companies
+
+    async def iter_multi(
+        self,
+        session: "AsyncSession",
+        load_options: list[Any] | None = None,
+        chunk_size: int = 1000,
+    ) -> AsyncIterator[ModelType]:
+        stmt = select(self.model)
+        if load_options:
+            stmt = stmt.options(*load_options)
+
+        stmt = ListQueryHelper.apply_sorting_with_created(
+            stmt,
+            self.model.id.desc(),
+        )
+
+        stream = await session.stream_scalars(
+            stmt.execution_options(yield_per=chunk_size)
+        )
+        async for item in stream:
+            yield item
 
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int

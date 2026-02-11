@@ -1,12 +1,12 @@
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import String, ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
 if TYPE_CHECKING:
-    from . import Employee, MedicalFacility, Pharmacy, Company, ImportLogs
+    from . import Company, Employee, ImportLogs, MedicalFacility, Pharmacy
 
 
 class Country(Base):
