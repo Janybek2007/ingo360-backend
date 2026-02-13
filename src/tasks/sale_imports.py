@@ -147,7 +147,7 @@ def import_sales_task(
             },
         }
         _publish_excel_status(payload)
-        return {saved_file_path}
+        return {"saved_file_path": saved_file_path}
 
     except Exception as e:
         error_message = _format_error_message(e)

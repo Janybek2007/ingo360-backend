@@ -12,12 +12,12 @@ class BaseFilter(BaseModel):
 
 
 class BaseReferenceFilter(BaseModel):
-    limit: int | None = None
+    limit: int | None = 500
     offset: int = 0
     sort_order: SortDirection | None = None
 
 
 class BaseDbFilter(BaseModel):
-    limit: int | None = None
+    limit: int | None = 500
     offset: int = 0
     sort_order: SortDirection | None = None

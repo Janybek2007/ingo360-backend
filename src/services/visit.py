@@ -287,6 +287,9 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 total=total_records,
                 imported=imported_count,
                 skipped_records=skipped_records,
+                inserted=imported_count,
+                updated=0,
+                deduplicated_in_batch=0,
             )
         finally:
             temp.close()

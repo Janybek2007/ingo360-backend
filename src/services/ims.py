@@ -19,6 +19,7 @@ from src.schemas.ims import (
 from src.services.base import BaseService, ModelType
 from src.utils.build_period_values import build_period_values
 from src.utils.excel_parser import iter_excel_records
+from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import (
     InOrNullSpec,
     ListQueryHelper,
@@ -189,7 +190,14 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                 imported_count += len(data_to_insert)
 
             await session.commit()
-            return {"imported": imported_count, "total": total_records}
+            return build_import_result(
+                total=total_records,
+                imported=imported_count,
+                skipped_records=[],
+                inserted=imported_count,
+                updated=0,
+                deduplicated_in_batch=0,
+            )
         finally:
             temp.close()
 
