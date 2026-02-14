@@ -9,6 +9,7 @@ from src.mapping.geography import region_mapping
 from src.schemas import geography as geography_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
+from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
 
@@ -34,20 +35,40 @@ class RegionService(
         session.add(import_log)
         await session.flush()
 
-        country_map, _ = await self.get_id_map(
+        country_map, missing_countries = await self.get_id_map(
             session, Country, "name", {r["страна"] for r in records}
         )
 
+        skipped_records = []
         data_to_insert = []
-        for r in records:
+
+        for idx, r in enumerate(records):
+            missing_keys = []
+
+            if r["страна"] in missing_countries:
+                missing_keys.append(f"страна: {r['страна']}")
+
+            if missing_keys:
+                skipped_records.append({"row": idx + 1, "missing": missing_keys})
+                continue
+
             relation_fields = {
                 "country_id": country_map[r["страна"]],
                 "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, region_mapping, relation_fields))
-        stmt = insert(self.model).on_conflict_do_nothing()
-        await session.execute(stmt, data_to_insert)
+
+        if data_to_insert:
+            stmt = insert(self.model).on_conflict_do_nothing()
+            await session.execute(stmt, data_to_insert)
+
         await session.commit()
+
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
 
     @staticmethod
     def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:

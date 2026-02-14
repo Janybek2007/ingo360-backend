@@ -159,9 +159,10 @@ async def bulk_insert_regions(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await geography_service.region_service.import_excel(
+    result = await geography_service.region_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.get("/regions/{region_id}", response_model=geography.RegionResponse)
@@ -364,9 +365,10 @@ async def bulk_insert_districts(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await geography_service.district_service.import_excel(
+    result = await geography_service.district_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.get("/districts/{district_id}", response_model=geography.DistrictResponse)

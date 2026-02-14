@@ -9,6 +9,7 @@ from src.mapping.geography import district_mapping
 from src.schemas import geography as geography_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
+from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
 
@@ -36,20 +37,20 @@ class DistrictService(
         session.add(import_log)
         await session.flush()
 
-        region_map, _ = await self.get_id_map(
+        region_map, missing_regions = await self.get_id_map(
             session, Region, "name", {r["область"] for r in records}
         )
-        company_map, _ = await self.get_id_map(
+        company_map, missing_companies = await self.get_id_map(
             session, Company, "name", {r["компания"] for r in records}
         )
 
         settlement_pairs = {
-            (r["населенный пункт"], region_map[r["область"]])
+            (r["населенный пункт"], region_map.get(r["область"]))
             for r in records
-            if r["населенный пункт"] is not None
+            if r["населенный пункт"] is not None and r["область"] in region_map
         }
 
-        settlement_map, _ = (
+        settlement_map, missing_settlements = (
             await self.get_id_map(
                 session,
                 Settlement,
@@ -62,9 +63,26 @@ class DistrictService(
             else ({}, set())
         )
 
+        skipped_records = []
         data_to_insert = []
-        for r in records:
-            region_id = region_map[r["область"]]
+
+        for idx, r in enumerate(records):
+            missing_keys = []
+
+            if r["область"] in missing_regions:
+                missing_keys.append(f"область: {r['область']}")
+            if r["компания"] in missing_companies:
+                missing_keys.append(f"компания: {r['компания']}")
+
+            region_id = region_map.get(r["область"])
+            if r["населенный пункт"] is not None and region_id:
+                settlement_key = (r["населенный пункт"], region_id)
+                if settlement_key in missing_settlements:
+                    missing_keys.append(f"населенный пункт: {r['населенный пункт']}")
+
+            if missing_keys:
+                skipped_records.append({"row": idx + 1, "missing": missing_keys})
+                continue
 
             settlement_id = None
             if r["населенный пункт"] is not None:
@@ -78,8 +96,18 @@ class DistrictService(
                 "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, district_mapping, relation_fields))
-        await session.execute(insert(self.model), data_to_insert)
+
+        if data_to_insert:
+            stmt = insert(self.model).on_conflict_do_nothing()
+            await session.execute(stmt, data_to_insert)
+
         await session.commit()
+
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
 
     @staticmethod
     def _parse_csv_ids(value: str | None, field_name: str) -> list[int] | None:

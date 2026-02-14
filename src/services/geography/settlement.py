@@ -43,11 +43,10 @@ class SettlementService(
         session.add(import_log)
         await session.flush()
 
-        region_map, _ = await self.get_id_map(
+        region_map, missing_regions = await self.get_id_map(
             session, Region, "name", {r["область"] for r in records}
         )
 
-        missing_regions = {r["область"] for r in records} - set(region_map.keys())
         skipped_records = []
         data_to_insert = []
 

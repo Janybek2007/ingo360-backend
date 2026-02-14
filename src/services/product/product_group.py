@@ -9,6 +9,7 @@ from src.mapping.products import product_group_mapping
 from src.schemas import product
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
+from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
 
@@ -94,17 +95,37 @@ class ProductGroupService(
         session.add(import_log)
         await session.flush()
 
-        company_map = await self.get_id_map(
+        company_map, missing_companies = await self.get_id_map(
             session, Company, "name", {r["компания"] for r in records}
         )
 
+        skipped_records = []
         data_to_insert = []
-        for r in records:
+
+        for idx, r in enumerate(records):
+            missing_keys = []
+
+            if r["компания"] in missing_companies:
+                missing_keys.append(f"компания: {r['компания']}")
+
+            if missing_keys:
+                skipped_records.append({"row": idx + 1, "missing": missing_keys})
+                continue
+
             relation_fields = {
                 "company_id": company_map[r["компания"]],
                 "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, product_group_mapping, relation_fields))
 
-        await session.execute(insert(self.model), data_to_insert)
+        if data_to_insert:
+            stmt = insert(self.model).on_conflict_do_nothing()
+            await session.execute(stmt, data_to_insert)
+
         await session.commit()
+
+        return build_import_result(
+            total=len(records),
+            imported=len(data_to_insert),
+            skipped_records=skipped_records,
+        )
