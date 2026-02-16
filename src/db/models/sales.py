@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Optional
+from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, String, UniqueConstraint, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -20,8 +21,8 @@ class PrimarySalesAndStock(Base):
     quarter: Mapped[int]
     year: Mapped[int]
     indicator: Mapped[str] = mapped_column(String(256))
-    packages: Mapped[float]
-    amount: Mapped[float]
+    packages: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     published: Mapped[bool] = mapped_column(server_default="false")
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
@@ -71,8 +72,8 @@ class SecondarySales(Base):
     year: Mapped[int]
     indicator: Mapped[str] = mapped_column(String(256))
     quarter: Mapped[int]
-    packages: Mapped[float]
-    amount: Mapped[float]
+    packages: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     published: Mapped[bool] = mapped_column(server_default="false")
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
@@ -116,8 +117,8 @@ class TertiarySalesAndStock(Base):
     year: Mapped[int]
     quarter: Mapped[int]
     indicator: Mapped[str] = mapped_column(String(256))
-    packages: Mapped[float]
-    amount: Mapped[float]
+    packages: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     published: Mapped[bool] = mapped_column(server_default="false")
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
