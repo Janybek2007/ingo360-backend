@@ -12,6 +12,7 @@ from src.db.models import (
     ProductGroup,
     Speciality,
     clients,
+    Company
 )
 from src.mapping.clients import doctor_mapping
 from src.schemas import client
@@ -165,6 +166,10 @@ class DoctorService(
             else ({}, set())
         )
 
+        company_map, missing_companies = await self.get_id_map(
+            session, Company, "name", {r["компания"] for r in records}
+        )
+
         skipped_records = []
         data_to_insert = []
 
@@ -189,6 +194,9 @@ class DoctorService(
             if r["группа"] and r["группа"] in missing_product_groups:
                 missing_keys.append(f"группа: {r['группа']}")
 
+            if r["компания"] in missing_companies:
+                missing_keys.append(f"компания: {r['компания']}")
+
             if missing_keys:
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
@@ -201,6 +209,7 @@ class DoctorService(
                 "speciality_id": speciality_map[r["специальность"]],
                 "client_category_id": client_category_map[r["категория"]],
                 "product_group_id": product_group_map.get(r["группа"]),
+                "company_id": company_map[r["компания"]],
                 "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, doctor_mapping, relation_fields))
