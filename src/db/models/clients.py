@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import CITEXT
 
 from .base import Base
 
@@ -81,7 +82,7 @@ class Doctor(Base):
 class Pharmacy(Base):
     __tablename__ = "pharmacies"
 
-    name: Mapped[str] = mapped_column(String(256))
+    name: Mapped[str] = mapped_column(CITEXT)
     distributor_id: Mapped[int | None] = mapped_column(
         ForeignKey("distributors.id"), nullable=True
     )
@@ -158,7 +159,7 @@ class Speciality(Base):
 class MedicalFacility(Base):
     __tablename__ = "medical_facilities"
 
-    name: Mapped[str] = mapped_column(String(256))
+    name: Mapped[str] = mapped_column(CITEXT)
     settlement_id: Mapped[int] = mapped_column(ForeignKey("settlements.id"))
     settlement: Mapped["Settlement"] = relationship(back_populates="medical_facilities")
     district_id: Mapped[int | None] = mapped_column(
@@ -212,7 +213,7 @@ class Distributor(Base):
 class GeoIndicator(Base):
     __tablename__ = "geo_indicators"
 
-    name: Mapped[str] = mapped_column(String(256))
+    name: Mapped[str] = mapped_column(CITEXT)
 
     pharmacies: Mapped[list["Pharmacy"]] = relationship(back_populates="geo_indicator")
     medical_facilities: Mapped[list["MedicalFacility"]] = relationship(
