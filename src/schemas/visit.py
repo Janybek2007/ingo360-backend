@@ -41,7 +41,7 @@ class VisitsRequest(BaseDbFilter):
     product_group_ids: list[int] | None = None
     medical_facility_ids: list[int] | None = None
     doctor_ids: list[int] | None = None
-    client_type: str | None = None
+    client_type: list[str] | None = None
     months: list[int] | None = None
     year: str | None = None
     sort_by: (
