@@ -73,4 +73,7 @@ async def parse_excel_file(file: UploadFile, read_as_str: bool = False) -> list[
 
     df.columns = df.columns.str.strip().str.lower()
 
+    str_cols = df.select_dtypes(include="object").columns
+    df[str_cols] = df[str_cols].apply(lambda col: col.str.strip())
+
     return df.to_dict("records")
