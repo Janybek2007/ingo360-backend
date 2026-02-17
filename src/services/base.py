@@ -5,6 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from src.utils.list_query_helper import ListQueryHelper
+from src.utils.case_insensitive_dict import CaseInsensitiveDict
+
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -220,14 +222,16 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         objs = result.scalars().all()
 
         if filter_field and filter_values:
-            obj_map = {
+            obj_map = CaseInsensitiveDict({
                 (getattr(obj, field), getattr(obj, filter_field)): obj.id
                 for obj in objs
-            }
+            })
+            missing = {v for v in values if (v[0], v[1]) not in obj_map}
         else:
-            obj_map = {getattr(obj, field): obj.id for obj in objs}
-
-        missing = values - obj_map.keys()
+            obj_map = CaseInsensitiveDict({
+                getattr(obj, field): obj.id for obj in objs
+            })
+            missing = {v for v in values if v not in obj_map}
 
         return obj_map, missing
 
