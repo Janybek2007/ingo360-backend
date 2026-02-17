@@ -187,6 +187,7 @@ class MedicalFacility(Base):
     __table_args__ = (
         UniqueConstraint("name", "geo_indicator_id", name="uq_facility_name_indicator"),
         Index("idx_med_facility_geo_indicator", "geo_indicator_id"),
+        UniqueConstraint("name", "settlement_id", name="uq_facility_name_settlement")
     )
 
 
