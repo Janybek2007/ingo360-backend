@@ -369,7 +369,7 @@ class PrimarySalesAndStockService(
     @staticmethod
     async def get_shipment_stock_report(
         session: "AsyncSession",
-        indicator: str,
+        indicator: list[str],
         company_id: int | None,
         filters: sale.ShipmentStockFilter | None = None,
     ):
@@ -396,7 +396,7 @@ class PrimarySalesAndStockService(
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .where(
-                PrimarySalesAndStock.indicator == indicator,
+                PrimarySalesAndStock.indicator.in_(indicator),
             )
         )
 
@@ -499,7 +499,7 @@ class PrimarySalesAndStockService(
                 func.sum(
                     case(
                         (
-                            PrimarySalesAndStock.indicator == "Первичная продажа",
+                            PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                             PrimarySalesAndStock.packages,
                         ),
                         else_=0,
@@ -513,7 +513,7 @@ class PrimarySalesAndStockService(
                 func.sum(
                     case(
                         (
-                            PrimarySalesAndStock.indicator == "Первичная продажа",
+                            PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                             PrimarySalesAndStock.packages,
                         ),
                         else_=0,
@@ -527,7 +527,7 @@ class PrimarySalesAndStockService(
                 func.sum(
                     case(
                         (
-                            PrimarySalesAndStock.indicator == "Первичная продажа",
+                            PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                             PrimarySalesAndStock.packages,
                         ),
                         else_=0,
@@ -544,8 +544,7 @@ class PrimarySalesAndStockService(
                         func.sum(
                             case(
                                 (
-                                    PrimarySalesAndStock.indicator
-                                    == "Первичная продажа",
+                                    PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                                     PrimarySalesAndStock.packages,
                                 ),
                                 else_=0,
@@ -602,7 +601,7 @@ class PrimarySalesAndStockService(
                 func.sum(
                     case(
                         (
-                            PrimarySalesAndStock.indicator == "Первичная продажа",
+                            PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                             PrimarySalesAndStock.packages,
                         ),
                         else_=0,
@@ -612,7 +611,7 @@ class PrimarySalesAndStockService(
                     func.sum(
                         case(
                             (
-                                PrimarySalesAndStock.indicator == "Первичная продажа",
+                                PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                                 PrimarySalesAndStock.amount,
                             ),
                             else_=0,
@@ -628,7 +627,7 @@ class PrimarySalesAndStockService(
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
             .where(
                 PrimarySalesAndStock.indicator.in_(
-                    ["Остаток на складе", "Первичная продажа"]
+                    ["Остаток на складе", "Первичная продажа", "Первичные продажи"]
                 )
             )
         )
@@ -674,7 +673,7 @@ class PrimarySalesAndStockService(
                     func.sum(
                         case(
                             (
-                                PrimarySalesAndStock.indicator == "Первичная продажа",
+                                PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                                 PrimarySalesAndStock.packages,
                             ),
                             else_=0,
@@ -688,7 +687,7 @@ class PrimarySalesAndStockService(
                 func.sum(
                     case(
                         (
-                            PrimarySalesAndStock.indicator == "Первичная продажа",
+                            PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                             PrimarySalesAndStock.packages,
                         ),
                         else_=0,
@@ -725,8 +724,7 @@ class PrimarySalesAndStockService(
                             func.sum(
                                 case(
                                     (
-                                        PrimarySalesAndStock.indicator
-                                        == "Первичная продажа",
+                                        PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                                         PrimarySalesAndStock.packages,
                                     ),
                                     else_=0,
@@ -747,8 +745,7 @@ class PrimarySalesAndStockService(
                                 func.sum(
                                     case(
                                         (
-                                            PrimarySalesAndStock.indicator
-                                            == "Первичная продажа",
+                                            PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
                                             PrimarySalesAndStock.packages,
                                         ),
                                         else_=0,
@@ -770,7 +767,7 @@ class PrimarySalesAndStockService(
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .where(
                 PrimarySalesAndStock.indicator.in_(
-                    ["Остаток на складе", "Первичная продажа"]
+                    ["Остаток на складе", "Первичная продажа", "Первичные продажи"]
                 ),
             )
         )
@@ -878,7 +875,7 @@ class PrimarySalesAndStockService(
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .where(
-                PrimarySalesAndStock.indicator == "Первичная продажа",
+                PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]),
             )
         )
 
@@ -1029,7 +1026,7 @@ class PrimarySalesAndStockService(
             )
             .select_from(PrimarySalesAndStock)
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
-            .where(PrimarySalesAndStock.indicator == "Первичная продажа")
+            .where(PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]))
         )
 
         period_totals = ListQueryHelper.apply_period_values(
@@ -1052,7 +1049,7 @@ class PrimarySalesAndStockService(
             .select_from(PrimarySalesAndStock)
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
-            .where(PrimarySalesAndStock.indicator == "Первичная продажа")
+            .where(PrimarySalesAndStock.indicator.in_(["Первичная продажа", "Первичные продажи"]))
         )
 
         if company_id is not None:
