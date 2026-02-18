@@ -197,7 +197,10 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                     pharmacies.add(r["учреждение"])
 
             import_log = ImportLogs(
-                uploaded_by=user_id, target_table="Визиты", records_count=total_records
+                uploaded_by=user_id,
+                target_table="Визиты",
+                records_count=total_records,
+                target_table_name=self.model.__tablename__,
             )
             session.add(import_log)
             await session.flush()

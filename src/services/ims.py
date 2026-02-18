@@ -169,6 +169,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                 uploaded_by=user_id,
                 target_table="IMS",
                 records_count=total_records,
+                target_table_name=self.model.__tablename__,
             )
             session.add(import_log)
             await session.flush()

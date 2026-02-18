@@ -109,6 +109,7 @@ class EmployeeService(
             uploaded_by=user_id,
             target_table="Сотрудники",
             records_count=len(records),
+            target_table_name=self.model.__tablename__,
         )
         session.add(import_log)
         await session.flush()
@@ -278,6 +279,7 @@ class PositionService(
             uploaded_by=user_id,
             target_table="Должности МП",
             records_count=len(records),
+            target_table_name=self.model.__tablename__,
         )
         session.add(import_log)
         await session.flush()

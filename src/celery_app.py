@@ -14,6 +14,7 @@ celery_app.autodiscover_tasks(
         "src.tasks.export_excel",
         "src.tasks.email",
         "src.tasks.cleanup_excel_tasks",
+        "src.tasks.import_log_batch_delete"
     ]
 )
 

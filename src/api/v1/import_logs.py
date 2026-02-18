@@ -12,6 +12,7 @@ from src.schemas import base_filter
 from src.schemas.export import ExportExcelRequest
 from src.schemas.import_log import ImportLogResponse
 from src.services.import_log import import_log_service
+from src.tasks.import_log_batch_delete import delete_import_log_task
 
 router = APIRouter(dependencies=[Depends(current_operator_user)])
 
@@ -69,4 +70,8 @@ async def delete_import_log(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
     import_log_id: int,
 ):
-    return await import_log_service.delete(session, import_log_id)
+    obj = await import_log_service.get_or_404(session, import_log_id)
+
+    delete_import_log_task.delay(import_log_id, obj.target_table_name)
+
+    return {"status": "accepted"}

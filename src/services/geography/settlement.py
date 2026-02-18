@@ -39,6 +39,7 @@ class SettlementService(
             uploaded_by=user_id,
             target_table="Населенные пункты",
             records_count=len(records),
+            target_table_name=self.model.__tablename__,
         )
         session.add(import_log)
         await session.flush()

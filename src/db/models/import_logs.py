@@ -45,6 +45,7 @@ class ImportLogs(Base):
     )
     target_table: Mapped[str]
     records_count: Mapped[int]
+    target_table_name: Mapped[str | None]
 
     user: Mapped[Optional["User"]] = relationship(back_populates="import_logs")
 
