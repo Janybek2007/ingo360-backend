@@ -38,6 +38,8 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.sale.utils import upsert_batch_with_stats
+from src.utils.case_insensitive_dict import CaseInsensitiveDict
+from src.utils.case_insensitive_set import CaseInsensitiveSet
 
 
 class PrimarySalesAndStockService(
@@ -107,10 +109,10 @@ class PrimarySalesAndStockService(
             session.add(import_log)
             await session.flush()
 
-            distributor_cache: dict[str, int] = {}
-            sku_cache: dict[str, int] = {}
-            missing_distributors: set[str] = set()
-            missing_skus: set[str] = set()
+            distributor_cache: CaseInsensitiveDict = CaseInsensitiveDict()
+            sku_cache: CaseInsensitiveDict = CaseInsensitiveDict()
+            missing_distributors: CaseInsensitiveSet = CaseInsensitiveSet()
+            missing_skus: CaseInsensitiveSet = CaseInsensitiveSet()
 
             skipped_records = []
             skipped_total = 0
