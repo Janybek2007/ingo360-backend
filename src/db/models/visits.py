@@ -12,6 +12,7 @@ if TYPE_CHECKING:
         MedicalFacility,
         Pharmacy,
         ProductGroup,
+        ImportLogs,
     )
 
 
@@ -39,6 +40,12 @@ class Visit(Base):
         ForeignKey("pharmacies.id"), nullable=True
     )
     pharmacy: Mapped[Optional["Pharmacy"]] = relationship(back_populates="visits")
+    import_log_id: Mapped[int | None] = mapped_column(
+        ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
+    )
+    import_log: Mapped[Optional["ImportLogs"]] = relationship(
+        back_populates="visits"
+    )
 
     __table_args__ = (
         Index(

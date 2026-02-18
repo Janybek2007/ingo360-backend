@@ -31,6 +31,8 @@ if TYPE_CHECKING:
         Speciality,
         TertiarySalesAndStock,
         User,
+        IMS,
+        Visit
     )
 
 
@@ -122,5 +124,13 @@ class ImportLogs(Base):
     )
 
     product_groups: Mapped[list["ProductGroup"]] = relationship(
+        back_populates="import_log", cascade="all, delete-orphan"
+    )
+
+    ims: Mapped[list["IMS"]] = relationship(
+        back_populates="import_log", cascade="all, delete-orphan"
+    )
+
+    visits: Mapped[list["Visit"]] = relationship(
         back_populates="import_log", cascade="all, delete-orphan"
     )
