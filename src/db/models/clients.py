@@ -48,10 +48,10 @@ class Doctor(Base):
     responsible_employee: Mapped[Optional["Employee"]] = relationship(
         back_populates="doctors"
     )
-    medical_facility_id: Mapped[int | None] = mapped_column(
-        ForeignKey("medical_facilities.id"), nullable=True
+    medical_facility_id: Mapped[int] = mapped_column(
+        ForeignKey("medical_facilities.id"),
     )
-    medical_facility: Mapped[Optional["MedicalFacility"]] = relationship(
+    medical_facility: Mapped[["MedicalFacility"]] = relationship(
         back_populates="doctors"
     )
     speciality_id: Mapped[int] = mapped_column(ForeignKey("specialities.id"))
@@ -59,18 +59,18 @@ class Doctor(Base):
     client_category_id: Mapped[int] = mapped_column(ForeignKey("client_categories.id"))
     client_category: Mapped["ClientCategory"] = relationship(back_populates="doctors")
     visits: Mapped[list["Visit"]] = relationship(back_populates="doctor")
-    product_group_id: Mapped[int | None] = mapped_column(
-        ForeignKey("product_groups.id"), nullable=True
+    product_group_id: Mapped[int] = mapped_column(
+        ForeignKey("product_groups.id"),
     )
-    product_group: Mapped[Optional["ProductGroup"]] = relationship(
+    product_group: Mapped[["ProductGroup"]] = relationship(
         back_populates="doctors"
     )
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
     import_log: Mapped[Optional["ImportLogs"]] = relationship(back_populates="doctors")
-    company_id: Mapped[int | None] = mapped_column(
-        ForeignKey("companies.id"), nullable=True
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id"),
     )
 
     __table_args__ = (
