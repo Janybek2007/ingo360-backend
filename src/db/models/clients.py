@@ -76,6 +76,10 @@ class Doctor(Base):
     __table_args__ = (
         Index("idx_doctor_speciality", "speciality_id"),
         Index("idx_doctor_medical_facility", "medical_facility_id"),
+        UniqueConstraint(
+            "full_name", "medical_facility_id", "speciality_id", "company_id",
+            name="uq_doctor_full_name_medical_facility_speciality_company"
+        )
     )
 
 
@@ -136,7 +140,7 @@ class Pharmacy(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("name", "geo_indicator_id", name="uq_pharmacy_name_indicator"),
+        UniqueConstraint("name", "product_group_id", "company_id", name="uq_pharmacy_name_group_company"),
         Index("idx_pharmacy_company", "company_id"),
         Index("idx_pharmacy_distributor", "distributor_id"),
         Index("idx_pharmacy_geo_indicator", "geo_indicator_id"),
