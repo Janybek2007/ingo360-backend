@@ -51,7 +51,7 @@ class Doctor(Base):
     medical_facility_id: Mapped[int] = mapped_column(
         ForeignKey("medical_facilities.id"),
     )
-    medical_facility: Mapped[["MedicalFacility"]] = relationship(
+    medical_facility: Mapped["MedicalFacility"] = relationship(
         back_populates="doctors"
     )
     speciality_id: Mapped[int] = mapped_column(ForeignKey("specialities.id"))
@@ -62,7 +62,7 @@ class Doctor(Base):
     product_group_id: Mapped[int] = mapped_column(
         ForeignKey("product_groups.id"),
     )
-    product_group: Mapped[["ProductGroup"]] = relationship(
+    product_group: Mapped["ProductGroup"] = relationship(
         back_populates="doctors"
     )
     import_log_id: Mapped[int | None] = mapped_column(
