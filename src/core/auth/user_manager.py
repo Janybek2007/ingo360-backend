@@ -360,7 +360,7 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
         token: str, session: "AsyncSession"
     ) -> PasswordSetupToken:
         stmt = select(PasswordSetupToken).where(
-            PasswordSetupToken.token == token, not PasswordSetupToken.is_used
+            PasswordSetupToken.token == token, ~PasswordSetupToken.is_used
         )
         result = await session.execute(stmt)
         token_record = result.scalar_one_or_none()
