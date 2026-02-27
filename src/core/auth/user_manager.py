@@ -490,7 +490,7 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
             getattr(filters, "sort_by", None),
             getattr(filters, "sort_order", None),
             sort_map,
-            self.model.created_at.desc(),
+            self.user_db.user_table.created_at.desc(),
         )
         if filters:
             if filters.is_active is not None:
