@@ -123,7 +123,7 @@ async def get_primary_stock(
     return await primary_sales_service.get_shipment_stock_report(
         session,
         filters=filters,
-        indicator=["Остаток на складе"],
+        indicator="остат",
         company_id=current_user.company_id,
     )
 
@@ -137,7 +137,7 @@ async def get_primary_sales(
     return await primary_sales_service.get_shipment_stock_report(
         session,
         filters=filters,
-        indicator=["Первичная продажа", "Первичные продажи"],
+        indicator="продаж",
         company_id=current_user.company_id,
     )
 

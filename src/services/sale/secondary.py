@@ -337,7 +337,7 @@ class SecondarySalesService(
                 )
 
             if filters.indicator:
-                stmt = stmt.where(self.model.indicator == filters.indicator)
+                stmt = stmt.where(self.model.indicator.ilike(f"%{filters.indicator}%"))
 
             if filters.sort_by == "distributors" and not joined_pharmacy:
                 stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
@@ -408,7 +408,7 @@ class SecondarySalesService(
             .outerjoin(Distributor, Pharmacy.distributor_id == Distributor.id)
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
-                SecondarySales.indicator == "Вторичные продажи",
+                SecondarySales.indicator.ilike("%продаж%"),
             )
         )
 
@@ -516,7 +516,7 @@ class SecondarySalesService(
             .select_from(SecondarySales)
             .join(SKU, SecondarySales.sku_id == SKU.id)
             .where(
-                SecondarySales.indicator == "Вторичные продажи",
+                SecondarySales.indicator.ilike("%продаж%"),
             )
         )
 

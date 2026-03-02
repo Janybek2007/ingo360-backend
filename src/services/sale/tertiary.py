@@ -348,7 +348,7 @@ class TertiarySalesService(
                 )
 
             if filters.indicator:
-                stmt = stmt.where(self.model.indicator == filters.indicator)
+                stmt = stmt.where(self.model.indicator.ilike(f"%{filters.indicator}%"))
 
             if filters.sort_by == "distributors" and not joined_pharmacy:
                 stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
@@ -414,7 +414,7 @@ class TertiarySalesService(
             .outerjoin(Distributor, Pharmacy.distributor_id == Distributor.id)
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
-                TertiarySalesAndStock.indicator == "Третичные продажи",
+                TertiarySalesAndStock.indicator.ilike("%продаж%"),
             )
         )
 
@@ -517,7 +517,7 @@ class TertiarySalesService(
         sales_packages = func.sum(
             case(
                 (
-                    TertiarySalesAndStock.indicator == "Третичные продажи",
+                    TertiarySalesAndStock.indicator.ilike("%продаж%"),
                     TertiarySalesAndStock.packages,
                 ),
                 else_=0,
@@ -526,7 +526,7 @@ class TertiarySalesService(
         sales_amount = func.sum(
             case(
                 (
-                    TertiarySalesAndStock.indicator == "Третичные продажи",
+                    TertiarySalesAndStock.indicator.ilike("%продаж%"),
                     TertiarySalesAndStock.amount,
                 ),
                 else_=0,
@@ -673,7 +673,7 @@ class TertiarySalesService(
                 ),
             )
             .where(
-                TertiarySalesAndStock.indicator == "Остаток",
+                TertiarySalesAndStock.indicator.ilike("%остат%"),
                 TertiarySalesAndStock.packages > 0,
             )
         )
