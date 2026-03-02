@@ -770,10 +770,10 @@ class TertiarySalesService(
         return result.mappings().all()
 
     @staticmethod
-    async def get_low_stock(
-        session: "AsyncSession",
-        company_id: int | None,
-        filters: sale.LowStockLevelFilter | None = None,
+    async def get_stock_report(
+            session: "AsyncSession",
+            filters: sale.SecTerSalesReportFilter | None = None,
+            company_id: int | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
         period_values = build_period_values(
@@ -781,26 +781,26 @@ class TertiarySalesService(
         )
 
         select_fields, group_by_fields, search_cols = build_dimensions(
-            LOW_STOCK_DIMENSTIONS_MAPPING, filters.group_by_dimensions
+            BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR, filters.group_by_dimensions
         )
 
         base_stmt = (
             select(
                 *select_fields,
                 period_key.label("period"),
-                func.cast(
-                    func.sum(TertiarySalesAndStock.packages).label("total_packages"),
-                    Numeric(10, 2),
-                ),
+                func.sum(TertiarySalesAndStock.packages).label("packages"),
+                func.round(func.sum(TertiarySalesAndStock.amount)).label("amount"),
             )
             .select_from(TertiarySalesAndStock)
             .join(SKU, TertiarySalesAndStock.sku_id == SKU.id)
             .join(Brand, SKU.brand_id == Brand.id)
+            .join(PromotionType, SKU.promotion_type_id == PromotionType.id)
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Pharmacy, TertiarySalesAndStock.pharmacy_id == Pharmacy.id)
-            .outerjoin(Employee, Pharmacy.responsible_employee_id == Employee.id)
+            .outerjoin(Distributor, Pharmacy.distributor_id == Distributor.id)
+            .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
-                TertiarySalesAndStock.indicator == "Остаток",
+                TertiarySalesAndStock.indicator.ilike('%остат%'),
             )
         )
 
@@ -812,9 +812,10 @@ class TertiarySalesService(
             [
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
+                InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
+                InOrNullSpec(Distributor.id, filters.distributor_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
-                InOrNullSpec(Employee.id, filters.responsible_employee_ids),
-                InOrNullSpec(Pharmacy.id, filters.pharmacy_ids),
+                InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
                 SearchSpec(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
@@ -830,16 +831,7 @@ class TertiarySalesService(
         )
 
         group_by_fields.append(period_key)
-        period_agg = (
-            base_stmt.group_by(*group_by_fields)
-            .having(
-                and_(
-                    func.sum(TertiarySalesAndStock.packages) > 0,
-                    func.sum(TertiarySalesAndStock.packages) < 1.0,
-                )
-            )
-            .cte("period_agg")
-        )
+        period_agg = base_stmt.group_by(*group_by_fields).cte("period_agg")
 
         final_select_fields = []
         final_group_by_fields = []
@@ -863,7 +855,9 @@ class TertiarySalesService(
             *final_select_fields,
             func.json_object_agg(
                 period_agg.c.period,
-                func.json_build_object("total_packages", period_agg.c.total_packages),
+                func.json_build_object(
+                    "packages", period_agg.c.packages, "amount", period_agg.c.amount
+                ),
             ).label("periods_data"),
         )
 
@@ -871,12 +865,12 @@ class TertiarySalesService(
             final_stmt = final_stmt.group_by(*final_group_by_fields)
 
         sort_map = {
-            "sku": getattr(base_stmt.c, "sku_name", None),
-            "brand": getattr(base_stmt.c, "brand_name", None),
-            "product_group": getattr(base_stmt.c, "product_group_name", None),
-            "responsible_employee": getattr(
-                base_stmt.c, "responsible_employee_name", None
-            ),
+            "sku": getattr(period_agg.c, "sku_name", None),
+            "brand": getattr(period_agg.c, "brand_name", None),
+            "promotion": getattr(period_agg.c, "promotion_type_name", None),
+            "product_group": getattr(period_agg.c, "product_group_name", None),
+            "distributor": getattr(period_agg.c, "distributor_name", None),
+            "geo_indicator": getattr(period_agg.c, "geo_indicator_name", None),
         }
 
         final_stmt = ListQueryHelper.apply_sorting_with_default(

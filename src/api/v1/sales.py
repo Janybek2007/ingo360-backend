@@ -642,14 +642,14 @@ async def get_numeric_distribution_report(
 
 
 @router.post(
-    "/tertiary/reports/low-stock-pharmacies",
+    "/tertiary/reports/stock",
     dependencies=[Depends(can_view_tertiary_sales)],
 )
-async def get_low_stock_pharmacies(
+async def get_tertiary_stock_report(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
-    filters: sale.LowStockLevelFilter,
+    filters: sale.SecTerSalesReportFilter,
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await tertiary_sales_service.get_low_stock(
+    return await tertiary_sales_service.get_stock_report(
         session, filters=filters, company_id=current_user.company_id
     )
