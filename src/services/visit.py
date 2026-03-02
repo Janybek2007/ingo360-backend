@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import and_, func, insert, or_, select
+from sqlalchemy import and_, func, insert, or_, select, literal
 
 from src.db.models import (
     Doctor,
@@ -547,7 +547,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             .select_from(all_doctors_subquery)
             .outerjoin(
                 doctors_with_visits_subquery,
-                and_(*join_conditions) if join_conditions else True,
+                and_(*join_conditions) if join_conditions else literal(True),
             )
         )
 
