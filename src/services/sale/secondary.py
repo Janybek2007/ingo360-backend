@@ -162,6 +162,15 @@ class SecondarySalesService(
                     if sku_name in missing_skus:
                         missing_keys.append(f"SKU: {sku_name}")
 
+                    for excel_col in ("упаковки", "сумма"):
+                        val = record.get(excel_col)
+                        if val is not None and not isinstance(val, (int, float)):
+                            cleaned = str(val).replace(" ", "").replace(",", ".")
+                            try:
+                                record[excel_col] = float(cleaned)
+                            except ValueError:
+                                missing_keys.append(f"некорректное число в '{excel_col}': {val}")
+
                     if missing_keys:
                         skipped_records.append(
                             {"row": row_index, "missing": missing_keys}
