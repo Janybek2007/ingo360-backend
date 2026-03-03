@@ -33,9 +33,10 @@ async def bulk_insert_countries(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await geography_service.country_service.import_excel(
+    result = await geography_service.country_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.post("/countries", response_model=list[geography.CountryResponse])

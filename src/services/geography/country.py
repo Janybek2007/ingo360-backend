@@ -9,6 +9,7 @@ from src.mapping.geography import region_mapping
 from src.schemas import geography as geography_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
+from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import ListQueryHelper
 from src.utils.mapping import map_record
 
@@ -44,8 +45,18 @@ class CountryService(
             }
             data_to_insert.append(map_record(r, region_mapping, relation_fields))
         stmt = insert(self.model).on_conflict_do_nothing()
-        await session.execute(stmt, data_to_insert)
+        if data_to_insert:
+            await session.execute(stmt, data_to_insert)
         await session.commit()
+
+        imported = len(data_to_insert)
+        return build_import_result(
+            total=len(records),
+            imported=imported,
+            skipped_records=[],
+            inserted=imported,
+            deduplicated_in_batch=0,
+        )
 
     async def get_multi(
         self,

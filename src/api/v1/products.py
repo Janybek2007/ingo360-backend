@@ -281,9 +281,10 @@ async def bulk_insert_promotion_types(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await product_serv.promotion_type_service.import_excel(
+    result = await product_serv.promotion_type_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.post(
@@ -441,9 +442,10 @@ async def bulk_insert_dosage_forms(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await product_serv.dosage_form_service.import_excel(
+    result = await product_serv.dosage_form_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.patch(
@@ -534,9 +536,10 @@ async def bulk_insert_dosages(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await product_serv.dosage_service.import_excel(
+    result = await product_serv.dosage_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.get(
@@ -633,9 +636,10 @@ async def bulk_insert_segments(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await product_serv.segment_service.import_excel(
+    result = await product_serv.segment_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.get(
