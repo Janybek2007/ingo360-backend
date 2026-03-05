@@ -79,9 +79,10 @@ async def bulk_insert_client_categories(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await client_service.client_category_service.import_excel(
+    result = await client_service.client_category_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.get(
@@ -480,9 +481,10 @@ async def bulk_insert_specialities(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await client_service.speciality_service.import_excel(
+    result = await client_service.speciality_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.post(
@@ -733,9 +735,10 @@ async def bulk_insert_distributors(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await client_service.distributor_service.import_excel(
+    result = await client_service.distributor_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.get(
@@ -840,9 +843,10 @@ async def bulk_insert_geo_indicators(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await client_service.geo_indicator_service.import_excel(
+    result = await client_service.geo_indicator_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.get(

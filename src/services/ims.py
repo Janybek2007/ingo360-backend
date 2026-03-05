@@ -196,7 +196,6 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                 imported=imported_count,
                 skipped_records=[],
                 inserted=imported_count,
-                updated=0,
                 deduplicated_in_batch=0,
             )
         finally:

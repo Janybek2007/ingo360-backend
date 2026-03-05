@@ -97,17 +97,17 @@ class DistrictService(
                 "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, district_mapping, relation_fields))
-
         if data_to_insert:
-            stmt = insert(self.model).on_conflict_do_nothing()
-            await session.execute(stmt, data_to_insert)
-
+            await session.execute(insert(self.model), data_to_insert)
         await session.commit()
 
+        imported = len(data_to_insert)
         return build_import_result(
             total=len(records),
-            imported=len(data_to_insert),
-            skipped_records=skipped_records,
+            imported=imported,
+            skipped_records=[],
+            inserted=imported,
+            deduplicated_in_batch=0,
         )
 
     @staticmethod

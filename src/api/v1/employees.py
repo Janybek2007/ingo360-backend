@@ -110,9 +110,10 @@ async def bulk_insert_employees(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await employee_service.employee_service.import_excel(
+    result = await employee_service.employee_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result
 
 
 @router.patch(
@@ -224,6 +225,7 @@ async def bulk_insert_positions(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only Excel files are allowed",
         )
-    await employee_service.position_service.import_excel(
+    result = await employee_service.position_service.import_excel(
         session, file, user_id=current_user.id
     )
+    return result

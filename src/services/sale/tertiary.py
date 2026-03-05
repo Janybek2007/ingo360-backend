@@ -285,7 +285,6 @@ class TertiarySalesService(
                 skipped_records=skipped_records,
                 skipped_total=skipped_total,
                 inserted=inserted,
-                updated=updated,
                 deduplicated_in_batch=deduplicated_in_batch,
             )
         finally:

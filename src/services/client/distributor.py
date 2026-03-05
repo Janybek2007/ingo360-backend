@@ -9,6 +9,7 @@ from src.mapping.clients import distributor_mapping
 from src.schemas import client
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
+from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import ListQueryHelper
 from src.utils.mapping import map_record
 
@@ -91,5 +92,15 @@ class DistributorService(
                 "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, distributor_mapping, relation_fields))
-        await session.execute(insert(self.model), data_to_insert)
+        if data_to_insert:
+            await session.execute(insert(self.model), data_to_insert)
         await session.commit()
+
+        imported = len(data_to_insert)
+        return build_import_result(
+            total=len(records),
+            imported=imported,
+            skipped_records=[],
+            inserted=imported,
+            deduplicated_in_batch=0,
+        )

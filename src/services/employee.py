@@ -213,6 +213,8 @@ class EmployeeService(
             total=len(records),
             imported=len(data_to_insert),
             skipped_records=skipped_records,
+            inserted=len(data_to_insert),
+            deduplicated_in_batch=0,
         )
 
 
@@ -290,8 +292,18 @@ class PositionService(
                 "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, position_mapping, relation_fields))
-        await session.execute(insert(self.model), data_to_insert)
+        if data_to_insert:
+            await session.execute(insert(self.model), data_to_insert)
         await session.commit()
+
+        imported = len(data_to_insert)
+        return build_import_result(
+            total=len(records),
+            imported=imported,
+            skipped_records=[],
+            inserted=imported,
+            deduplicated_in_batch=0,
+        )
 
 
 employee_service = EmployeeService(employees.Employee)

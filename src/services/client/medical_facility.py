@@ -288,4 +288,6 @@ class MedicalFacilityService(
             total=len(records),
             imported=len(data_to_insert),
             skipped_records=skipped_records,
+            inserted=len(data_to_insert),
+            deduplicated_in_batch=0,
         )

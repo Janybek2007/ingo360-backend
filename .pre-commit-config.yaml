@@ -1,16 +1,16 @@
 repos:
   - repo: local
     hooks:
-      - id: ruff-fix-docker
-        name: ruff remove unused imports (docker)
-        entry: docker compose exec -T back ruff check . --select F401,I --fix
+      - id: ruff-fix
+        name: ruff remove unused imports
+        entry: ruff check . --select F401,I --fix
         language: system
         types: [python]
         pass_filenames: false
 
-      - id: black-docker
-        name: black (docker)
-        entry: docker compose exec -T back black .
+      - id: black
+        name: black
+        entry: black .
         language: system
         types: [python]
         pass_filenames: false

@@ -274,7 +274,6 @@ class SecondarySalesService(
                 imported=imported,
                 skipped_records=skipped_records,
                 inserted=inserted,
-                updated=updated,
                 deduplicated_in_batch=deduplicated_in_batch,
             )
         finally:
