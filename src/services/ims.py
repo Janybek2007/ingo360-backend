@@ -1,7 +1,7 @@
 import os
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile, status
@@ -30,6 +30,8 @@ from src.utils.mapping import map_record
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.schemas.base_filter import PaginatedResponse
 
 
 class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
@@ -77,7 +79,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
         session: "AsyncSession",
         filters: IMSRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> Sequence[ModelType]:
+    ) -> PaginatedResponse:
         stmt = select(self.model)
 
         if load_options:
@@ -117,10 +119,28 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                     NumberTypedSpec(self.model.packages, filters.packages),
                 ],
             )
+            # Count before pagination
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total_count = await session.scalar(count_stmt)
+
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+        else:
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total_count = await session.scalar(count_stmt)
 
         result = await session.execute(stmt)
-        return result.unique().scalars().all()
+
+        items = result.unique().scalars().all()
+
+        hasPrev = filters.offset > 0 if filters else False
+        hasNext = len(items) == filters.limit if filters and filters.limit else False
+
+        return PaginatedResponse(
+            result=items,
+            hasPrev=hasPrev,
+            hasNext=hasNext,
+            count=total_count,
+        )
 
     async def iter_multi(
         self,

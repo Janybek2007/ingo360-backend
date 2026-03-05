@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, UploadFile
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
 from src.db.session import db_session
+from src.schemas.base_filter import PaginatedResponse
 from src.schemas.export import ExportExcelRequest
 from src.schemas.ims import (
     IMSCreate,
@@ -25,7 +26,9 @@ router = APIRouter()
 
 
 @router.post(
-    "", dependencies=[Depends(current_operator_user)], response_model=list[IMSResponse]
+    "",
+    dependencies=[Depends(current_operator_user)],
+    response_model=PaginatedResponse[IMSResponse],
 )
 async def get_all_ims(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],

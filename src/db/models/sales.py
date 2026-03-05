@@ -1,7 +1,7 @@
-from typing import TYPE_CHECKING, Optional
 from decimal import Decimal
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, Index, String, UniqueConstraint, Numeric
+from sqlalchemy import ForeignKey, Index, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base

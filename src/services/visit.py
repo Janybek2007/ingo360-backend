@@ -1,11 +1,11 @@
 import asyncio
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import and_, func, insert, or_, select, literal
+from sqlalchemy import and_, func, insert, literal, or_, select
 
 from src.db.models import (
     Doctor,
@@ -42,7 +42,10 @@ from src.utils.mapping import map_record
 from .base import BaseService
 
 if TYPE_CHECKING:
+    from fastapi import UploadFile
     from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.schemas.base_filter import PaginatedResponse
 
 
 class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
@@ -90,7 +93,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         session: "AsyncSession",
         filters: VisitsRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> Sequence[ModelType]:
+    ) -> PaginatedResponse[visit.VisitResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -133,10 +136,26 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 ],
             )
 
+        # Count before pagination
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_count = await session.scalar(count_stmt)
+
+        if filters:
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
-        return result.unique().scalars().all()
+
+        items = result.unique().scalars().all()
+
+        hasPrev = filters.offset > 0 if filters else False
+        hasNext = len(items) == filters.limit if filters and filters.limit else False
+
+        return PaginatedResponse(
+            result=items,
+            hasPrev=hasPrev,
+            hasNext=hasNext,
+            count=total_count,
+        )
 
     async def iter_multi(
         self,

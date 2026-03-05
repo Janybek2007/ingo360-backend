@@ -8,6 +8,7 @@ from src.api.dependencies.current_user import current_operator_user
 from src.db.models import Doctor, MedicalFacility, Pharmacy, User
 from src.db.session import db_session
 from src.schemas import client
+from src.schemas.base_filter import PaginatedResponse
 from src.schemas.export import ExportExcelRequest
 from src.services import client as client_service
 
@@ -16,7 +17,7 @@ router = APIRouter()
 
 @router.post(
     "/client-categories",
-    response_model=list[client.ClientCategoryResponse],
+    response_model=PaginatedResponse[client.ClientCategoryResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_client_categories(
@@ -129,7 +130,7 @@ async def delete_client_category(
 
 @router.post(
     "/doctors",
-    response_model=list[client.DoctorResponse],
+    response_model=PaginatedResponse[client.DoctorResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_doctors(
@@ -272,7 +273,7 @@ async def delete_doctor(
 
 @router.post(
     "/pharmacies",
-    response_model=list[client.PharmacyResponse],
+    response_model=PaginatedResponse[client.PharmacyResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_pharmacies(
@@ -432,7 +433,7 @@ async def delete_pharmacy(
 
 @router.post(
     "/specialities",
-    response_model=list[client.SpecialityResponse],
+    response_model=PaginatedResponse[client.SpecialityResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_specialities(
@@ -538,7 +539,7 @@ async def delete_speciality(
 
 @router.post(
     "/medical-facilities",
-    response_model=list[client.MedicalFacilityResponse],
+    response_model=PaginatedResponse[client.MedicalFacilityResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_medical_facilities(
@@ -674,7 +675,7 @@ async def delete_medical_facility(
 
 @router.post(
     "/distributors",
-    response_model=list[client.DistributorResponse],
+    response_model=PaginatedResponse[client.DistributorResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_distributors(
@@ -780,7 +781,7 @@ async def delete_distributor(
 
 @router.post(
     "/geo-indicators",
-    response_model=list[client.GeoIndicatorResponse],
+    response_model=PaginatedResponse[client.GeoIndicatorResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_geo_indicators(

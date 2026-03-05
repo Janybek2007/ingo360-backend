@@ -8,6 +8,7 @@ from src.api.dependencies.company import can_view_visits
 from src.api.dependencies.current_user import current_active_user, current_operator_user
 from src.db.models import MedicalFacility, Pharmacy, User, Visit
 from src.db.session import db_session
+from src.schemas.base_filter import PaginatedResponse
 from src.schemas.export import ExportExcelRequest
 from src.schemas.visit import (
     DoctorsBySpecialtyResponse,
@@ -27,7 +28,7 @@ router = APIRouter()
 
 @router.post(
     "",
-    response_model=list[VisitResponse],
+    response_model=PaginatedResponse[VisitResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_visits(

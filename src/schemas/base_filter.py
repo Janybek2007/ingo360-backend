@@ -1,8 +1,17 @@
-from typing import Literal
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel
 
 SortDirection = Literal["ASC", "DESC"]
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    result: list[T]
+    hasPrev: bool
+    hasNext: bool
+    count: int
 
 
 class BaseFilter(BaseModel):

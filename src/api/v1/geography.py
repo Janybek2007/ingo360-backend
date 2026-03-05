@@ -8,6 +8,7 @@ from src.api.dependencies.current_user import current_active_user, current_opera
 from src.db.models import District, Region, Settlement, User
 from src.db.session import db_session
 from src.schemas import geography
+from src.schemas.base_filter import PaginatedResponse
 from src.schemas.export import ExportExcelRequest
 from src.services import geography as geography_service
 
@@ -39,7 +40,7 @@ async def bulk_insert_countries(
     return result
 
 
-@router.post("/countries", response_model=list[geography.CountryResponse])
+@router.post("/countries", response_model=PaginatedResponse[geography.CountryResponse])
 async def get_countries(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     filters: geography.CountryListRequest,
@@ -109,7 +110,7 @@ async def create_region(
     )
 
 
-@router.post("/regions", response_model=list[geography.RegionResponse])
+@router.post("/regions", response_model=PaginatedResponse[geography.RegionResponse])
 async def get_regions(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     filters: geography.RegionListRequest,
@@ -206,7 +207,9 @@ async def create_settlement(
     )
 
 
-@router.post("/settlements", response_model=list[geography.SettlementResponse])
+@router.post(
+    "/settlements", response_model=PaginatedResponse[geography.SettlementResponse]
+)
 async def get_settlements(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     filters: geography.SettlementListRequest,
@@ -311,7 +314,7 @@ async def create_district(
     )
 
 
-@router.post("/districts", response_model=list[geography.DistrictResponse])
+@router.post("/districts", response_model=PaginatedResponse[geography.DistrictResponse])
 async def get_districts(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     filters: geography.DistrictListRequest,

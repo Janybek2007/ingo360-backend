@@ -1,10 +1,9 @@
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Index, ForeignKey
+from sqlalchemy import ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-
 
 if TYPE_CHECKING:
     from . import ImportLogs
@@ -26,9 +25,7 @@ class IMS(Base):
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
-    import_log: Mapped[Optional["ImportLogs"]] = relationship(
-        back_populates="ims"
-    )
+    import_log: Mapped[Optional["ImportLogs"]] = relationship(back_populates="ims")
 
     __table_args__ = (
         Index("idx_ims_period", "period"),

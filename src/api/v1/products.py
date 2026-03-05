@@ -8,6 +8,7 @@ from src.api.dependencies.current_user import current_active_user, current_opera
 from src.db.models import SKU, Brand, ProductGroup, User
 from src.db.session import db_session
 from src.schemas import product
+from src.schemas.base_filter import PaginatedResponse
 from src.schemas.export import ExportExcelRequest
 from src.services import product as product_serv
 
@@ -48,7 +49,7 @@ async def bulk_insert_product_groups(
 
 @router.post(
     "/product-groups",
-    response_model=list[product.ProductGroupResponse],
+    response_model=PaginatedResponse[product.ProductGroupResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_product_groups(
@@ -150,7 +151,7 @@ async def create_brand(
 
 @router.post(
     "/brands",
-    response_model=list[product.BrandResponse],
+    response_model=PaginatedResponse[product.BrandResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_brands(
@@ -289,7 +290,7 @@ async def bulk_insert_promotion_types(
 
 @router.post(
     "/promotion-types",
-    response_model=list[product.PromotionTypeResponse],
+    response_model=PaginatedResponse[product.PromotionTypeResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_promotion_types(
@@ -381,7 +382,7 @@ async def create_dosage_form(
 
 @router.post(
     "/dosage-forms",
-    response_model=list[product.DosageFormResponse],
+    response_model=PaginatedResponse[product.DosageFormResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_dosage_forms(
@@ -487,7 +488,7 @@ async def create_dosage(
 
 @router.post(
     "/dosages",
-    response_model=list[product.DosageResponse],
+    response_model=PaginatedResponse[product.DosageResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_dosages(
@@ -587,7 +588,7 @@ async def create_segment(
 
 @router.post(
     "/segments",
-    response_model=list[product.SegmentResponse],
+    response_model=PaginatedResponse[product.SegmentResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_segments(
@@ -698,7 +699,7 @@ async def create_sku(
 
 @router.post(
     "/skus",
-    response_model=list[product.SKUResponse],
+    response_model=PaginatedResponse[product.SKUResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def get_skus(

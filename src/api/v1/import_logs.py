@@ -1,6 +1,4 @@
-from datetime import datetime
 from typing import Annotated
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,18 +13,6 @@ from src.services.import_log import import_log_service
 from src.tasks.import_log_batch_delete import delete_import_log_task
 
 router = APIRouter(dependencies=[Depends(current_operator_user)])
-
-
-def format_created_at(dt: datetime | None) -> str | None:
-    if dt is None:
-        return None
-
-    # считаем, что created_at в БД хранится в UTC
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-
-    bishkek_dt = dt.astimezone(ZoneInfo("Asia/Bishkek"))
-    return bishkek_dt.strftime("%d.%m.%Y %H:%M")
 
 
 @router.get("", response_model=list[ImportLogResponse])
@@ -49,7 +35,7 @@ async def export_distributors_excel(
         file_name=payload.file_name,
         service_path="src.services.import_log.ImportLogService",
         model_path="src.db.models.ImportLogs",
-        serializer_path="src.schemas.import_log.ImportLogResponse",
+        serializer_path="src.schemas.import_log.ImportLogFormattedResponse",
         header_map=payload.header_map,
         fields_map=payload.fields_map,
         boolean_map=payload.boolean_map,

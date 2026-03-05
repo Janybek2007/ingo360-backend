@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -10,7 +10,6 @@ from src.db.models import (
     SKU,
     Brand,
     Distributor,
-    Employee,
     GeoIndicator,
     ImportLogs,
     Pharmacy,
@@ -22,7 +21,6 @@ from src.db.models import (
 from src.mapping.dimension_mapping.sale import (
     BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR,
     BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR_AND_SEGMENT,
-    LOW_STOCK_DIMENSTIONS_MAPPING,
 )
 from src.mapping.sales import secondary_sales_mapping
 from src.schemas import sale
@@ -45,6 +43,7 @@ if TYPE_CHECKING:
     from fastapi import UploadFile
     from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.schemas.base_filter import PaginatedResponse
 from src.services.sale.utils import upsert_batch_with_stats
 from src.utils.case_insensitive_dict import CaseInsensitiveDict
 from src.utils.case_insensitive_set import CaseInsensitiveSet
@@ -177,7 +176,9 @@ class TertiarySalesService(
                             try:
                                 record[excel_col] = float(cleaned)
                             except ValueError:
-                                missing_keys.append(f"некорректное число в '{excel_col}': {val}")
+                                missing_keys.append(
+                                    f"некорректное число в '{excel_col}': {val}"
+                                )
 
                     if missing_keys:
                         skipped_total += 1
@@ -295,7 +296,7 @@ class TertiarySalesService(
         session: "AsyncSession",
         filters: sale.SecondaryTertiarySalesListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> Sequence[ModelType]:
+    ) -> PaginatedResponse[sale.TertiarySalesResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -364,10 +365,28 @@ class TertiarySalesService(
             if filters.sort_by == "brands" and not joined_sku:
                 stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
 
+            # Count before pagination
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total_count = await session.scalar(count_stmt)
+
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+        else:
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total_count = await session.scalar(count_stmt)
 
         result = await session.execute(stmt)
-        return result.unique().scalars().all()
+
+        items = result.unique().scalars().all()
+
+        hasPrev = filters.offset > 0 if filters else False
+        hasNext = len(items) == filters.limit if filters and filters.limit else False
+
+        return PaginatedResponse(
+            result=items,
+            hasPrev=hasPrev,
+            hasNext=hasNext,
+            count=total_count,
+        )
 
     async def iter_multi(
         self,
@@ -779,9 +798,9 @@ class TertiarySalesService(
 
     @staticmethod
     async def get_stock_report(
-            session: "AsyncSession",
-            filters: sale.SecTerSalesReportFilter | None = None,
-            company_id: int | None = None,
+        session: "AsyncSession",
+        filters: sale.SecTerSalesReportFilter | None = None,
+        company_id: int | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
         period_values = build_period_values(
@@ -808,7 +827,7 @@ class TertiarySalesService(
             .outerjoin(Distributor, Pharmacy.distributor_id == Distributor.id)
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
-                TertiarySalesAndStock.indicator.ilike('%остат%'),
+                TertiarySalesAndStock.indicator.ilike("%остат%"),
             )
         )
 

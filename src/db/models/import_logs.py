@@ -7,6 +7,7 @@ from .base import Base
 
 if TYPE_CHECKING:
     from . import (
+        IMS,
         SKU,
         Brand,
         ClientCategory,
@@ -31,8 +32,7 @@ if TYPE_CHECKING:
         Speciality,
         TertiarySalesAndStock,
         User,
-        IMS,
-        Visit
+        Visit,
     )
 
 

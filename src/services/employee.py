@@ -1,8 +1,8 @@
 import asyncio
-from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
@@ -26,6 +26,8 @@ from .base import BaseService
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.schemas.base_filter import PaginatedResponse
+
 
 class EmployeeService(
     BaseService[employees.Employee, employee.EmployeeCreate, employee.EmployeeUpdate]
@@ -35,7 +37,7 @@ class EmployeeService(
         session: "AsyncSession",
         filters: employee.EmployeeListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> Sequence[employees.Employee]:
+    ) -> PaginatedResponse[employee.EmployeeResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -56,8 +58,6 @@ class EmployeeService(
             sort_map,
             self.model.created_at.desc(),
         )
-        print(filters)
-
         if filters:
             stmt = ListQueryHelper.apply_specs(
                 stmt,
@@ -72,11 +72,28 @@ class EmployeeService(
                     InOrNullSpec(self.model.company_id, filters.company_ids),
                 ],
             )
+            # Count before pagination
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total_count = await session.scalar(count_stmt)
 
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+        else:
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total_count = await session.scalar(count_stmt)
 
         result = await session.execute(stmt)
-        return result.unique().scalars().all()
+
+        items = result.unique().scalars().all()
+
+        hasPrev = filters.offset > 0 if filters else False
+        hasNext = len(items) == filters.limit if filters and filters.limit else False
+
+        return PaginatedResponse(
+            result=items,
+            hasPrev=hasPrev,
+            hasNext=hasNext,
+            count=total_count,
+        )
 
     async def iter_multi(
         self,
@@ -226,7 +243,7 @@ class PositionService(
         session: "AsyncSession",
         filters: employee.PositionListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> Sequence[employees.Position]:
+    ) -> PaginatedResponse[employee.PositionResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -245,10 +262,28 @@ class PositionService(
                 stmt = ListQueryHelper.apply_string_typed_filter(
                     stmt, self.model.name, filters.name
                 )
+            # Count before pagination
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total_count = await session.scalar(count_stmt)
+
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
+        else:
+            count_stmt = select(func.count()).select_from(stmt.subquery())
+            total_count = await session.scalar(count_stmt)
 
         result = await session.execute(stmt)
-        return result.unique().scalars().all()
+
+        items = result.unique().scalars().all()
+
+        hasPrev = filters.offset > 0 if filters else False
+        hasNext = len(items) == filters.limit if filters and filters.limit else False
+
+        return PaginatedResponse(
+            result=items,
+            hasPrev=hasPrev,
+            hasNext=hasNext,
+            count=total_count,
+        )
 
     async def iter_multi(
         self,

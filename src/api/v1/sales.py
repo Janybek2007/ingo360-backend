@@ -20,6 +20,7 @@ from src.db.models import (
 )
 from src.db.session import db_session
 from src.schemas import sale
+from src.schemas.base_filter import PaginatedResponse
 from src.schemas.export import ExportExcelRequest
 from src.services.sale import (
     primary_sales_service,
@@ -32,7 +33,7 @@ router = APIRouter()
 
 @router.post(
     "/primary",
-    response_model=list[sale.PrimarySalesAndStockResponse],
+    response_model=PaginatedResponse[sale.PrimarySalesAndStockResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def list_primary_sales(
@@ -261,7 +262,7 @@ async def delete_primary_sales(
 
 @router.post(
     "/secondary",
-    response_model=list[sale.SecondarySalesResponse],
+    response_model=PaginatedResponse[sale.SecondarySalesResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def list_secondary_sales(
@@ -463,7 +464,7 @@ async def delete_secondary_sales(
 
 @router.post(
     "/tertiary",
-    response_model=list[sale.TertiarySalesResponse],
+    response_model=PaginatedResponse[sale.TertiarySalesResponse],
     dependencies=[Depends(current_operator_user)],
 )
 async def list_tertiary_sales(

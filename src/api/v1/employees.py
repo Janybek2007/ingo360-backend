@@ -8,6 +8,7 @@ from src.api.dependencies.current_user import current_active_user, current_opera
 from src.db.models import Employee, User
 from src.db.session import db_session
 from src.schemas import employee as employee_schema
+from src.schemas.base_filter import PaginatedResponse
 from src.schemas.export import ExportExcelRequest
 from src.services import employee as employee_service
 
@@ -31,7 +32,9 @@ async def create_employee(
     )
 
 
-@router.post("/employees", response_model=list[employee_schema.EmployeeResponse])
+@router.post(
+    "/employees", response_model=PaginatedResponse[employee_schema.EmployeeResponse]
+)
 async def get_employees(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     filters: employee_schema.EmployeeListRequest,
@@ -151,7 +154,9 @@ async def create_position(
     return await employee_service.position_service.create(session, position)
 
 
-@router.post("/positions", response_model=list[employee_schema.PositionResponse])
+@router.post(
+    "/positions", response_model=PaginatedResponse[employee_schema.PositionResponse]
+)
 async def get_positions(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     filters: employee_schema.PositionListRequest,

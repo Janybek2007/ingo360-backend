@@ -6,7 +6,6 @@ from sqlalchemy import text
 from src.celery_app import celery_app
 from src.db.session import db_session
 
-
 get_async_session_context = contextlib.asynccontextmanager(db_session.get_session)
 
 
@@ -24,7 +23,7 @@ def delete_import_log_task(self, import_log_id: int, table_name: str):
                             LIMIT 15000
                         )
                     """),
-                    {"import_log_id": import_log_id}
+                    {"import_log_id": import_log_id},
                 )
                 await session.commit()
 
@@ -34,8 +33,7 @@ def delete_import_log_task(self, import_log_id: int, table_name: str):
                 await asyncio.sleep(0.1)
 
             await session.execute(
-                text("DELETE FROM import_logs WHERE id = :id"),
-                {"id": import_log_id}
+                text("DELETE FROM import_logs WHERE id = :id"), {"id": import_log_id}
             )
             await session.commit()
 

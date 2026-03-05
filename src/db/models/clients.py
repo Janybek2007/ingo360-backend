@@ -1,8 +1,8 @@
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey, Index, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import CITEXT
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
@@ -51,9 +51,7 @@ class Doctor(Base):
     medical_facility_id: Mapped[int] = mapped_column(
         ForeignKey("medical_facilities.id"),
     )
-    medical_facility: Mapped["MedicalFacility"] = relationship(
-        back_populates="doctors"
-    )
+    medical_facility: Mapped["MedicalFacility"] = relationship(back_populates="doctors")
     speciality_id: Mapped[int] = mapped_column(ForeignKey("specialities.id"))
     speciality: Mapped["Speciality"] = relationship(back_populates="doctors")
     client_category_id: Mapped[int] = mapped_column(ForeignKey("client_categories.id"))
@@ -62,9 +60,7 @@ class Doctor(Base):
     product_group_id: Mapped[int] = mapped_column(
         ForeignKey("product_groups.id"),
     )
-    product_group: Mapped["ProductGroup"] = relationship(
-        back_populates="doctors"
-    )
+    product_group: Mapped["ProductGroup"] = relationship(back_populates="doctors")
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
@@ -77,9 +73,12 @@ class Doctor(Base):
         Index("idx_doctor_speciality", "speciality_id"),
         Index("idx_doctor_medical_facility", "medical_facility_id"),
         UniqueConstraint(
-            "full_name", "medical_facility_id", "speciality_id", "company_id",
-            name="uq_doctor_full_name_medical_facility_speciality_company"
-        )
+            "full_name",
+            "medical_facility_id",
+            "speciality_id",
+            "company_id",
+            name="uq_doctor_full_name_medical_facility_speciality_company",
+        ),
     )
 
 
@@ -140,7 +139,12 @@ class Pharmacy(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("name", "product_group_id", "company_id", name="uq_pharmacy_name_group_company"),
+        UniqueConstraint(
+            "name",
+            "product_group_id",
+            "company_id",
+            name="uq_pharmacy_name_group_company",
+        ),
         Index("idx_pharmacy_company", "company_id"),
         Index("idx_pharmacy_distributor", "distributor_id"),
         Index("idx_pharmacy_geo_indicator", "geo_indicator_id"),
@@ -192,7 +196,7 @@ class MedicalFacility(Base):
     __table_args__ = (
         UniqueConstraint("name", "geo_indicator_id", name="uq_facility_name_indicator"),
         Index("idx_med_facility_geo_indicator", "geo_indicator_id"),
-        UniqueConstraint("name", "settlement_id", name="uq_facility_name_settlement")
+        UniqueConstraint("name", "settlement_id", name="uq_facility_name_settlement"),
     )
 
 

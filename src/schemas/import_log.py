@@ -15,7 +15,7 @@ class ImportLogUpdate(BaseModel):
     records_count: int | None = None
 
 
-class ImportLogResponse(BaseModel):
+class ImportLogBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -23,4 +23,11 @@ class ImportLogResponse(BaseModel):
     user_last_name: str
     target_table: str
     records_count: int
+
+
+class ImportLogResponse(ImportLogBase):
     created_at: datetime
+
+
+class ImportLogFormattedResponse(ImportLogBase):
+    created_at: str
