@@ -1040,6 +1040,18 @@ class PrimarySalesAndStockService(
             .where(PrimarySalesAndStock.indicator.ilike("%продаж%"))
         )
 
+        if company_id is not None:
+            period_totals = period_totals.where(SKU.company_id == company_id)
+
+        period_totals = ListQueryHelper.apply_specs(
+            period_totals,
+            [
+                InOrNullSpec(SKU.brand_id, filters.brand_ids),
+                InOrNullSpec(SKU.product_group_id, filters.product_group_ids),
+                InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
+            ],
+        )
+
         period_totals = ListQueryHelper.apply_period_values(
             period_totals,
             period_values,
