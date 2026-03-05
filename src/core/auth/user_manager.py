@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence
 from fastapi import HTTPException, status
 from fastapi_users import BaseUserManager, IntegerIDMixin, exceptions
 from fastapi_users.db import BaseUserDatabase
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, update, case
 from sqlalchemy.sql import ColumnElement
 
 from src.core.settings import settings
@@ -267,7 +267,7 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
                 stmt = stmt.where(User.is_operator.is_(True))
 
             if filters.sort_by and filters.sort_order:
-                role_value = func.case(
+                role_value = case(
                     (User.is_admin.is_(True), 2),
                     (User.is_operator.is_(True), 1),
                     else_=0,
