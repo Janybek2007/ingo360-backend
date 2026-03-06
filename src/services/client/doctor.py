@@ -21,6 +21,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,18 +130,36 @@ class DoctorService(
     ):
         records = await parse_excel_file(file)
 
+        validate_required_columns(
+            records,
+            {
+                "фио|фио врача|ФИО|full_name|name",
+                "специальность|speciality|специальность врача",
+                "компания|company",
+                "лпу|medical_facility",
+                "группа|product_group",
+            },
+        )
+
         import_log = ImportLogs(
             uploaded_by=user_id,
             target_table="Врачи",
             records_count=len(records),
             target_table_name=self.model.__tablename__,
         )
+
         session.add(import_log)
         await session.flush()
 
         for r in records:
             if "фио врача" in r and "фио" not in r:
                 r["фио"] = r.get("фио врача")
+            if "ФИО" in r and "фио" not in r:
+                r["фио"] = r.get("ФИО")
+            if "full_name" in r and "фио" not in r:
+                r["фио"] = r.get("full_name")
+            if "name" in r and "фио" not in r:
+                r["фио"] = r.get("name")
             if (
                 "ответственный сотрудник" in r
                 and "фио ответственного сотрудника" not in r
@@ -155,14 +174,22 @@ class DoctorService(
         speciality_map, missing_specialities = await self.get_id_map(
             session, Speciality, "name", {r["специальность"] for r in records}
         )
-        client_category_map, missing_client_categories = await self.get_id_map(
-            session, ClientCategory, "name", {r["категория"] for r in records}
+
+        client_category_values = {
+            r.get("категория") for r in records if r.get("категория") is not None
+        }
+        client_category_map, missing_client_categories = (
+            await self.get_id_map(
+                session, ClientCategory, "name", client_category_values
+            )
+            if client_category_values
+            else ({}, set())
         )
 
         employee_values = {
-            r["фио ответственного сотрудника"]
+            r.get("фио ответственного сотрудника")
             for r in records
-            if r["фио ответственного сотрудника"] is not None
+            if r.get("фио ответственного сотрудника") is not None
         }
         employee_map, missing_employees = (
             await self.get_id_map(session, Employee, "full_name", employee_values)
@@ -170,20 +197,12 @@ class DoctorService(
             else ({}, set())
         )
 
-        medical_facility_values = {r["лпу"] for r in records if r["лпу"] is not None}
-        medical_facility_map, missing_medical_facilities = (
-            await self.get_id_map(
-                session, MedicalFacility, "name", medical_facility_values
-            )
-            if medical_facility_values
-            else ({}, set())
+        medical_facility_map, missing_medical_facilities = await self.get_id_map(
+            session, MedicalFacility, "name", {r["лпу"] for r in records}
         )
 
-        product_group_values = {r["группа"] for r in records if r["группа"] is not None}
-        product_group_map, missing_product_groups = (
-            await self.get_id_map(session, ProductGroup, "name", product_group_values)
-            if product_group_values
-            else ({}, set())
+        product_group_map, missing_product_groups = await self.get_id_map(
+            session, ProductGroup, "name", {r["группа"] for r in records}
         )
 
         company_map, missing_companies = await self.get_id_map(
@@ -199,19 +218,21 @@ class DoctorService(
             if r["специальность"] in missing_specialities:
                 missing_keys.append(f"специальность: {r['специальность']}")
 
-            if r["категория"] in missing_client_categories:
+            if r.get("категория") and r.get("категория") in missing_client_categories:
                 missing_keys.append(f"категория: {r['категория']}")
 
             if (
-                r["фио ответственного сотрудника"]
-                and r["фио ответственного сотрудника"] in missing_employees
+                r.get("фио ответственного сотрудника")
+                and r.get("фио ответственного сотрудника") in missing_employees
             ):
-                missing_keys.append(f"сотрудник: {r['фио ответственного сотрудника']}")
+                missing_keys.append(
+                    f"сотрудник: {r.get('фио ответственного сотрудника')}"
+                )
 
-            if r["лпу"] and r["лпу"] in missing_medical_facilities:
+            if r["лпу"] in missing_medical_facilities:
                 missing_keys.append(f"ЛПУ: {r['лпу']}")
 
-            if r["группа"] and r["группа"] in missing_product_groups:
+            if r["группа"] in missing_product_groups:
                 missing_keys.append(f"группа: {r['группа']}")
 
             if r["компания"] in missing_companies:
@@ -223,27 +244,34 @@ class DoctorService(
 
             relation_fields = {
                 "responsible_employee_id": employee_map.get(
-                    r["фио ответственного сотрудника"]
+                    r.get("фио ответственного сотрудника")
                 ),
-                "medical_facility_id": medical_facility_map.get(r["лпу"]),
+                "medical_facility_id": medical_facility_map[r["лпу"]],
                 "speciality_id": speciality_map[r["специальность"]],
-                "client_category_id": client_category_map[r["категория"]],
-                "product_group_id": product_group_map.get(r["группа"]),
+                "client_category_id": client_category_map.get(r.get("категория")),
+                "product_group_id": product_group_map[r["группа"]],
                 "company_id": company_map[r["компания"]],
                 "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, doctor_mapping, relation_fields))
 
+        inserted_ids = []
         if data_to_insert:
-            stmt = insert(self.model).on_conflict_do_nothing()
-            await session.execute(stmt, data_to_insert)
+            stmt = (
+                insert(self.model)
+                .values(data_to_insert)
+                .on_conflict_do_nothing()
+                .returning(self.model.id)
+            )
+            result = await session.execute(stmt)
+            inserted_ids = result.scalars().all()
 
         await session.commit()
 
         return build_import_result(
             total=len(records),
-            imported=len(data_to_insert),
+            imported=len(inserted_ids),
             skipped_records=skipped_records,
-            inserted=len(data_to_insert),
-            deduplicated_in_batch=0,
+            inserted=len(inserted_ids),
+            deduplicated=len(data_to_insert) - len(inserted_ids),
         )

@@ -1,4 +1,3 @@
-from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, AsyncIterator, Sequence
 
 from sqlalchemy import select
@@ -10,6 +9,7 @@ from src.schemas.import_log import (
     ImportLogResponse,
     ImportLogUpdate,
 )
+from src.utils.format_date import format_date
 from src.utils.list_query_helper import ListQueryHelper
 
 from .base import BaseService, FilterSchemaType, ModelType
@@ -65,18 +65,8 @@ class ImportLogService(BaseService[ImportLogs, ImportLogCreate, ImportLogUpdate]
         stream = await session.stream(stmt.execution_options(yield_per=chunk_size))
         async for row in stream:
             data = dict(row._mapping)
-            data["created_at"] = format_created_at(data["created_at"])
+            data["created_at"] = format_date(data["created_at"])
             yield ImportLogFormattedResponse(**data)
-
-
-def format_created_at(created_at: datetime) -> str:
-    if not created_at:
-        return ""
-    bishkek_tz = timezone(timedelta(hours=6))
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
-    bishkek_time = created_at.astimezone(bishkek_tz)
-    return bishkek_time.strftime("%d.%m.%Y %H:%M")
 
 
 import_log_service = ImportLogService(ImportLogs)

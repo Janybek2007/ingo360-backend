@@ -51,11 +51,16 @@ class Doctor(Base):
     medical_facility_id: Mapped[int] = mapped_column(
         ForeignKey("medical_facilities.id"),
     )
+    client_category: Mapped[Optional["ClientCategory"]] = relationship(
+        back_populates="doctors"
+    )
+
     medical_facility: Mapped["MedicalFacility"] = relationship(back_populates="doctors")
     speciality_id: Mapped[int] = mapped_column(ForeignKey("specialities.id"))
     speciality: Mapped["Speciality"] = relationship(back_populates="doctors")
-    client_category_id: Mapped[int] = mapped_column(ForeignKey("client_categories.id"))
-    client_category: Mapped["ClientCategory"] = relationship(back_populates="doctors")
+    client_category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("client_categories.id"), nullable=True
+    )
     visits: Mapped[list["Visit"]] = relationship(back_populates="doctor")
     product_group_id: Mapped[int] = mapped_column(
         ForeignKey("product_groups.id"),

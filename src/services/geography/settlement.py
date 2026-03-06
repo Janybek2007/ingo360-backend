@@ -12,6 +12,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,8 @@ class SettlementService(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
+
+        validate_required_columns(records, {"область|region", "название|name"})
 
         for r in records:
             if "name" in r and "название" not in r:
@@ -80,7 +83,7 @@ class SettlementService(
             imported=len(data_to_insert),
             skipped_records=skipped_records,
             inserted=len(data_to_insert),
-            deduplicated_in_batch=0,
+            deduplicated=0,
         )
 
     @staticmethod

@@ -8,11 +8,13 @@ from src.db.models import Company, ImportLogs, RegistrationApplication, User
 from src.mapping.companies import company_mapping
 from src.schemas.company import (
     CompanyCreate,
+    CompanyFormattedResponse,
     CompanyUpdate,
     RegistrationApplicationCreate,
     RegistrationApplicationUpdate,
 )
 from src.utils.excel_parser import parse_excel_file
+from src.utils.format_date import format_date
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import ListQueryHelper
 from src.utils.mapping import map_record
@@ -118,7 +120,7 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
         session: "AsyncSession",
         load_options: list[Any] | None = None,
         chunk_size: int = 1000,
-    ) -> AsyncIterator[ModelType]:
+    ) -> AsyncIterator[CompanyFormattedResponse]:
         stmt = select(self.model)
         if load_options:
             stmt = stmt.options(*load_options)
@@ -128,11 +130,33 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
             self.model.id.desc(),
         )
 
+        # Используем stream_scalars, чтобы получать ORM объекты
         stream = await session.stream_scalars(
             stmt.execution_options(yield_per=chunk_size)
         )
-        async for item in stream:
-            yield item
+
+        async for company in stream:
+            data = {
+                "id": company.id,
+                "name": company.name,
+                "ims_name": company.ims_name,
+                "active_users_limit": company.active_users_limit,
+                "active_users": getattr(company, "active_users", 0),
+                "can_primary_sales": company.can_primary_sales,
+                "can_secondary_sales": company.can_secondary_sales,
+                "can_tertiary_sales": company.can_tertiary_sales,
+                "can_visits": company.can_visits,
+                "can_market_analysis": company.can_market_analysis,
+                "contract_number": company.contract_number,
+                "contract_end_date": (
+                    format_date(company.contract_end_date)
+                    if company.contract_end_date
+                    else ""
+                ),
+                "is_active": company.is_active,
+                "address": company.address,
+            }
+            yield CompanyFormattedResponse(**data)
 
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
@@ -164,7 +188,7 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
             imported=imported,
             skipped_records=[],
             inserted=imported,
-            deduplicated_in_batch=0,
+            deduplicated=0,
         )
 
     @staticmethod

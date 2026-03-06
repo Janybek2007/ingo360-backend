@@ -20,6 +20,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 from .base import BaseService
 
@@ -122,6 +123,17 @@ class EmployeeService(
     ):
         records = await parse_excel_file(file)
 
+        validate_required_columns(
+            records,
+            {
+                "фио|ФИО|full_name|name",
+                "область|region|область",
+                "компания|company",
+                "должность|position",
+                "группа|group",
+            },
+        )
+
         import_log = ImportLogs(
             uploaded_by=user_id,
             target_table="Сотрудники",
@@ -149,9 +161,13 @@ class EmployeeService(
         product_group_map, missing_product_groups = results[3]
 
         district_triples = {
-            (r["район"], region_map.get(r["область"]), company_map.get(r["компания"]))
+            (
+                r.get("район"),
+                region_map.get(r["область"]),
+                company_map.get(r["компания"]),
+            )
             for r in records
-            if r["район"] is not None
+            if r.get("район") is not None
             and r["область"] in region_map
             and r["компания"] in company_map
         }
@@ -199,8 +215,8 @@ class EmployeeService(
             company_id = company_map.get(r["компания"])
 
             district_id = None
-            if r["район"] is not None and region_id and company_id:
-                district_key = (r["район"], region_id, company_id)
+            if r.get("район") is not None and region_id and company_id:
+                district_key = (r.get("район"), region_id, company_id)
                 if district_key in missing_districts:
                     missing_keys.append(f"район: {r['район']}")
                 else:
@@ -221,17 +237,24 @@ class EmployeeService(
             data_to_insert.append(map_record(r, employee_mapping, relation_fields))
 
         if data_to_insert:
-            stmt = insert(self.model).on_conflict_do_nothing()
-            await session.execute(stmt, data_to_insert)
+            stmt = (
+                insert(self.model)
+                .values(data_to_insert)
+                .on_conflict_do_nothing()
+                .returning(self.model.id)
+            )
+            result = await session.execute(stmt)
+            inserted_ids = result.scalars().all()
 
         await session.commit()
+        inserted_count = len(inserted_ids)
 
         return build_import_result(
             total=len(records),
             imported=len(data_to_insert),
             skipped_records=skipped_records,
-            inserted=len(data_to_insert),
-            deduplicated_in_batch=0,
+            inserted=inserted_count,
+            deduplicated=len(data_to_insert) - inserted_count,
         )
 
 
@@ -312,6 +335,8 @@ class PositionService(
     ):
         records = await parse_excel_file(file)
 
+        validate_required_columns(records, {"название|name"})
+
         import_log = ImportLogs(
             uploaded_by=user_id,
             target_table="Должности МП",
@@ -337,7 +362,7 @@ class PositionService(
             imported=imported,
             skipped_records=[],
             inserted=imported,
-            deduplicated_in_batch=0,
+            deduplicated=0,
         )
 
 

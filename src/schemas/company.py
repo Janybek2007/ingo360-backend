@@ -45,7 +45,7 @@ class CompanySimpleResponse(BaseModel):
     can_market_analysis: bool
 
 
-class CompanyResponse(BaseModel):
+class CompanyBaseResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
@@ -58,9 +58,16 @@ class CompanyResponse(BaseModel):
     can_visits: bool
     can_market_analysis: bool
     contract_number: str
-    contract_end_date: date
     is_active: bool
     address: str | None
+
+
+class CompanyResponse(CompanyBaseResponse):
+    contract_end_date: date
+
+
+class CompanyFormattedResponse(CompanyBaseResponse):
+    contract_end_date: str
 
 
 class RegistrationApplicationCreate(BaseModel):

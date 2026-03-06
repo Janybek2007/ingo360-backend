@@ -11,7 +11,7 @@ def build_import_result(
     skipped_total: int | None = None,
     inserted: int = 0,
     updated: int = 0,
-    deduplicated_in_batch: int = 0,
+    deduplicated: int = 0,
     **extra: Any,
 ) -> dict[str, Any]:
     unique_skipped_records = deduplicate_skipped_records(skipped_records)
@@ -24,7 +24,7 @@ def build_import_result(
         "skipped": skipped_count,
         "inserted": inserted,
         "updated": updated,
-        "deduplicated_in_batch": deduplicated_in_batch,
+        "deduplicated": deduplicated,
         "skipped_records": unique_skipped_records,
     }
     result.update(extra)

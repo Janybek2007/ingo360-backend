@@ -12,6 +12,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,15 @@ class DistrictService(
     ):
         records = await parse_excel_file(file)
 
+        validate_required_columns(
+            records,
+            {
+                "область|region",
+                "компания|company",
+                "название|name",
+            },
+        )
+
         import_log = ImportLogs(
             uploaded_by=user_id,
             target_table="Районы",
@@ -48,9 +58,9 @@ class DistrictService(
         )
 
         settlement_pairs = {
-            (r["населенный пункт"], region_map.get(r["область"]))
+            (r.get("населенный пункт"), region_map.get(r["область"]))
             for r in records
-            if r["населенный пункт"] is not None and r["область"] in region_map
+            if r.get("населенный пункт") is not None and r["область"] in region_map
         }
 
         settlement_map, missing_settlements = (
@@ -78,18 +88,20 @@ class DistrictService(
                 missing_keys.append(f"компания: {r['компания']}")
 
             region_id = region_map.get(r["область"])
-            if r["населенный пункт"] is not None and region_id:
-                settlement_key = (r["населенный пункт"], region_id)
+            if r.get("населенный пункт") is not None and region_id:
+                settlement_key = (r.get("населенный пункт"), region_id)
                 if settlement_key in missing_settlements:
-                    missing_keys.append(f"населенный пункт: {r['населенный пункт']}")
+                    missing_keys.append(
+                        f"населенный пункт: {r.get('населенный пункт')}"
+                    )
 
             if missing_keys:
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
 
             settlement_id = None
-            if r["населенный пункт"] is not None:
-                settlement_key = (r["населенный пункт"], region_id)
+            if r.get("населенный пункт") is not None:
+                settlement_key = (r.get("населенный пункт"), region_id)
                 settlement_id = settlement_map.get(settlement_key)
 
             relation_fields = {
@@ -109,7 +121,7 @@ class DistrictService(
             imported=imported,
             skipped_records=[],
             inserted=imported,
-            deduplicated_in_batch=0,
+            deduplicated=0,
         )
 
     @staticmethod

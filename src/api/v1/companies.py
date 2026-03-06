@@ -40,7 +40,7 @@ async def export_companies_excel(
         file_name=payload.file_name,
         service_path="src.services.company.CompanyService",
         model_path="src.db.models.Company",
-        serializer_path="src.schemas.company.CompanyResponse",
+        serializer_path="src.schemas.company.CompanyFormattedResponse",
         header_map=payload.header_map,
         fields_map=payload.fields_map,
         boolean_map=payload.boolean_map,

@@ -36,6 +36,7 @@ from src.utils.list_query_helper import (
     SearchSpec,
 )
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from fastapi import UploadFile
@@ -100,6 +101,24 @@ class SecondarySalesService(
         batch_size: int = 2000,
     ):
         try:
+            with open(file_path, "rb") as f:
+                first_row = next(iter_excel_records(f), None)
+
+            if first_row is None:
+                raise HTTPException(status_code=400, detail="Файл пустой")
+
+            _, first_record = first_row
+            validate_required_columns(
+                [first_record],
+                {
+                    "аптека|pharmacy",
+                    "sku",
+                    "месяц|month",
+                    "год|year",
+                    "показатель|indicator",
+                },
+            )
+
             total_records = 0
 
             import_log = ImportLogs(
@@ -124,7 +143,7 @@ class SecondarySalesService(
             imported = 0
             inserted = 0
             updated = 0
-            deduplicated_in_batch = 0
+            deduplicated = 0
 
             async def resolve_pending_names():
                 if pending_pharmacies:
@@ -144,7 +163,7 @@ class SecondarySalesService(
                     pending_skus.clear()
 
             async def process_pending_records():
-                nonlocal imported, inserted, updated, deduplicated_in_batch
+                nonlocal imported, inserted, updated, deduplicated
                 nonlocal data_to_insert
 
                 if not pending_records:
@@ -211,7 +230,7 @@ class SecondarySalesService(
                         imported += batch_imported
                         inserted += batch_inserted
                         updated += batch_updated
-                        deduplicated_in_batch += batch_deduplicated
+                        deduplicated += batch_deduplicated
                         data_to_insert = []
 
                 pending_records.clear()
@@ -267,7 +286,7 @@ class SecondarySalesService(
                 imported += batch_imported
                 inserted += batch_inserted
                 updated += batch_updated
-                deduplicated_in_batch += batch_deduplicated
+                deduplicated += batch_deduplicated
 
             import_log.records_count = total_records
             await session.commit()
@@ -277,7 +296,7 @@ class SecondarySalesService(
                 imported=imported,
                 skipped_records=skipped_records,
                 inserted=inserted,
-                deduplicated_in_batch=deduplicated_in_batch,
+                deduplicated=deduplicated,
             )
         finally:
             pass

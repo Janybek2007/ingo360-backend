@@ -28,7 +28,7 @@ async def upsert_batch_with_stats(
         return 0, 0, 0, 0
 
     deduped_rows = _deduplicate_batch_rows(rows, key_fields)
-    deduplicated_in_batch = len(rows) - len(deduped_rows)
+    deduplicated = len(rows) - len(deduped_rows)
 
     max_params = 32767
     columns_per_row = max(1, len(deduped_rows[0]))
@@ -57,4 +57,4 @@ async def upsert_batch_with_stats(
 
     imported = len(deduped_rows)
 
-    return imported, inserted, updated, deduplicated_in_batch
+    return imported, inserted, updated, deduplicated

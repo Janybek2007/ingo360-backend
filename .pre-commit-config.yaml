@@ -1,3 +1,15 @@
+exclude: |
+  (?x)^(
+    src/db/migrations/.*|
+    \.venv/.*|
+    \.git/.*|
+    __pycache__/.*|
+    \.mypy_cache/.*|
+    \.ruff_cache/.*|
+    dist/.*|
+    build/.*
+  )$
+
 repos:
   - repo: local
     hooks:
@@ -10,7 +22,7 @@ repos:
 
       - id: black
         name: black
-        entry: black .
+        entry: black . --exclude src/db/migrations
         language: system
         types: [python]
         pass_filenames: false
@@ -22,3 +34,4 @@ repos:
       - id: trailing-whitespace
       - id: check-yaml
       - id: check-added-large-files
+        args: ["--maxkb=1000"]

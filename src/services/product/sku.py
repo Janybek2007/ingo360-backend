@@ -23,6 +23,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -126,7 +127,19 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
     async def import_excel(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
-        records = await parse_excel_file(file, read_as_str=True)
+        records = await parse_excel_file(file)
+
+        validate_required_columns(
+            records,
+            {
+                "название|name",
+                "бренд|brand",
+                "форма выпуска|dosage_form|форма",
+                "тип промоции|promotion_type|промоция",
+                "компания|company",
+                "группа|group|группа продуктов",
+            },
+        )
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -146,8 +159,12 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
                 session, PromotionType, "name", {r["тип промоции"] for r in records}
             ),
             self.get_id_map(session, Company, "name", {r["компания"] for r in records}),
-            self.get_id_map(session, Segment, "name", {r["сегмент"] for r in records}),
-            self.get_id_map(session, Dosage, "name", {r["дозировка"] for r in records}),
+            self.get_id_map(
+                session, Segment, "name", {r.get("сегмент") for r in records}
+            ),
+            self.get_id_map(
+                session, Dosage, "name", {r.get("дозировка") for r in records}
+            ),
             return_exceptions=True,
         )
 
@@ -237,5 +254,5 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
             imported=len(data_to_insert),
             skipped_records=skipped_records,
             inserted=len(data_to_insert),
-            deduplicated_in_batch=0,
+            deduplicated=0,
         )

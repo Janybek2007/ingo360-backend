@@ -20,6 +20,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,6 +124,14 @@ class MedicalFacilityService(
     ):
         records = await parse_excel_file(file)
 
+        validate_required_columns(
+            records,
+            {
+                "название|name",
+                "населенный пункт|settlement",
+            },
+        )
+
         import_log = ImportLogs(
             uploaded_by=user_id,
             target_table="ЛПУ",
@@ -146,22 +155,20 @@ class MedicalFacilityService(
             else set()
         )
 
-        if region_values:
-            region_map, missing_regions = await self.get_id_map(
-                session, Region, "name", region_values
-            )
-        else:
-            region_map, missing_regions = ({}, set())
+        region_map, missing_regions = (
+            await self.get_id_map(session, Region, "name", region_values)
+            if region_values
+            else ({}, set())
+        )
 
-        if company_values:
-            company_map, missing_companies = await self.get_id_map(
-                session, Company, "name", company_values
-            )
-        else:
-            company_map, missing_companies = ({}, set())
+        company_map, missing_companies = (
+            await self.get_id_map(session, Company, "name", company_values)
+            if company_values
+            else ({}, set())
+        )
 
         geo_indicator_values = {
-            r["индикатор"] for r in records if r["индикатор"] is not None
+            r.get("индикатор") for r in records if r.get("индикатор") is not None
         }
         geo_indicator_map, missing_geo_indicators = (
             await self.get_id_map(session, GeoIndicator, "name", geo_indicator_values)
@@ -249,7 +256,7 @@ class MedicalFacilityService(
             if has_company_column and r.get("компания") in missing_companies:
                 missing_keys.append(f"компания: {r['компания']}")
 
-            if r["индикатор"] and r["индикатор"] in missing_geo_indicators:
+            if r.get("индикатор") and r.get("индикатор") in missing_geo_indicators:
                 missing_keys.append(f"индикатор: {r['индикатор']}")
 
             region_id = region_map.get(r.get("область")) if has_region_column else None
@@ -291,22 +298,30 @@ class MedicalFacilityService(
                 "district_id": district_id,
                 "settlement_id": settlement_id,
                 "import_log_id": import_log.id,
-                "geo_indicator_id": geo_indicator_map.get(r["индикатор"]),
+                "geo_indicator_id": geo_indicator_map.get(r.get("индикатор")),
             }
             data_to_insert.append(
                 map_record(r, medical_facility_mapping, relation_fields)
             )
 
+        inserted_ids = []
+
         if data_to_insert:
-            stmt = insert(self.model).on_conflict_do_nothing()
-            await session.execute(stmt, data_to_insert)
+            stmt = (
+                insert(self.model)
+                .values(data_to_insert)
+                .on_conflict_do_nothing()
+                .returning(self.model.id)
+            )
+            result = await session.execute(stmt)
+            inserted_ids = result.scalars().all()
 
         await session.commit()
 
         return build_import_result(
             total=len(records),
-            imported=len(data_to_insert),
+            imported=len(inserted_ids),
             skipped_records=skipped_records,
-            inserted=len(data_to_insert),
-            deduplicated_in_batch=0,
+            inserted=len(inserted_ids),
+            deduplicated=len(data_to_insert) - len(inserted_ids),
         )

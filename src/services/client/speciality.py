@@ -12,6 +12,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import ListQueryHelper
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -95,6 +96,8 @@ class SpecialityService(
     ):
         records = await parse_excel_file(file)
 
+        validate_required_columns(records, {"название|name"})
+
         import_log = ImportLogs(
             uploaded_by=user_id,
             target_table="Специальности",
@@ -110,15 +113,24 @@ class SpecialityService(
                 "import_log_id": import_log.id,
             }
             data_to_insert.append(map_record(r, speciality_mapping, relation_fields))
+
+        inserted_ids = []
         if data_to_insert:
-            await session.execute(insert(self.model), data_to_insert)
+            stmt = (
+                insert(self.model)
+                .values(data_to_insert)
+                .on_conflict_do_nothing()
+                .returning(self.model.id)
+            )
+            result = await session.execute(stmt)
+            inserted_ids = result.scalars().all()
+
         await session.commit()
 
-        imported = len(data_to_insert)
         return build_import_result(
             total=len(records),
-            imported=imported,
+            imported=len(inserted_ids),
             skipped_records=[],
-            inserted=imported,
-            deduplicated_in_batch=0,
+            inserted=len(inserted_ids),
+            deduplicated=len(data_to_insert) - len(inserted_ids),
         )

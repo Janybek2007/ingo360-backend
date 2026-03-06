@@ -27,6 +27,7 @@ from src.utils.list_query_helper import (
     StringTypedSpec,
 )
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -171,24 +172,28 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
         user_id: int,
         batch_size: int = 2000,
     ):
-        with open(file_path, "rb") as f:
-            from tempfile import SpooledTemporaryFile
-
-            temp = SpooledTemporaryFile(max_size=50 * 1024 * 1024)
-            temp.write(f.read())
-            temp.seek(0)
-
         try:
+            with open(file_path, "rb") as f:
+                first_row = next(iter_excel_records(f), None)
+
+            if first_row is None:
+                raise HTTPException(status_code=400, detail="Файл пустой")
+
+            _, first_record = first_row
+            validate_required_columns(
+                [first_record],
+                {
+                    "компания|company",
+                    "бренд|brand",
+                    "период|period",
+                },
+            )
+
             total_records = 0
-            for _ in iter_excel_records(temp):
-                total_records += 1
-
-            temp.seek(0)
-
             import_log = ImportLogs(
                 uploaded_by=user_id,
                 target_table="IMS",
-                records_count=total_records,
+                records_count=0,
                 target_table_name=self.model.__tablename__,
             )
             session.add(import_log)
@@ -197,29 +202,35 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
             data_to_insert = []
             imported_count = 0
 
-            for _, record in iter_excel_records(temp):
-                relation_fields = {"import_log_id": import_log.id}
-                data_to_insert.append(map_record(record, ims_mapping, relation_fields))
+            with open(file_path, "rb") as f:
+                for _, record in iter_excel_records(f):
+                    total_records += 1
+                    relation_fields = {"import_log_id": import_log.id}
+                    data_to_insert.append(
+                        map_record(record, ims_mapping, relation_fields)
+                    )
 
-                if len(data_to_insert) >= batch_size:
-                    await session.execute(insert(self.model), data_to_insert)
-                    imported_count += len(data_to_insert)
-                    data_to_insert = []
+                    if len(data_to_insert) >= batch_size:
+                        await session.execute(insert(self.model), data_to_insert)
+                        imported_count += len(data_to_insert)
+                        data_to_insert = []
 
             if data_to_insert:
                 await session.execute(insert(self.model), data_to_insert)
                 imported_count += len(data_to_insert)
 
+            import_log.records_count = total_records
             await session.commit()
+
             return build_import_result(
                 total=total_records,
                 imported=imported_count,
                 skipped_records=[],
                 inserted=imported_count,
-                deduplicated_in_batch=0,
+                deduplicated=0,
             )
         finally:
-            temp.close()
+            pass
 
     @staticmethod
     def _format_db_period(year: int, month: int) -> str:

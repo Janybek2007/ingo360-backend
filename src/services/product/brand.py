@@ -19,6 +19,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -120,6 +121,16 @@ class BrandService(
     ):
         records = await parse_excel_file(file)
 
+        validate_required_columns(
+            records,
+            {
+                "название|name",
+                "тип промоции|promotion_type",
+                "группа|group",
+                "компания|company",
+            },
+        )
+
         import_log = ImportLogs(
             uploaded_by=user_id,
             target_table="Бренды",
@@ -197,5 +208,5 @@ class BrandService(
             imported=len(data_to_insert),
             skipped_records=skipped_records,
             inserted=len(data_to_insert),
-            deduplicated_in_batch=0,
+            deduplicated=0,
         )

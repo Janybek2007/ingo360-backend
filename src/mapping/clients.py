@@ -1,9 +1,8 @@
 client_category_mapping = {"название": "name"}
 
-doctor_mapping = {"фио": "full_name", "фио врача": "full_name"}
+doctor_mapping = {"фио": "full_name"}
 
-pharmacy_mapping = {"название": "name", "индикатор": "indicator"}
-
+pharmacy_mapping = {"название": "name"}
 
 medical_facility_mapping = {
     "название": "name",

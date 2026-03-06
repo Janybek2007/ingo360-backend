@@ -12,11 +12,15 @@ if TYPE_CHECKING:
 
 
 class UserClientsExportService:
-    @staticmethod
+    def __init__(self, model=None):
+        self.model = model
+
     async def iter_multi(
+        self,
         session: "AsyncSession",
         *,
         filters: UserFilter | None = None,
+        load_options: list | None = None,
         chunk_size: int = 1000,
     ) -> AsyncIterator[User]:
         stmt = (
@@ -84,11 +88,15 @@ class UserClientsExportService:
 
 
 class UserAdminsOperatorsExportService:
-    @staticmethod
+    def __init__(self, model=None):
+        self.model = model
+
     async def iter_multi(
+        self,
         session: "AsyncSession",
         *,
         filters: UserFilter | None = None,
+        load_options: list | None = None,
         chunk_size: int = 1000,
     ) -> AsyncIterator[User]:
         stmt = (

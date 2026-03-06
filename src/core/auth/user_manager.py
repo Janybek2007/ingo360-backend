@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence
 from fastapi import HTTPException, status
 from fastapi_users import BaseUserManager, IntegerIDMixin, exceptions
 from fastapi_users.db import BaseUserDatabase
-from sqlalchemy import func, or_, select, update, case
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.sql import ColumnElement
 
 from src.core.settings import settings

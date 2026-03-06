@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
@@ -24,6 +24,7 @@ from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -138,6 +139,14 @@ class PharmacyService(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
+        print(records)
+        validate_required_columns(
+            records,
+            {
+                "название|name" "компания|company",
+                "группа|product_group",
+            },
+        )
 
         for r in records:
             if "дистрибьютор/сеть" in r and "дистрибьютор / сеть" not in r:
@@ -158,20 +167,6 @@ class PharmacyService(
         await session.flush()
 
         has_region_column = any("область" in r for r in records)
-        has_company_column = any("компания" in r for r in records)
-        has_product_group_column = any("группа" in r for r in records)
-
-        if not has_company_column:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="В файле отсутствует обязательная колонка 'компания'",
-            )
-
-        if not has_product_group_column:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="В файле отсутствует обязательная колонка 'группа'",
-            )
 
         group_values = {r.get("группа") for r in records if r.get("группа") is not None}
         company_values = {
@@ -402,16 +397,23 @@ class PharmacyService(
             }
             data_to_insert.append(map_record(r, pharmacy_mapping, relation_fields))
 
+        inserted_ids = []
         if data_to_insert:
-            stmt = insert(self.model).on_conflict_do_nothing()
-            await session.execute(stmt, data_to_insert)
+            stmt = (
+                insert(self.model)
+                .values(data_to_insert)
+                .on_conflict_do_nothing()
+                .returning(self.model.id)
+            )
+            result = await session.execute(stmt)
+            inserted_ids = result.scalars().all()
 
         await session.commit()
 
         return build_import_result(
             total=len(records),
-            imported=len(data_to_insert),
+            imported=len(inserted_ids),
             skipped_records=skipped_records,
-            inserted=len(data_to_insert),
-            deduplicated_in_batch=0,
+            inserted=len(inserted_ids),
+            deduplicated=len(data_to_insert) - len(inserted_ids),
         )

@@ -30,10 +30,11 @@ class ClientCategoryCreate(BaseModel):
 class DoctorCreate(BaseModel):
     full_name: str
     responsible_employee_id: int | None = None
-    medical_facility_id: int | None = None
+    medical_facility_id: int
     speciality_id: int
-    client_category_id: int
-    product_group_id: int | None = None
+    client_category_id: int | None = None
+    product_group_id: int
+    company_id: int
 
 
 class PharmacyCreate(BaseModel):

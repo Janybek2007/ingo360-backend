@@ -1,4 +1,3 @@
-import asyncio
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator
@@ -29,6 +28,8 @@ from src.services.base import ModelType
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
+from src.utils.case_insensitive_dict import CaseInsensitiveDict
+from src.utils.case_insensitive_set import CaseInsensitiveSet
 from src.utils.excel_parser import iter_excel_records
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import (
@@ -38,6 +39,7 @@ from src.utils.list_query_helper import (
     SearchSpec,
 )
 from src.utils.mapping import map_record
+from src.utils.validate_required_columns import validate_required_columns
 
 from .base import BaseService
 
@@ -186,134 +188,213 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         user_id: int,
         batch_size: int = 2000,
     ):
-        with open(file_path, "rb") as f:
-            from tempfile import SpooledTemporaryFile
-
-            temp = SpooledTemporaryFile(max_size=50 * 1024 * 1024)
-            temp.write(f.read())
-            temp.seek(0)
 
         try:
-            product_group_names = set()
-            employee_names = set()
-            doctor_names = set()
-            medical_facilities = set()
-            pharmacies = set()
+            with open(file_path, "rb") as f:
+                first_row = next(iter_excel_records(f), None)
+
+            if first_row is None:
+                raise HTTPException(status_code=400, detail="Файл пустой")
+
+            _, first_record = first_row
+            validate_required_columns(
+                [first_record],
+                {
+                    "сотрудник|employee",
+                    "группа|product_group",
+                    "месяц|month",
+                    "год|year",
+                },
+            )
             total_records = 0
-
-            for _, r in iter_excel_records(temp):
-                total_records += 1
-                if r.get("группа"):
-                    product_group_names.add(r["группа"])
-                if r.get("сотрудник"):
-                    employee_names.add(r["сотрудник"])
-                if r.get("врач"):
-                    doctor_names.add(r["врач"])
-
-                if r.get("тип клиента") == "Врач" and r.get("учреждение"):
-                    medical_facilities.add(r["учреждение"])
-                elif r.get("тип клиента") == "Аптека" and r.get("учреждение"):
-                    pharmacies.add(r["учреждение"])
 
             import_log = ImportLogs(
                 uploaded_by=user_id,
                 target_table="Визиты",
-                records_count=total_records,
+                records_count=0,
                 target_table_name=self.model.__tablename__,
             )
             session.add(import_log)
             await session.flush()
 
-            results = await asyncio.gather(
-                self.get_id_map(session, ProductGroup, "name", product_group_names),
-                self.get_id_map(session, Employee, "full_name", employee_names),
-                (
-                    self.get_id_map(session, Doctor, "full_name", doctor_names)
-                    if doctor_names
-                    else asyncio.sleep(0, ({}, set()))
-                ),
-                (
-                    self.get_id_map(
-                        session, MedicalFacility, "name", medical_facilities
-                    )
-                    if medical_facilities
-                    else asyncio.sleep(0, ({}, set()))
-                ),
-                (
-                    self.get_id_map(session, Pharmacy, "name", pharmacies)
-                    if pharmacies
-                    else asyncio.sleep(0, ({}, set()))
-                ),
-            )
+            pg_cache: CaseInsensitiveDict = CaseInsensitiveDict()
+            emp_cache: CaseInsensitiveDict = CaseInsensitiveDict()
+            doc_cache: CaseInsensitiveDict = CaseInsensitiveDict()
+            mf_cache: CaseInsensitiveDict = CaseInsensitiveDict()
+            ph_cache: CaseInsensitiveDict = CaseInsensitiveDict()
 
-            pg_map, pg_miss = results[0]
-            emp_map, emp_miss = results[1]
-            doc_map, doc_miss = results[2]
-            mf_map, mf_miss = results[3]
-            ph_map, ph_miss = results[4]
+            missing_pgs: CaseInsensitiveSet = CaseInsensitiveSet()
+            missing_emps: CaseInsensitiveSet = CaseInsensitiveSet()
+            missing_docs: CaseInsensitiveSet = CaseInsensitiveSet()
+            missing_mfs: CaseInsensitiveSet = CaseInsensitiveSet()
+            missing_phs: CaseInsensitiveSet = CaseInsensitiveSet()
 
             skipped_records = []
             data_to_insert = []
+            pending_records: list[tuple[int, dict[str, Any]]] = []
+            pending_pgs: set[str] = set()
+            pending_emps: set[str] = set()
+            pending_docs: set[str] = set()
+            pending_mfs: set[str] = set()
+            pending_phs: set[str] = set()
             imported_count = 0
-            temp.seek(0)
 
-            for idx, r in iter_excel_records(temp):
-                missing_keys = []
+            async def resolve_pending_names():
+                if pending_pgs:
+                    m, miss = await self.get_id_map(
+                        session, ProductGroup, "name", pending_pgs
+                    )
+                    pg_cache.update(m)
+                    missing_pgs.update(miss)
+                    pending_pgs.clear()
 
-                if r["группа"] in pg_miss:
-                    missing_keys.append(f"группа: {r['группа']}")
-                if r["сотрудник"] in emp_miss:
-                    missing_keys.append(f"сотрудник: {r['сотрудник']}")
-                if r.get("врач") in doc_miss:
-                    missing_keys.append(f"врач: {r['врач']}")
+                if pending_emps:
+                    m, miss = await self.get_id_map(
+                        session, Employee, "full_name", pending_emps
+                    )
+                    emp_cache.update(m)
+                    missing_emps.update(miss)
+                    pending_emps.clear()
 
-                m_facility_id = None
-                p_id = None
+                if pending_docs:
+                    m, miss = await self.get_id_map(
+                        session, Doctor, "full_name", pending_docs
+                    )
+                    doc_cache.update(m)
+                    missing_docs.update(miss)
+                    pending_docs.clear()
 
-                if r.get("тип клиента") == "Врач":
-                    if r.get("учреждение") in mf_miss:
-                        missing_keys.append(f"учреждение (ЛПУ): {r['учреждение']}")
-                    else:
-                        m_facility_id = mf_map.get(r.get("учреждение"))
-                elif r.get("тип клиента") == "Аптека":
-                    if r.get("учреждение") in ph_miss:
-                        missing_keys.append(f"учреждение (Аптека): {r['учреждение']}")
-                    else:
-                        p_id = ph_map.get(r.get("учреждение"))
+                if pending_mfs:
+                    m, miss = await self.get_id_map(
+                        session, MedicalFacility, "name", pending_mfs
+                    )
+                    mf_cache.update(m)
+                    missing_mfs.update(miss)
+                    pending_mfs.clear()
 
-                if missing_keys:
-                    skipped_records.append({"row": idx, "missing": missing_keys})
-                    continue
+                if pending_phs:
+                    m, miss = await self.get_id_map(
+                        session, Pharmacy, "name", pending_phs
+                    )
+                    ph_cache.update(m)
+                    missing_phs.update(miss)
+                    pending_phs.clear()
 
-                relation_fields = {
-                    "product_group_id": pg_map[r["группа"]],
-                    "doctor_id": doc_map.get(r.get("врач")),
-                    "employee_id": emp_map[r["сотрудник"]],
-                    "medical_facility_id": m_facility_id,
-                    "pharmacy_id": p_id,
-                    "import_log_id": import_log.id,
-                }
-                data_to_insert.append(map_record(r, visit_mapping, relation_fields))
+            async def process_pending_records():
+                nonlocal imported_count, data_to_insert
 
-                if len(data_to_insert) >= batch_size:
-                    await session.execute(insert(self.model), data_to_insert)
-                    imported_count += len(data_to_insert)
-                    data_to_insert = []
+                if not pending_records:
+                    return
+
+                await resolve_pending_names()
+
+                for row_index, r in pending_records:
+                    missing_keys = []
+
+                    if r.get("группа") in missing_pgs:
+                        missing_keys.append(f"группа: {r['группа']}")
+                    if r.get("сотрудник") in missing_emps:
+                        missing_keys.append(f"сотрудник: {r['сотрудник']}")
+                    if r.get("врач") and r.get("врач") in missing_docs:
+                        missing_keys.append(f"врач: {r['врач']}")
+
+                    m_facility_id = None
+                    p_id = None
+
+                    if r.get("тип клиента") == "Врач":
+                        if r.get("учреждение") in missing_mfs:
+                            missing_keys.append(f"учреждение (ЛПУ): {r['учреждение']}")
+                        else:
+                            m_facility_id = mf_cache.get(r.get("учреждение"))
+                    elif r.get("тип клиента") == "Аптека":
+                        if r.get("учреждение") in missing_phs:
+                            missing_keys.append(
+                                f"учреждение (Аптека): {r['учреждение']}"
+                            )
+                        else:
+                            p_id = ph_cache.get(r.get("учреждение"))
+
+                    if missing_keys:
+                        skipped_records.append(
+                            {"row": row_index, "missing": missing_keys}
+                        )
+                        continue
+
+                    relation_fields = {
+                        "product_group_id": pg_cache.get(r.get("группа")),
+                        "doctor_id": doc_cache.get(r.get("врач")),
+                        "employee_id": emp_cache.get(r.get("сотрудник")),
+                        "medical_facility_id": m_facility_id,
+                        "pharmacy_id": p_id,
+                        "import_log_id": import_log.id,
+                    }
+                    data_to_insert.append(map_record(r, visit_mapping, relation_fields))
+
+                    if len(data_to_insert) >= batch_size:
+                        await session.execute(insert(self.model), data_to_insert)
+                        imported_count += len(data_to_insert)
+                        data_to_insert = []
+
+                pending_records.clear()
+
+            with open(file_path, "rb") as f:
+                for row_index, r in iter_excel_records(f):
+                    total_records += 1
+
+                    pending_records.append((row_index, r))
+
+                    if (
+                        r.get("группа")
+                        and r["группа"] not in pg_cache
+                        and r["группа"] not in missing_pgs
+                    ):
+                        pending_pgs.add(r["группа"])
+                    if (
+                        r.get("сотрудник")
+                        and r["сотрудник"] not in emp_cache
+                        and r["сотрудник"] not in missing_emps
+                    ):
+                        pending_emps.add(r["сотрудник"])
+                    if (
+                        r.get("врач")
+                        and r["врач"] not in doc_cache
+                        and r["врач"] not in missing_docs
+                    ):
+                        pending_docs.add(r["врач"])
+                    if r.get("тип клиента") == "Врач" and r.get("учреждение"):
+                        if (
+                            r["учреждение"] not in mf_cache
+                            and r["учреждение"] not in missing_mfs
+                        ):
+                            pending_mfs.add(r["учреждение"])
+                    elif r.get("тип клиента") == "Аптека" and r.get("учреждение"):
+                        if (
+                            r["учреждение"] not in ph_cache
+                            and r["учреждение"] not in missing_phs
+                        ):
+                            pending_phs.add(r["учреждение"])
+
+                    if len(pending_records) >= batch_size:
+                        await process_pending_records()
+
+            await process_pending_records()
 
             if data_to_insert:
                 await session.execute(insert(self.model), data_to_insert)
                 imported_count += len(data_to_insert)
 
+            import_log.records_count = total_records
             await session.commit()
+
             return build_import_result(
                 total=total_records,
                 imported=imported_count,
                 skipped_records=skipped_records,
                 inserted=imported_count,
-                deduplicated_in_batch=0,
+                deduplicated=0,
             )
         finally:
-            temp.close()
+            pass
 
     @staticmethod
     async def get_doctor_count_by_speciality(
