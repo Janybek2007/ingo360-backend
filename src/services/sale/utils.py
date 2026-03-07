@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import literal_column
+from sqlalchemy import and_, literal_column, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 if TYPE_CHECKING:
@@ -28,7 +28,7 @@ async def upsert_batch_with_stats(
         return 0, 0, 0, 0
 
     deduped_rows = _deduplicate_batch_rows(rows, key_fields)
-    deduplicated = len(rows) - len(deduped_rows)
+    file_duplicates = len(rows) - len(deduped_rows)
 
     max_params = 32767
     columns_per_row = max(1, len(deduped_rows[0]))
@@ -39,6 +39,16 @@ async def upsert_batch_with_stats(
 
     for start in range(0, len(deduped_rows), max_rows_per_stmt):
         chunk = deduped_rows[start : start + max_rows_per_stmt]
+
+        filters = [
+            and_(*(getattr(model, field) == row[field] for field in key_fields))
+            for row in chunk
+        ]
+        existing_count_stmt = (
+            select(literal_column("count(*)")).select_from(model).where(or_(*filters))
+        )
+        existing_count = await session.scalar(existing_count_stmt) or 0
+
         stmt = pg_insert(model).values(chunk)
         stmt = stmt.on_conflict_do_update(
             constraint=constraint_name,
@@ -47,14 +57,13 @@ async def upsert_batch_with_stats(
                 "amount": stmt.excluded.amount,
             },
         )
-        stmt = stmt.returning(literal_column("xmax").label("xmax"))
-        result = await session.execute(stmt)
+        await session.execute(stmt)
 
-        xmax_values = result.scalars().all()
-        inserted_in_chunk = sum(1 for xmax in xmax_values if xmax == 0)
+        inserted_in_chunk = len(chunk) - existing_count
         inserted += inserted_in_chunk
-        updated += len(xmax_values) - inserted_in_chunk
+        updated += existing_count
 
     imported = len(deduped_rows)
+    deduplicated = file_duplicates + updated
 
     return imported, inserted, updated, deduplicated

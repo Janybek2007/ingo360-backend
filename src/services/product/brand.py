@@ -198,15 +198,24 @@ class BrandService(
                 seen_names.add(brand_name)
             if ims_name:
                 seen_ims_names.add(ims_name)
+
+        inserted_ids = []
         if data_to_insert:
-            stmt = insert(self.model).on_conflict_do_nothing()
-            await session.execute(stmt, data_to_insert)
+            stmt = (
+                insert(self.model)
+                .values(data_to_insert)
+                .on_conflict_do_nothing()
+                .returning(self.model.id)
+            )
+            result = await session.execute(stmt)
+            inserted_ids = result.scalars().all()
+
         await session.commit()
 
         return build_import_result(
             total=len(records),
-            imported=len(data_to_insert),
-            skipped_records=skipped_records,
-            inserted=len(data_to_insert),
-            deduplicated=0,
+            imported=len(inserted_ids),
+            skipped_records=[],
+            inserted=len(inserted_ids),
+            deduplicated=len(data_to_insert) - len(inserted_ids),
         )

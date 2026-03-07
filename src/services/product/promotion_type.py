@@ -119,15 +119,23 @@ class PromotionTypeService(
                 map_record(r, promotion_type_mapping, relation_fields)
             )
 
+        inserted_ids = []
         if data_to_insert:
-            await session.execute(insert(self.model), data_to_insert)
+            stmt = (
+                insert(self.model)
+                .values(data_to_insert)
+                .on_conflict_do_nothing()
+                .returning(self.model.id)
+            )
+            result = await session.execute(stmt)
+            inserted_ids = result.scalars().all()
+
         await session.commit()
 
-        imported = len(data_to_insert)
         return build_import_result(
             total=len(records),
-            imported=imported,
+            imported=len(inserted_ids),
             skipped_records=[],
-            inserted=imported,
-            deduplicated=0,
+            inserted=len(inserted_ids),
+            deduplicated=len(data_to_insert) - len(inserted_ids),
         )
