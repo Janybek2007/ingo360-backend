@@ -21,7 +21,8 @@ async def save_upload_to_temp(
 
 
 def iter_excel_records(
-    file_obj: SpooledTemporaryFile, read_as_str: bool = False
+    file_obj: SpooledTemporaryFile,
+    read_as_str: bool = False,
 ) -> Iterator[tuple[int, dict]]:
     file_obj.seek(0)
     workbook = load_workbook(file_obj, read_only=True, data_only=True)
@@ -44,15 +45,27 @@ def iter_excel_records(
             continue
 
         record: dict = {}
+        skip_record = False
+
         for header, cell in zip(normalized_headers, row):
             if not header:
                 continue
+
             value = None if cell == "-" else cell
+
             if isinstance(value, str):
                 value = value.strip()
+                if value in ("#N/A", "nan"):
+                    skip_record = True
+                    break
+
             if read_as_str and value is not None:
                 value = str(value)
+
             record[header] = value
+
+        if skip_record:
+            continue
 
         yield row_index, record
 
@@ -78,7 +91,6 @@ async def parse_excel_file(file: UploadFile, read_as_str: bool = False) -> list[
 
     records = df.to_dict("records")
 
-    # Clean records: remove rows with error values
     cleaned_records = []
     for r in records:
         has_error = False

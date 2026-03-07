@@ -101,8 +101,12 @@ class PrimarySalesAndStockService(
         batch_size: int = 2000,
     ):
         try:
+            field_types = {
+                "упаковки": (int, float),
+                "сумма": (int, float),
+            }
             with open(file_path, "rb") as f:
-                first_row = next(iter_excel_records(f), None)
+                first_row = next(iter_excel_records(f, field_types=field_types), None)
 
             if first_row is None:
                 raise HTTPException(status_code=400, detail="Файл пустой")

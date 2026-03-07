@@ -112,6 +112,7 @@ class TertiarySalesService(
                 raise HTTPException(status_code=400, detail="Файл пустой")
 
             _, first_record = first_row
+
             validate_required_columns(
                 [first_record],
                 {

@@ -1,4 +1,3 @@
-import json
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from fastapi import UploadFile
@@ -140,9 +139,6 @@ class PharmacyService(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
-
-        with open("/app/pharmacies.json", "w", encoding="utf-8") as f:
-            json.dump(records, f, ensure_ascii=False, indent=2)
 
         validate_required_columns(
             records,

@@ -337,6 +337,11 @@ async def bulk_insert_secondary_sales(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only Excel files are allowed",
+        )
     result = await secondary_sales_service.import_sales(
         session, file, user_id=current_user.id
     )
@@ -539,6 +544,11 @@ async def bulk_insert_tertiary_sales(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only Excel files are allowed",
+        )
     result = await tertiary_sales_service.import_sales(
         session, file, user_id=current_user.id
     )

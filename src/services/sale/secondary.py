@@ -136,6 +136,8 @@ class SecondarySalesService(
             missing_skus: CaseInsensitiveSet = CaseInsensitiveSet()
 
             skipped_records = []
+            skipped_total = 0
+            skipped_limit = 1000
             data_to_insert = []
             pending_records: list[tuple[int, dict[str, Any]]] = []
             pending_pharmacies: set[str] = set()
@@ -163,7 +165,7 @@ class SecondarySalesService(
                     pending_skus.clear()
 
             async def process_pending_records():
-                nonlocal imported, inserted, updated, deduplicated
+                nonlocal skipped_total, imported, inserted, updated, deduplicated
                 nonlocal data_to_insert
 
                 if not pending_records:
@@ -194,9 +196,11 @@ class SecondarySalesService(
                                 )
 
                     if missing_keys:
-                        skipped_records.append(
-                            {"row": row_index, "missing": missing_keys}
-                        )
+                        skipped_total += 1
+                        if len(skipped_records) < skipped_limit:
+                            skipped_records.append(
+                                {"row": row_index, "missing": missing_keys}
+                            )
                         continue
 
                     relation_fields = {
@@ -295,6 +299,7 @@ class SecondarySalesService(
                 total=total_records,
                 imported=imported,
                 skipped_records=skipped_records,
+                skipped_total=skipped_total,
                 inserted=inserted,
                 deduplicated=deduplicated,
             )
