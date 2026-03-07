@@ -549,7 +549,7 @@ class PrimarySalesAndStockService(
                     case(
                         (
                             PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                            PrimarySalesAndStock.packages,
+                            PrimarySalesAndStock.amount,
                         ),
                         else_=0,
                     )
@@ -563,7 +563,7 @@ class PrimarySalesAndStockService(
                     case(
                         (
                             PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                            PrimarySalesAndStock.packages,
+                            PrimarySalesAndStock.amount,
                         ),
                         else_=0,
                     )
@@ -577,7 +577,7 @@ class PrimarySalesAndStockService(
                     case(
                         (
                             PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                            PrimarySalesAndStock.packages,
+                            PrimarySalesAndStock.amount,
                         ),
                         else_=0,
                     )
@@ -594,7 +594,7 @@ class PrimarySalesAndStockService(
                             case(
                                 (
                                     PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                                    PrimarySalesAndStock.packages,
+                                    PrimarySalesAndStock.amount,
                                 ),
                                 else_=0,
                             )
@@ -604,7 +604,7 @@ class PrimarySalesAndStockService(
                             case(
                                 (
                                     PrimarySalesAndStock.indicator.ilike("%остат%"),
-                                    PrimarySalesAndStock.packages,
+                                    PrimarySalesAndStock.amount,
                                 ),
                                 else_=0,
                             )
@@ -775,7 +775,7 @@ class PrimarySalesAndStockService(
                                         PrimarySalesAndStock.indicator.ilike(
                                             "%продаж%"
                                         ),
-                                        PrimarySalesAndStock.packages,
+                                        PrimarySalesAndStock.amount,
                                     ),
                                     else_=0,
                                 )
@@ -785,7 +785,7 @@ class PrimarySalesAndStockService(
                                 case(
                                     (
                                         PrimarySalesAndStock.indicator.ilike("%остат%"),
-                                        PrimarySalesAndStock.packages,
+                                        PrimarySalesAndStock.amount,
                                     ),
                                     else_=0,
                                 )
@@ -797,7 +797,7 @@ class PrimarySalesAndStockService(
                                             PrimarySalesAndStock.indicator.ilike(
                                                 "%продаж%"
                                             ),
-                                            PrimarySalesAndStock.packages,
+                                            PrimarySalesAndStock.amount,
                                         ),
                                         else_=0,
                                     )
