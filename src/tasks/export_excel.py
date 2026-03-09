@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 from typing import Any, Iterator
 
+import polars as pl
 import redis
-from openpyxl import Workbook
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
@@ -78,24 +78,26 @@ def _write_export_file_from_jsonl(
     custom_map: dict[str, dict[str, str]] | None = None,
 ) -> None:
     headers = list(header_map.keys())
-    wb = Workbook(write_only=True)
-    ws = wb.create_sheet("Sheet1")
-    ws.append([header_map[key] for key in headers])
 
+    # Build data with transformed values
+    data = []
     for row in _iter_rows_from_jsonl(rows_file_path):
-        ws.append(
-            build_export_row_values(
-                row=row,
-                headers=headers,
-                header_map=header_map,
-                fields_map=fields_map,
-                boolean_map=boolean_map,
-                custom_map=custom_map,
-            )
+        values = build_export_row_values(
+            row=row,
+            headers=headers,
+            header_map=header_map,
+            fields_map=fields_map,
+            boolean_map=boolean_map,
+            custom_map=custom_map,
         )
+        data.append(values)
 
-    wb.save(output_path)
-    wb.close()
+    # Create DataFrame with display names as column names
+    df = pl.DataFrame(
+        {header_map[key]: col_values for key, col_values in zip(headers, zip(*data))}
+    )
+
+    df.write_excel(output_path)
 
 
 async def _write_export_file_from_service(
@@ -122,10 +124,9 @@ async def _write_export_file_from_service(
             load_options.append(option)
 
     headers = list(header_map.keys())
-    wb = Workbook(write_only=True)
-    ws = wb.create_sheet("Sheet1")
-    ws.append([header_map[key] for key in headers])
 
+    # Build data with transformed values
+    data = []
     async with get_async_session_context() as session:
         service = service_cls(model_cls)
         async for item in service.iter_multi(
@@ -134,19 +135,22 @@ async def _write_export_file_from_service(
             chunk_size=chunk_size,
         ):
             row = serializer_cls.model_validate(item).model_dump()
-            ws.append(
-                build_export_row_values(
-                    row=row,
-                    headers=headers,
-                    header_map=header_map,
-                    fields_map=fields_map,
-                    boolean_map=boolean_map,
-                    custom_map=custom_map,
-                )
+            values = build_export_row_values(
+                row=row,
+                headers=headers,
+                header_map=header_map,
+                fields_map=fields_map,
+                boolean_map=boolean_map,
+                custom_map=custom_map,
             )
+            data.append(values)
 
-    wb.save(output_path)
-    wb.close()
+    # Create DataFrame with display names as column names
+    df = pl.DataFrame(
+        {header_map[key]: col_values for key, col_values in zip(headers, zip(*data))}
+    )
+
+    df.write_excel(output_path)
 
 
 def _format_error_message(exc: Exception) -> str:

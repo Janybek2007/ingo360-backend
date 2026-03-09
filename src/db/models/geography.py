@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -20,6 +20,7 @@ class Country(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="countries"
     )
+    __table_args__ = (Index("idx_country_name", "name"),)
 
 
 class Region(Base):
@@ -35,6 +36,7 @@ class Region(Base):
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
     import_log: Mapped[Optional["ImportLogs"]] = relationship(back_populates="regions")
+    __table_args__ = (Index("idx_region_name", "name"),)
 
 
 class Settlement(Base):
@@ -59,6 +61,7 @@ class Settlement(Base):
 
     __table_args__ = (
         UniqueConstraint("name", "region_id", name="uq_settlement_name_region"),
+        Index("idx_settlement_name", "name"),
     )
 
 
@@ -91,5 +94,6 @@ class District(Base):
     )
 
     __table_args__ = (
+        Index("idx_district_name", "name"),
         UniqueConstraint("name", "region_id", name="uq_district_name_region"),
     )

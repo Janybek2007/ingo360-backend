@@ -43,6 +43,13 @@ class PrimarySalesAndStock(Base):
         Index("idx_primary_sales_year_month", "year", "month"),
         Index("idx_primary_sales_sku_year", "sku_id", "year"),
         Index(
+            "idx_primary_sales_pharmacy_sku_month_year",
+            "distributor_id",
+            "sku_id",
+            "month",
+            "year",
+        ),
+        Index(
             "idx_primary_sales_distributor_year_month",
             "distributor_id",
             "year",
@@ -94,6 +101,13 @@ class SecondarySales(Base):
         Index("idx_secondary_sales_year_month", "year", "month"),
         Index("idx_secondary_sales_sku_year", "sku_id", "year"),
         Index(
+            "idx_secondary_sales_pharmacy_sku_month_year",
+            "pharmacy_id",
+            "sku_id",
+            "month",
+            "year",
+        ),
+        Index(
             "idx_secondary_sales_filters",
             "pharmacy_id",
             "sku_id",
@@ -135,6 +149,13 @@ class TertiarySalesAndStock(Base):
             "year",
             "indicator",
             name="uq_tertiary_sales_business_key",
+        ),
+        Index(
+            "idx_tertiary_sales_pharmacy_sku_month_year",
+            "pharmacy_id",
+            "sku_id",
+            "month",
+            "year",
         ),
         Index("idx_tertiary_sales_year_month", "year", "month"),
         Index("idx_tertiary_sales_sku_year", "sku_id", "year"),

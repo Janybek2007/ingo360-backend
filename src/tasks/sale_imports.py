@@ -181,6 +181,7 @@ def import_sales_task(
             },
         }
         _publish_excel_status(payload)
+        return {"saved_file_path": saved_file_path}
     finally:
         try:
             file_path_obj = Path(file_path)

@@ -1,4 +1,3 @@
-from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -107,8 +106,6 @@ class DoctorsCountWithVisitFilter(BaseModel):
     doctor_ids: list[int] | None = None
     search: str | None = None
     period_values: list[str] | None = None
-    months: list[int] = Field(default_factory=lambda: [date.today().month])
-    years: list[int] = Field(default_factory=lambda: [date.today().year])
     group_by_period: Literal["month", "quarter", "year"] = "month"
     limit: int | None = None
     offset: int = 0
@@ -151,8 +148,6 @@ class VisitSumForPeriodFilter(BaseModel):
     employee_ids: list[int] | None = None
     search: str | None = None
     period_values: list[str] | None = None
-    months: list[int] | None = None
-    years: list[int] | None = None
     group_by_period: Literal["month", "quarter", "year"] = "month"
     geo_indicator_ids: list[int] | None = Field(default=None, alias="indicator_ids")
     speciality_ids: list[int] | None = None

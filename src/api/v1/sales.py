@@ -17,6 +17,7 @@ from src.db.models import (
     SecondarySales,
     TertiarySalesAndStock,
     User,
+    Visit,
 )
 from src.db.session import db_session
 from src.schemas import sale
@@ -664,3 +665,22 @@ async def get_tertiary_stock_report(
     return await tertiary_sales_service.get_stock_report(
         session, filters=filters, company_id=current_user.company_id
     )
+
+
+@router.get("/last-year", dependencies=[Depends(current_active_user)])
+async def get_last_year(
+    session: Annotated[AsyncSession, Depends(db_session.get_session)],
+):
+    from sqlalchemy import func, select
+
+    primary = await session.scalar(select(func.max(PrimarySalesAndStock.year)))
+    secondary = await session.scalar(select(func.max(SecondarySales.year)))
+    tertiary = await session.scalar(select(func.max(TertiarySalesAndStock.year)))
+    visits = await session.scalar(select(func.max(Visit.year)))
+
+    return {
+        "primary": primary,
+        "secondary": secondary,
+        "tertiary": tertiary,
+        "visits": visits,
+    }

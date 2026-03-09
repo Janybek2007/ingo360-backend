@@ -35,6 +35,11 @@ class Brand(Base):
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
     import_log: Mapped[Optional["ImportLogs"]] = relationship(back_populates="brands")
+    __table_args__ = (
+        Index("idx_brand_name", "name"),
+        Index("idx_brand_ims_name", "ims_name"),
+        Index("idx_brand_company", "company_id"),
+    )
 
 
 class PromotionType(Base):
@@ -43,6 +48,7 @@ class PromotionType(Base):
     name: Mapped[str] = mapped_column(String(256), unique=True)
     brands: Mapped[list["Brand"]] = relationship(back_populates="promotion_type")
     sku: Mapped[list["SKU"]] = relationship(back_populates="promotion_type")
+    __table_args__ = (Index("idx_promotion_type_name", "name"),)
 
 
 class DosageForm(Base):
@@ -56,6 +62,7 @@ class DosageForm(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="dosage_forms"
     )
+    __table_args__ = (Index("idx_dosage_form_name", "name"),)
 
 
 class Dosage(Base):
@@ -67,6 +74,7 @@ class Dosage(Base):
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
     import_log: Mapped[Optional["ImportLogs"]] = relationship(back_populates="dosages")
+    __table_args__ = (Index("idx_dosage_name", "name"),)
 
 
 class Segment(Base):
@@ -78,6 +86,7 @@ class Segment(Base):
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
     import_log: Mapped[Optional["ImportLogs"]] = relationship(back_populates="segments")
+    __table_args__ = (Index("idx_segment_name", "name"),)
 
 
 class SKU(Base):
@@ -116,6 +125,8 @@ class SKU(Base):
 
     __table_args__ = (
         UniqueConstraint("name", "company_id", name="uq_sku_name_company"),
+        Index("idx_sku_name_company", "name", "company_id"),
+        Index("idx_sku_name", "name"),
         Index("idx_sku_company", "company_id"),
         Index("idx_sku_brand", "brand_id"),
         Index("idx_sku_promotion", "promotion_type_id"),
@@ -144,5 +155,7 @@ class ProductGroup(Base):
     )
 
     __table_args__ = (
+        Index("idx_product_group_name", "name"),
+        Index("idx_product_group_company", "company_id"),
         UniqueConstraint("name", "company_id", name="uq_group_name_company"),
     )

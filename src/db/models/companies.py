@@ -1,7 +1,7 @@
 from datetime import date
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -51,6 +51,10 @@ class Company(Base):
     )
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="companies"
+    )
+    __table_args__ = (
+        Index("idx_company_name", "name"),
+        Index("idx_companny_ims_name", "ims_name"),
     )
 
 

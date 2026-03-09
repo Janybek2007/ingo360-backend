@@ -1,4 +1,4 @@
-from sqlalchemy import distinct, select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import (
@@ -107,7 +107,15 @@ def normalize_options(rows, value_field: str = "name") -> list[FilterOption]:
             value = row_mapping.get("name")
         if value is None:
             continue
-        result.append(FilterOption(id=row_mapping["id"], name=str(value)))
+        product_group_ids = row_mapping.get("product_group_ids")
+        scope_values = (
+            {"product_group_ids": product_group_ids} if product_group_ids else None
+        )
+        result.append(
+            FilterOption(
+                id=row_mapping["id"], name=str(value), scope_values=scope_values
+            )
+        )
     return result
 
 
@@ -250,6 +258,22 @@ def apply_visits_scope(stmt, target_ref: ReferencesType):
 
 
 def build_reference_stmt(reference: ReferencesType, company_id: int):
+    if reference == "products_brands":
+        stmt = (
+            select(
+                Brand.id.label("id"),
+                Brand.name.label("name"),
+                func.array_remove(
+                    func.array_agg(distinct(SKU.product_group_id)), None
+                ).label("product_group_ids"),
+            )
+            .outerjoin(SKU, SKU.brand_id == Brand.id)
+            .group_by(Brand.id, Brand.name)
+        )
+        if company_id:
+            stmt = stmt.where(Brand.company_id == company_id)
+        return stmt
+
     model, label_column = REFERENCE_CONFIG[reference]
     stmt = select(distinct(model.id).label("id"), label_column.label("name"))
 

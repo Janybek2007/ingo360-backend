@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class FilterOption(BaseModel):
     id: int
     name: str
+    scope_values: dict[str, list[int]] | None = None
 
 
 ReferencesType = Literal[

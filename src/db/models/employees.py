@@ -52,6 +52,7 @@ class Employee(Base):
 
     __table_args__ = (
         UniqueConstraint("full_name", "company_id", name="uq_full_name_company"),
+        Index("idx_employee_full_name", "full_name"),
         Index("idx_employee_company", "company_id"),
         Index("idx_employee_product_group", "product_group_id"),
     )
@@ -68,3 +69,4 @@ class Position(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="positions"
     )
+    __table_args__ = (Index("idx_position_name", "name"),)

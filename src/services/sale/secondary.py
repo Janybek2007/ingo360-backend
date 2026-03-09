@@ -178,15 +178,21 @@ class SecondarySalesService(
                     pharmacy_name = record.get("аптека")
                     sku_name = record.get("sku")
 
-                    if pharmacy_name in missing_pharmacies:
+                    if not pharmacy_name:
+                        missing_keys.append("аптека: (пусто)")
+                    elif pharmacy_name in missing_pharmacies:
                         missing_keys.append(f"аптека: {pharmacy_name}")
 
-                    if sku_name in missing_skus:
+                    if not sku_name:
+                        missing_keys.append("SKU: (пусто)")
+                    elif sku_name in missing_skus:
                         missing_keys.append(f"SKU: {sku_name}")
 
                     for excel_col in ("упаковки", "сумма"):
                         val = record.get(excel_col)
-                        if val is not None and not isinstance(val, (int, float)):
+                        if val is None:
+                            record[excel_col] = 0
+                        elif not isinstance(val, (int, float)):
                             cleaned = str(val).replace(" ", "").replace(",", ".")
                             try:
                                 record[excel_col] = float(cleaned)

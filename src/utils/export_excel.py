@@ -4,7 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from openpyxl import Workbook
+import polars as pl
 
 
 def _get_nested_value(data: dict[str, Any], path: str) -> Any:
@@ -14,20 +14,6 @@ def _get_nested_value(data: dict[str, Any], path: str) -> Any:
             return None
         current = current.get(part)
     return current
-
-
-"""
-def _get_nested_value(data: Any, path: str) -> Any:
-    current = data
-    for part in path.split("."):
-        if current is None:
-            return None
-        if isinstance(current, dict):
-            current = current.get(part)
-        else:
-            current = getattr(current, part, None)
-    return current
-"""
 
 
 def _format_template(template: str, data: dict[str, Any]) -> str:
@@ -94,24 +80,23 @@ def export_excel_to_file(
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    wb = Workbook(write_only=True)
-    ws = wb.create_sheet("Sheet1")
-    ws.append([header_map[key] for key in headers])
-
+    data = []
     for row in rows:
-        ws.append(
-            build_export_row_values(
-                row=row,
-                headers=headers,
-                header_map=header_map,
-                fields_map=fields_map,
-                boolean_map=boolean_map,
-                custom_map=custom_map,
-            )
+        values = build_export_row_values(
+            row=row,
+            headers=headers,
+            header_map=header_map,
+            fields_map=fields_map,
+            boolean_map=boolean_map,
+            custom_map=custom_map,
         )
+        data.append(values)
 
-    wb.save(str(path))
-    wb.close()
+    df = pl.DataFrame(
+        {header_map[key]: col_values for key, col_values in zip(headers, zip(*data))}
+    )
+
+    df.write_excel(str(path))
     return str(path)
 
 
@@ -125,24 +110,26 @@ def export_excel(
 ) -> bytes:
     headers = list(header_map.keys())
 
-    wb = Workbook(write_only=True)
-    ws = wb.create_sheet("Sheet1")
-    ws.append([header_map[key] for key in headers])
-
+    # Build data with transformed values
+    data = []
     for row in rows:
-        ws.append(
-            build_export_row_values(
-                row=row,
-                headers=headers,
-                header_map=header_map,
-                fields_map=fields_map,
-                boolean_map=boolean_map,
-                custom_map=custom_map,
-            )
+        values = build_export_row_values(
+            row=row,
+            headers=headers,
+            header_map=header_map,
+            fields_map=fields_map,
+            boolean_map=boolean_map,
+            custom_map=custom_map,
         )
+        data.append(values)
 
+    # Create DataFrame with display names as column names
+    df = pl.DataFrame(
+        {header_map[key]: col_values for key, col_values in zip(headers, zip(*data))}
+    )
+
+    # Write to BytesIO buffer
     buffer = BytesIO()
-    wb.save(buffer)
-    wb.close()
+    df.write_excel(buffer)
     buffer.seek(0)
     return buffer.read()

@@ -7,7 +7,8 @@ exclude: |
     \.mypy_cache/.*|
     \.ruff_cache/.*|
     dist/.*|
-    build/.*
+    build/.*|
+    postgres/.*       # <- добавлено исключение
   )$
 
 repos:
@@ -22,7 +23,7 @@ repos:
 
       - id: black
         name: black
-        entry: black . --exclude src/db/migrations
+        entry: black . --exclude 'src/db/migrations|postgres'   # <- добавлено исключение
         language: system
         types: [python]
         pass_filenames: false

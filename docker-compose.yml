@@ -14,16 +14,15 @@ services:
     env_file:
       - .env
     healthcheck:
-      # ⚠️ поменяй /health если у тебя другой endpoint
       test:
         [
           'CMD-SHELL',
-          'wget -qO- http://127.0.0.1:8000${API_VERSION}/health || exit 1'
+          'python -c "import socket; socket.create_connection((\"127.0.0.1\", 8000), timeout=2)"'
         ]
       interval: 10s
       timeout: 3s
       retries: 20
-      start_period: 20s
+      start_period: 40s
 
   db:
     # image: postgres:17-alpine
@@ -33,7 +32,6 @@ services:
       - .env
     volumes:
       - ./postgres:/var/lib/postgresql/data
-      # - postgres_data:/var/lib/postgresql/data
     expose:
       - '5432'
     healthcheck:
@@ -96,5 +94,4 @@ services:
 
 volumes:
   postgres:
-  # postgres_data:
   redis:

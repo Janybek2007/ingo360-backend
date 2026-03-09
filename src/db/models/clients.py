@@ -36,6 +36,7 @@ class ClientCategory(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="client_categories"
     )
+    __table_args__ = (Index("idx_client_category_name", "name"),)
 
 
 class Doctor(Base):
@@ -77,6 +78,8 @@ class Doctor(Base):
     __table_args__ = (
         Index("idx_doctor_speciality", "speciality_id"),
         Index("idx_doctor_medical_facility", "medical_facility_id"),
+        Index("idx_doctor_full_name", "full_name"),
+        Index("idx_doctor_company", "company_id"),
         UniqueConstraint(
             "full_name",
             "medical_facility_id",
@@ -150,6 +153,8 @@ class Pharmacy(Base):
             "company_id",
             name="uq_pharmacy_name_group_company",
         ),
+        Index("idx_pharmacy_name_product_group", "name", "product_group_id"),
+        Index("idx_pharmacy_name", "name"),
         Index("idx_pharmacy_company", "company_id"),
         Index("idx_pharmacy_distributor", "distributor_id"),
         Index("idx_pharmacy_geo_indicator", "geo_indicator_id"),
@@ -167,6 +172,7 @@ class Speciality(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="specialities"
     )
+    __table_args__ = (Index("idx_speciality_name", "name"),)
 
 
 class MedicalFacility(Base):
@@ -199,6 +205,7 @@ class MedicalFacility(Base):
     )
 
     __table_args__ = (
+        Index("idx_medical_facility_name", "name"),
         UniqueConstraint("name", "geo_indicator_id", name="uq_facility_name_indicator"),
         Index("idx_med_facility_geo_indicator", "geo_indicator_id"),
         UniqueConstraint("name", "settlement_id", name="uq_facility_name_settlement"),
@@ -238,3 +245,4 @@ class GeoIndicator(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="geo_indicators"
     )
+    __table_args__ = (Index("idx_geo_indicator_name", "name"),)

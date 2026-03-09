@@ -101,12 +101,8 @@ class PrimarySalesAndStockService(
         batch_size: int = 2000,
     ):
         try:
-            field_types = {
-                "упаковки": (int, float),
-                "сумма": (int, float),
-            }
             with open(file_path, "rb") as f:
-                first_row = next(iter_excel_records(f, field_types=field_types), None)
+                first_row = next(iter_excel_records(f), None)
 
             if first_row is None:
                 raise HTTPException(status_code=400, detail="Файл пустой")
@@ -181,15 +177,21 @@ class PrimarySalesAndStockService(
                     distributor_name = record.get("дистрибьютор")
                     sku_name = record.get("sku")
 
-                    if distributor_name in missing_distributors:
+                    if not distributor_name:
+                        missing_keys.append("дистрибьютор: (пусто)")
+                    elif distributor_name in missing_distributors:
                         missing_keys.append(f"дистрибьютор: {distributor_name}")
 
-                    if sku_name in missing_skus:
+                    if not sku_name:
+                        missing_keys.append("SKU: (пусто)")
+                    elif sku_name in missing_skus:
                         missing_keys.append(f"SKU: {sku_name}")
 
                     for excel_col in ("упаковки", "сумма"):
                         val = record.get(excel_col)
-                        if val is not None and not isinstance(val, (int, float)):
+                        if val is None:
+                            record[excel_col] = 0
+                        elif not isinstance(val, (int, float)):
                             cleaned = str(val).replace(" ", "").replace(",", ".")
                             try:
                                 record[excel_col] = float(cleaned)

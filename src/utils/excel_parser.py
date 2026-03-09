@@ -2,9 +2,8 @@ from io import BytesIO
 from tempfile import SpooledTemporaryFile
 from typing import Iterator
 
-import pandas as pd
+import polars as pl
 from fastapi import UploadFile
-from openpyxl import load_workbook
 
 
 async def save_upload_to_temp(
@@ -20,85 +19,101 @@ async def save_upload_to_temp(
     return temp
 
 
+def _clean_excel_dataframe(df: pl.DataFrame, read_as_str: bool = False) -> pl.DataFrame:
+    """Векторизованная очистка DataFrame без Python loops"""
+    if df.height == 0:
+        return df
+
+    # Нормализация имён колонок
+    df.columns = [str(col).strip().lower() for col in df.columns]
+
+    # Получаем строковые колонки (Utf8, String, или могут содержать строки)
+    string_cols = [
+        col
+        for col in df.columns
+        if df[col].dtype in (pl.Utf8, pl.String) or df[col].dtype == pl.Null
+    ]
+
+    # 1. Заменяем "-" на null ТОЛЬКО В СТРОКОВЫХ колонках (vectorized)
+    if string_cols:
+        df = df.with_columns(
+            [
+                pl.when(pl.col(col).cast(pl.Utf8) == "-")
+                .then(None)
+                .otherwise(pl.col(col))
+                .alias(col)
+                for col in string_cols
+            ]
+        )
+
+    # 2. Strip для строковых колонок (vectorized)
+    if string_cols:
+        df = df.with_columns(
+            [
+                pl.col(col).cast(pl.Utf8).str.strip_chars().alias(col)
+                for col in string_cols
+            ]
+        )
+
+    # 3. Заменяем ошибочные значения ("#N/A", "nan") на null (vectorized, case-insensitive)
+    if string_cols:
+        df = df.with_columns(
+            [
+                pl.when(
+                    pl.col(col).cast(pl.Utf8).str.to_lowercase().is_in(["#n/a", "nan"])
+                )
+                .then(None)
+                .otherwise(pl.col(col))
+                .alias(col)
+                for col in string_cols
+            ]
+        )
+
+    # 4. Конвертируем в строки если нужно
+    if read_as_str:
+        df = df.with_columns(pl.all().cast(pl.Utf8))
+
+    # 5. Финальная фильтрация: убираем строки, которые полностью null
+    df = df.filter(~pl.all_horizontal(pl.col("*").is_null()))
+
+    return df
+
+
 def iter_excel_records(
     file_obj: SpooledTemporaryFile,
     read_as_str: bool = False,
 ) -> Iterator[tuple[int, dict]]:
+    """Итератор по записям Excel файла с номерами строк"""
     file_obj.seek(0)
-    workbook = load_workbook(file_obj, read_only=True, data_only=True)
-    worksheet = workbook.active
+    content = file_obj.read()
 
-    rows = worksheet.iter_rows(values_only=True)
-    headers = next(rows, None)
-    if not headers:
-        workbook.close()
+    df = pl.read_excel(BytesIO(content), engine="calamine")
+
+    if df.height == 0:
         return iter(())
 
-    normalized_headers = [
-        str(h).strip().lower() if h is not None else "" for h in headers
-    ]
-    row_index = 1
+    df = _clean_excel_dataframe(df, read_as_str)
 
-    for row in rows:
-        row_index += 1
-        if not row or all(cell is None for cell in row):
-            continue
+    for idx, row in enumerate(df.iter_rows(named=True), start=2):
+        yield idx, row
 
-        record: dict = {}
-        skip_record = False
 
-        for header, cell in zip(normalized_headers, row):
-            if not header:
-                continue
-
-            value = None if cell == "-" else cell
-
-            if isinstance(value, str):
-                value = value.strip()
-                if value in ("#N/A", "nan"):
-                    skip_record = True
-                    break
-
-            if read_as_str and value is not None:
-                value = str(value)
-
-            record[header] = value
-
-        if skip_record:
-            continue
-
-        yield row_index, record
-
-    workbook.close()
+async def parse_excel_to_df(
+    file: UploadFile, read_as_str: bool = False
+) -> pl.DataFrame:
+    content = await file.read()
+    df = pl.read_excel(BytesIO(content), engine="calamine")
+    return _clean_excel_dataframe(df, read_as_str)
 
 
 async def parse_excel_file(file: UploadFile, read_as_str: bool = False) -> list[dict]:
-    content = await file.read()
+    df = await parse_excel_to_df(file, read_as_str)
+    return df.to_dicts()
 
-    if read_as_str:
-        df = pd.read_excel(BytesIO(content), sheet_name=0, dtype=str)
-    else:
-        df = pd.read_excel(BytesIO(content), sheet_name=0)
 
-    df = df.dropna(how="all")
-    df = df.where(pd.notna(df), None)
-    df = df.replace("-", None)
-
-    df.columns = df.columns.str.strip().str.lower()
-
-    str_cols = df.select_dtypes(include="object").columns
-    df[str_cols] = df[str_cols].apply(lambda col: col.str.strip())
-
-    records = df.to_dict("records")
-
-    cleaned_records = []
-    for r in records:
-        has_error = False
-        for key, value in r.items():
-            if value == "#N/A" or value == "nan":
-                has_error = True
-                break
-        if not has_error:
-            cleaned_records.append(r)
-
-    return cleaned_records
+def get_batch_records(df: pl.DataFrame, batch_size: int = 5000) -> Iterator[list[dict]]:
+    total_rows = df.height
+    for start in range(0, total_rows, batch_size):
+        end = min(start + batch_size, total_rows)
+        batch_df = df.slice(start, end - start)
+        yield batch_df.to_dicts()
