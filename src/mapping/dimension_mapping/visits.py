@@ -7,7 +7,7 @@ from src.db.models.clients import (
     Pharmacy,
     Speciality,
 )
-from src.db.models.employees import Employee
+from src.db.models.employees import Employee, Position
 from src.db.models.products import ProductGroup
 from src.db.models.visits import Visit
 
@@ -72,6 +72,16 @@ VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING = {
         "join_table": Employee,
         "join_condition": lambda: Visit.employee_id == Employee.id,
         "join_type": "join",
+    },
+    "position": {
+        "id_field": Position.id,
+        "name_field": Position.name,
+        "id_label": "position_id",
+        "name_label": "position",
+        "join_table": Position,
+        "join_condition": lambda: Employee.position_id == Position.id,
+        "join_type": "join",
+        "requires": ["employee"],
     },
     "product_group": {
         "id_field": Visit.product_group_id,

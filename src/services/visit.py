@@ -13,6 +13,7 @@ from src.db.models import (
     ImportLogs,
     MedicalFacility,
     Pharmacy,
+    Position,
     ProductGroup,
     Speciality,
     Visit,
@@ -690,10 +691,13 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             filters.group_by_period, filters.period_values
         )
         quarter_expr = func.ceil(Visit.month / 3.0)
+        group_by_dimensions = list(filters.group_by_dimensions or [])
+        if "employee" in group_by_dimensions and "position" not in group_by_dimensions:
+            group_by_dimensions.append("position")
         select_fields = []
         group_by_fields = []
 
-        for dim in filters.group_by_dimensions:
+        for dim in group_by_dimensions:
             dim_config = VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING[dim]
 
             if dim_config["id_field"] is not None:
@@ -708,11 +712,11 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 )
                 group_by_fields.append(dim_config["name_field"])
 
-        if "year" not in (filters.group_by_dimensions or []):
+        if "year" not in group_by_dimensions:
             select_fields.append(Visit.year.label("year"))
             group_by_fields.append(Visit.year)
 
-        if "month" not in (filters.group_by_dimensions or []):
+        if "month" not in group_by_dimensions:
             select_fields.append(Visit.month.label("month"))
             group_by_fields.append(Visit.month)
 
@@ -721,7 +725,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         stmt = select(*select_fields).select_from(Visit)
 
         tables_to_join = set()
-        for dim in filters.group_by_dimensions:
+        for dim in group_by_dimensions:
             dim_config = VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING[dim]
             if dim_config["join_table"] is not None:
                 tables_to_join.add(dim)
@@ -731,6 +735,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
 
         join_order = [
             "employee",
+            "position",
             "product_group",
             "pharmacy",
             "medical_facility",
@@ -757,6 +762,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 InOrNullSpec(Employee.company_id, [company_id] if company_id else None),
                 InOrNullSpec(Visit.pharmacy_id, filters.pharmacy_ids),
                 InOrNullSpec(Visit.employee_id, filters.employee_ids),
+                InOrNullSpec(Position.id, filters.position_ids),
                 InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),
                 InOrNullSpec(Visit.product_group_id, filters.product_group_ids),
                 InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
@@ -776,17 +782,19 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             search_term = f"%{filters.search}%"
             search_conditions = []
 
-            if "product_group" in filters.group_by_dimensions:
+            if "product_group" in group_by_dimensions:
                 search_conditions.append(ProductGroup.name.ilike(search_term))
-            if "pharmacy" in filters.group_by_dimensions:
+            if "pharmacy" in group_by_dimensions:
                 search_conditions.append(Pharmacy.name.ilike(search_term))
-            if "medical_facility" in filters.group_by_dimensions:
+            if "medical_facility" in group_by_dimensions:
                 search_conditions.append(MedicalFacility.name.ilike(search_term))
-            if "employee" in filters.group_by_dimensions:
+            if "employee" in group_by_dimensions:
                 search_conditions.append(Employee.full_name.ilike(search_term))
-            if "geo_indicator" in filters.group_by_dimensions:
+            if "position" in group_by_dimensions:
+                search_conditions.append(Position.name.ilike(search_term))
+            if "geo_indicator" in group_by_dimensions:
                 search_conditions.append(GeoIndicator.name.ilike(search_term))
-            if "speciality" in filters.group_by_dimensions:
+            if "speciality" in group_by_dimensions:
                 search_conditions.append(Speciality.name.ilike(search_term))
 
             if search_conditions:
@@ -801,6 +809,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             "group": ProductGroup.name,
             "employee_visits": func.count(Visit.id),
             "geo_indicator": GeoIndicator.name,
+            "position": Position.name,
         }
 
         allowed_dim_sorts = {
@@ -809,9 +818,10 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             "employee",
             "geo_indicator",
             "group",
+            "position",
         }
         if filters.sort_by in allowed_dim_sorts and filters.sort_by not in (
-            filters.group_by_dimensions or []
+            group_by_dimensions or []
         ):
             sort_by = None
             sort_order = None
@@ -820,7 +830,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             sort_order = filters.sort_order
 
         default_sort = []
-        g = set(filters.group_by_dimensions or [])
+        g = set(group_by_dimensions or [])
 
         if "year" in g:
             default_sort.append(Visit.year.desc())
@@ -828,6 +838,8 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             default_sort.append(Visit.month.desc())
         if "employee" in g:
             default_sort.append(Employee.full_name.nulls_last())
+        if "position" in g:
+            default_sort.append(Position.name.nulls_last())
         if "pharmacy" in g:
             default_sort.append(Pharmacy.name.nulls_last())
         if "medical_facility" in g:

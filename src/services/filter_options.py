@@ -238,6 +238,14 @@ def apply_visits_scope(stmt, target_ref: ReferencesType):
         employee_ids = select(distinct(Visit.employee_id))
         return stmt.where(Employee.id.in_(employee_ids))
 
+    if target_ref == "employees_positions":
+        position_ids = (
+            select(distinct(Employee.position_id))
+            .where(Employee.id.in_(select(distinct(Visit.employee_id))))
+            .scalar_subquery()
+        )
+        return stmt.where(Position.id.in_(position_ids))
+
     if target_ref == "products_product_groups":
         group_ids = select(distinct(Visit.product_group_id))
         return stmt.where(ProductGroup.id.in_(group_ids))

@@ -146,6 +146,7 @@ class VisitSumForPeriodFilter(BaseModel):
     product_group_ids: list[int] | None = None
     medical_facility_ids: list[int] | None = None
     employee_ids: list[int] | None = None
+    position_ids: list[int] | None = None
     search: str | None = None
     period_values: list[str] | None = None
     group_by_period: Literal["month", "quarter", "year"] = "month"
@@ -162,6 +163,7 @@ class VisitSumForPeriodFilter(BaseModel):
             "geo_indicator",
             "speciality",
             "doctor",
+            "position",
         ]
     ] = Field(
         default_factory=lambda: [
@@ -174,6 +176,7 @@ class VisitSumForPeriodFilter(BaseModel):
             "geo_indicator",
             "speciality",
             "doctor",
+            "position",
         ]
     )
     sort_by: (
@@ -207,3 +210,5 @@ class VisitCountPeriodResponse(BaseModel):
     speciality_id: int | None
     speciality_name: str | None
     doctor_name: str | None
+    position_id: int | None = None
+    position: str | None = None

@@ -98,6 +98,12 @@ class IMSMetricsResponse(BaseModel):
 
 
 class IMSTableFilter(BaseModel):
+    company: str | None = None
+    brand: str | None = None
+    segment: str | None = None
+    dosage: str | None = None
+    dosage_form: str | None = None
+    molecule: str | None = None
     company_names: list[str] | None = None
     brand_names: list[str] | None = None
     segment_names: list[str] | None = None

@@ -782,6 +782,12 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
         stmt = ListQueryHelper.apply_specs(
             stmt,
             [
+                StringTypedSpec(IMS.company, filters.company),
+                StringTypedSpec(IMS.brand, filters.brand),
+                StringTypedSpec(IMS.segment, filters.segment),
+                StringTypedSpec(IMS.dosage, filters.dosage),
+                StringTypedSpec(IMS.dosage_form, filters.dosage_form),
+                StringTypedSpec(IMS.molecule, filters.molecule),
                 InOrNullSpec(IMS.company, filters.company_names),
                 InOrNullSpec(IMS.brand, filters.brand_names),
                 InOrNullSpec(IMS.segment, filters.segment_names),
