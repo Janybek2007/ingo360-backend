@@ -807,7 +807,9 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
         }
 
         stmt = ListQueryHelper.apply_sorting(
-            stmt, sort_map.get(filters.sort_by), filters.sort_order
+            stmt,
+            ListQueryHelper.build_sort_payload(filters.sort_by, filters.sort_order),
+            sort_map,
         )
         stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
