@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class FilterOption(BaseModel):
-    id: int
+    id: int | str
     name: str
     scope_values: dict[str, list[int]] | None = None
 
@@ -31,6 +31,10 @@ ReferencesType = Literal[
     "clients_doctors",
     "clients_pharmacies",
     "companies_companies",
+    "ims_company_names",
+    "ims_brand_names",
+    "ims_segment_names",
+    "ims_dosage_form_names",
 ]
 
 ScopeType: TypeAlias = Union[
@@ -68,8 +72,13 @@ class GroupedFilterOptionsResponse(BaseModel):
     clients_doctors: list[FilterOption] | None = None
     clients_pharmacies: list[FilterOption] | None = None
     companies_companies: list[FilterOption] | None = None
+    ims_company_names: list[FilterOption] | None = None
+    ims_brand_names: list[FilterOption] | None = None
+    ims_segment_names: list[FilterOption] | None = None
+    ims_dosage_form_names: list[FilterOption] | None = None
 
 
 class GroupedFilterOptionsRequest(BaseModel):
     references: list[ReferencesType]
     scope: ScopeType | None = None
+    filters: dict[str, list[int]] | None = None

@@ -78,6 +78,7 @@ class IMSTopFilter(BaseModel):
     )
     group_by_period: Literal["month", "quarter", "year", "mat", "ytd"] = "ytd"
     segment_name: str | None = None
+    segments: list[str] | None = None
     brand_name: str | None = None
 
 

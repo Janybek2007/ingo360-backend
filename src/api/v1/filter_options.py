@@ -14,7 +14,6 @@ from src.services.filter_options import ALLOWED_REFERENCES, ALLOWED_SCOPES
 from src.services.filter_options import (
     get_grouped_filter_options as get_grouped_filter_options_service,
 )
-from src.services.ims import ims_service
 
 router = APIRouter()
 
@@ -53,37 +52,7 @@ async def get_grouped_filter_options(
         include_values=include_values,
         scope=scope,
         company_id=current_user.company_id,
+        filters=body.filters,
     )
 
     return GroupedFilterOptionsResponse(**payload)
-
-
-# IMS
-@router.get("/filter-options/company-name", dependencies=[Depends(current_active_user)])
-async def get_company_names(
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
-):
-    return await ims_service.get_field(session, "company")
-
-
-@router.get("/filter-options/brand-name", dependencies=[Depends(current_active_user)])
-async def get_brand_names(
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
-):
-    return await ims_service.get_field(session, "brand")
-
-
-@router.get("/filter-options/segment-name", dependencies=[Depends(current_active_user)])
-async def get_segment_names(
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
-):
-    return await ims_service.get_field(session, "segment")
-
-
-@router.get(
-    "/filter-options/dosage-form-name", dependencies=[Depends(current_active_user)]
-)
-async def get_dosage_form_names(
-    session: Annotated["AsyncSession", Depends(db_session.get_session)],
-):
-    return await ims_service.get_field(session, "dosage_form")

@@ -497,6 +497,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                 .label("rank"),
             )
             .where(IMS.period.in_(periods))
+            .where(IMS.segment.in_(filters.segments) if filters.segments else True)
             .group_by(group_column)
         ).subquery()
 
@@ -659,26 +660,46 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
             )
 
         entity_sales_stmt = select(func.sum(IMS.amount)).where(
-            and_(entity_filter, IMS.period.in_(periods))
+            and_(
+                entity_filter,
+                IMS.period.in_(periods),
+                IMS.segment.in_(filters.segments) if filters.segments else True,
+            )
         )
+
         result = await session.execute(entity_sales_stmt)
         entity_sales = result.scalar() or 0.0
 
-        market_sales_stmt = select(func.sum(IMS.amount)).where(IMS.period.in_(periods))
+        market_sales_stmt = select(func.sum(IMS.amount)).where(
+            and_(
+                IMS.period.in_(periods),
+                IMS.segment.in_(filters.segments) if filters.segments else True,
+            )
+        )
+
         result = await session.execute(market_sales_stmt)
         market_sales = result.scalar() or 0.0
 
         market_share = (entity_sales / market_sales * 100) if market_sales > 0 else 0.0
 
         prev_entity_sales_stmt = select(func.sum(IMS.amount)).where(
-            and_(entity_filter, IMS.period.in_(previous_periods))
+            and_(
+                entity_filter,
+                IMS.period.in_(previous_periods),
+                IMS.segment.in_(filters.segments) if filters.segments else True,
+            )
         )
+
         result = await session.execute(prev_entity_sales_stmt)
         prev_entity_sales = result.scalar() or 0.0
 
         prev_market_sales_stmt = select(func.sum(IMS.amount)).where(
-            IMS.period.in_(previous_periods)
+            and_(
+                IMS.period.in_(previous_periods),
+                IMS.segment.in_(filters.segments) if filters.segments else True,
+            )
         )
+
         result = await session.execute(prev_market_sales_stmt)
         prev_market_sales = result.scalar() or 0.0
 

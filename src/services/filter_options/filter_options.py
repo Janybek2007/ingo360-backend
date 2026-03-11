@@ -4,98 +4,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.models import (
     SKU,
     Brand,
-    ClientCategory,
     Company,
-    Country,
     Distributor,
-    District,
     Doctor,
-    Dosage,
-    DosageForm,
     Employee,
-    GeoIndicator,
     MedicalFacility,
     Pharmacy,
     Position,
     PrimarySalesAndStock,
     ProductGroup,
-    PromotionType,
-    Region,
     SecondarySales,
-    Segment,
-    Settlement,
-    Speciality,
     TertiarySalesAndStock,
     User,
     Visit,
 )
 from src.schemas.filter_options import FilterOption, ReferencesType, ScopeType
 
-REFERENCE_ALIASES = {
-    "geography_countries": "geography_countries",
-    "geography_settlements": "geography_settlements",
-    "geography_regions": "geography_regions",
-    "geography_districts": "geography_districts",
-    "products_product_groups": "products_product_groups",
-    "products_promotion_types": "products_promotion_types",
-    "products_brands": "products_brands",
-    "products_dosages": "products_dosages",
-    "products_dosage_forms": "products_dosage_forms",
-    "products_segments": "products_segments",
-    "products_skus": "products_skus",
-    "employees_positions": "employees_positions",
-    "employees_employees": "employees_employees",
-    "clients_distributors": "clients_distributors",
-    "clients_geo_indicators": "clients_geo_indicators",
-    "clients_medical_facilities": "clients_medical_facilities",
-    "clients_specialities": "clients_specialities",
-    "clients_client_categories": "clients_client_categories",
-    "clients_doctors": "clients_doctors",
-    "clients_pharmacies": "clients_pharmacies",
-    "companies_companies": "companies_companies",
-}
-
-ALLOWED_REFERENCES = set(REFERENCE_ALIASES.keys())
-ALLOWED_SCOPES = {
-    "all",
-    "clients_clients",
-    "sales_primary",
-    "sales_secondary",
-    "sales_tertiary",
-    "visits",
-}
-ALLOWED_SCOPES.update(ALLOWED_REFERENCES)
-
-REFERENCE_CONFIG = {
-    "geography_countries": (Country, Country.name),
-    "geography_settlements": (Settlement, Settlement.name),
-    "geography_regions": (Region, Region.name),
-    "geography_districts": (District, District.name),
-    "products_product_groups": (ProductGroup, ProductGroup.name),
-    "products_promotion_types": (PromotionType, PromotionType.name),
-    "products_brands": (Brand, Brand.name),
-    "products_dosages": (Dosage, Dosage.name),
-    "products_dosage_forms": (DosageForm, DosageForm.name),
-    "products_segments": (Segment, Segment.name),
-    "products_skus": (SKU, SKU.name),
-    "employees_positions": (Position, Position.name),
-    "employees_employees": (Employee, Employee.full_name),
-    "clients_distributors": (Distributor, Distributor.name),
-    "clients_geo_indicators": (GeoIndicator, GeoIndicator.name),
-    "clients_medical_facilities": (MedicalFacility, MedicalFacility.name),
-    "clients_specialities": (Speciality, Speciality.name),
-    "clients_client_categories": (ClientCategory, ClientCategory.name),
-    "clients_doctors": (Doctor, Doctor.full_name),
-    "clients_pharmacies": (Pharmacy, Pharmacy.name),
-    "companies_companies": (Company, Company.name),
-}
-
-DEFAULT_COMPANY_FILTER_REFS = {
-    "geography_districts",
-    "products_product_groups",
-    "products_brands",
-    "products_skus",
-}
+from .config import (
+    DEFAULT_COMPANY_FILTER_REFS,
+    FILTER_KEY_TO_MODEL,
+    IMS_REFERENCE_CONFIG,
+    REFERENCE_ALIASES,
+    REFERENCE_CONFIG,
+)
 
 
 def normalize_options(rows, value_field: str = "name") -> list[FilterOption]:
@@ -266,6 +197,18 @@ def apply_visits_scope(stmt, target_ref: ReferencesType):
 
 
 def build_reference_stmt(reference: ReferencesType, company_id: int):
+    if reference in IMS_REFERENCE_CONFIG:
+        ims_col = IMS_REFERENCE_CONFIG[reference]
+        stmt = (
+            select(
+                distinct(ims_col).label("id"),
+                ims_col.label("name"),
+            )
+            .where(ims_col.is_not(None))
+            .order_by(ims_col)
+        )
+        return stmt
+
     if reference == "products_brands":
         stmt = (
             select(
@@ -291,11 +234,76 @@ def build_reference_stmt(reference: ReferencesType, company_id: int):
     return stmt
 
 
+def apply_dynamic_filters(
+    stmt,
+    reference: ReferencesType,
+    filters: dict[str, list[int]],
+):
+    """
+    Динамически применяет фильтры к stmt.
+
+    Логика для каждого filter_key:
+      1. Прямое поле на target_model → WHERE col IN values
+      2. FK target → filter_model → WHERE fk_col IN values
+      3. FK filter_model → target → WHERE target.id IN (
+             SELECT DISTINCT fk_col FROM filter_model WHERE id IN values
+         )
+      Если связь не найдена — фильтр молча пропускается.
+    """
+    target_model, _ = REFERENCE_CONFIG[reference]
+
+    for filter_key, filter_values in filters.items():
+        if not filter_values:
+            continue
+
+        # ── 1. Прямая колонка на target_model (напр. "brand_id") ──────────
+        direct_col = target_model.__table__.c.get(filter_key)
+        if direct_col is not None:
+            stmt = stmt.where(direct_col.in_(filter_values))
+            continue
+
+        # ── Резолвим filter_key в (filter_model, filter_id_col) ───────────
+        filter_info = FILTER_KEY_TO_MODEL.get(filter_key)
+        if filter_info is None:
+            # Неизвестный ключ — пропускаем
+            continue
+
+        filter_model, filter_id_col = filter_info
+
+        # ── 2. Та же модель ───────────────────────────────────────────────
+        if filter_model is target_model:
+            stmt = stmt.where(target_model.id.in_(filter_values))
+            continue
+
+        # ── 3. FK: target_model → filter_model ────────────────────────────
+        #    Напр. SKU.brand_id → Brand  =>  WHERE SKU.brand_id IN values
+        fk_on_target = find_fk_column(target_model, filter_model)
+        if fk_on_target is not None:
+            stmt = stmt.where(fk_on_target.in_(filter_values))
+            continue
+
+        # ── 4. FK: filter_model → target_model ────────────────────────────
+        #    Напр. SKU.brand_id → Brand  (target=Brand, filter=SKU)
+        #    => WHERE Brand.id IN (SELECT DISTINCT SKU.brand_id
+        #                          FROM SKU WHERE SKU.id IN values)
+        fk_on_filter = find_fk_column(filter_model, target_model)
+        if fk_on_filter is not None:
+            subquery = select(distinct(fk_on_filter)).where(
+                filter_id_col.in_(filter_values),
+                fk_on_filter.is_not(None),
+            )
+            stmt = stmt.where(target_model.id.in_(subquery))
+            continue
+
+    return stmt
+
+
 async def get_grouped_filter_options(
     session: AsyncSession,
     include_values: list[ReferencesType],
     scope: ScopeType | None,
     company_id: int | None,
+    filters: dict[str, list[int]] | None = None,
 ) -> dict[str, list[FilterOption]]:
     payload: dict[str, list[FilterOption]] = {}
 
@@ -303,7 +311,12 @@ async def get_grouped_filter_options(
 
     for key in include_values:
         stmt = build_reference_stmt(key, company_id)
-        stmt = apply_scope_filter(stmt, key, scope_ref)
+
+        if key not in IMS_REFERENCE_CONFIG:
+            stmt = apply_scope_filter(stmt, key, scope_ref)
+
+        if filters and key not in IMS_REFERENCE_CONFIG:
+            stmt = apply_dynamic_filters(stmt, key, filters)
 
         rows_result = await session.execute(stmt)
         rows = rows_result.mappings().all()
