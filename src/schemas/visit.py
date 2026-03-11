@@ -92,6 +92,7 @@ class DoctorsBySpecialtyWithVisitResponse(BaseModel):
 class DoctorsCountFilter(BaseModel):
     medical_facility_ids: list[int] | None = None
     speciality_ids: list[int] | None = None
+    product_group_ids: list[int] | None = None
     search: str | None = None
     period_values: list[str] | None = None
     group_by_period: Literal["month", "quarter", "year"] = "month"

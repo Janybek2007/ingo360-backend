@@ -427,6 +427,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 InOrNullSpec(Employee.company_id, [company_id] if company_id else None),
                 InOrNullSpec(Doctor.speciality_id, filters.speciality_ids),
                 InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),
+                InOrNullSpec(Visit.product_group_id, filters.product_group_ids),
             ],
         )
 
