@@ -554,46 +554,39 @@ class PrimarySalesAndStockService(
         )
 
         if filters.group_by_period == "quarter":
-            sales_divisor = func.nullif(
-                func.sum(
-                    case(
-                        (
-                            PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                            PrimarySalesAndStock.amount,
-                        ),
-                        else_=0,
-                    )
-                )
-                / 3.0,
-                0,
-            )
+            divisor_factor = 3.0
         elif filters.group_by_period == "year":
-            sales_divisor = func.nullif(
-                func.sum(
-                    case(
-                        (
-                            PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                            PrimarySalesAndStock.amount,
-                        ),
-                        else_=0,
-                    )
-                )
-                / 12.0,
-                0,
-            )
+            divisor_factor = 12.0
         else:
-            sales_divisor = func.nullif(
-                func.sum(
-                    case(
-                        (
-                            PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                            PrimarySalesAndStock.amount,
-                        ),
-                        else_=0,
-                    )
-                ),
-                0,
+            divisor_factor = 1.0
+
+        sales_divisor_amount = func.nullif(
+            func.sum(
+                case(
+                    (
+                        PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                        PrimarySalesAndStock.amount,
+                    ),
+                    else_=0,
+                )
             )
+            / divisor_factor,
+            0,
+        )
+
+        sales_divisor_packages = func.nullif(
+            func.sum(
+                case(
+                    (
+                        PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                        PrimarySalesAndStock.packages,
+                    ),
+                    else_=0,
+                )
+            )
+            / divisor_factor,
+            0,
+        )
 
         select_cols = [
             period_key.label("period"),
@@ -619,12 +612,40 @@ class PrimarySalesAndStockService(
                                 else_=0,
                             )
                         )
-                        / sales_divisor,
+                        / sales_divisor_amount,
                     ),
                     else_=None,
                 ),
                 Numeric(10, 2),
-            ).label("coverage_months"),
+            ).label("coverage_months_amount"),
+            func.cast(
+                case(
+                    (
+                        func.sum(
+                            case(
+                                (
+                                    PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                                    PrimarySalesAndStock.packages,
+                                ),
+                                else_=0,
+                            )
+                        )
+                        > 0,
+                        func.sum(
+                            case(
+                                (
+                                    PrimarySalesAndStock.indicator.ilike("%остат%"),
+                                    PrimarySalesAndStock.packages,
+                                ),
+                                else_=0,
+                            )
+                        )
+                        / sales_divisor_packages,
+                    ),
+                    else_=None,
+                ),
+                Numeric(10, 2),
+            ).label("coverage_months_packages"),
         ]
 
         if filters.group_by_period not in ("quarter", "year"):
@@ -772,53 +793,67 @@ class PrimarySalesAndStockService(
             BASE_SALE_DIMENSTION_MAPPING, filters.group_by_dimensions
         )
 
+        if filters.group_by_period == "quarter":
+            divisor_factor = 3.0
+        elif filters.group_by_period == "year":
+            divisor_factor = 12.0
+        else:
+            divisor_factor = 1.0
+
+        def make_coverage(stock_col, sales_col):
+            return func.cast(
+                case(
+                    (
+                        func.sum(
+                            case(
+                                (
+                                    PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                                    sales_col,
+                                ),
+                                else_=0,
+                            )
+                        )
+                        > 0,
+                        func.sum(
+                            case(
+                                (
+                                    PrimarySalesAndStock.indicator.ilike("%остат%"),
+                                    stock_col,
+                                ),
+                                else_=0,
+                            )
+                        )
+                        / func.nullif(
+                            func.sum(
+                                case(
+                                    (
+                                        PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                                        sales_col,
+                                    ),
+                                    else_=0,
+                                )
+                            )
+                            / divisor_factor,
+                            0,
+                        ),
+                    ),
+                    else_=0,
+                ),
+                Numeric(10, 2),
+            )
+
         base_stmt = (
             select(
                 *select_fields,
                 period_key.label("period"),
-                func.cast(
-                    case(
-                        (
-                            func.sum(
-                                case(
-                                    (
-                                        PrimarySalesAndStock.indicator.ilike(
-                                            "%продаж%"
-                                        ),
-                                        PrimarySalesAndStock.amount,
-                                    ),
-                                    else_=0,
-                                )
-                            )
-                            > 0,
-                            func.sum(
-                                case(
-                                    (
-                                        PrimarySalesAndStock.indicator.ilike("%остат%"),
-                                        PrimarySalesAndStock.amount,
-                                    ),
-                                    else_=0,
-                                )
-                            )
-                            / func.nullif(
-                                func.sum(
-                                    case(
-                                        (
-                                            PrimarySalesAndStock.indicator.ilike(
-                                                "%продаж%"
-                                            ),
-                                            PrimarySalesAndStock.amount,
-                                        ),
-                                        else_=0,
-                                    )
-                                ),
-                                0,
-                            ),
-                        ),
-                        else_=0,
-                    ),
-                    Numeric(10, 2),
-                ).label("coverage_months"),
+                make_coverage(
+                    PrimarySalesAndStock.amount,
+                    PrimarySalesAndStock.amount,
+                ).label("coverage_months_amount"),
+                make_coverage(
+                    PrimarySalesAndStock.packages,
+                    PrimarySalesAndStock.packages,
+                ).label("coverage_months_packages"),
             )
             .select_from(PrimarySalesAndStock)
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
@@ -884,7 +919,10 @@ class PrimarySalesAndStockService(
             *final_select_fields,
             func.json_object_agg(
                 period_agg.c.period,
-                func.json_build_object("coverage_months", period_agg.c.coverage_months),
+                func.json_build_object(
+                    "coverage_months_amount", period_agg.c.coverage_months_amount,
+                    "coverage_months_packages", period_agg.c.coverage_months_packages,
+                ),
             ).label("periods_data"),
         )
 
