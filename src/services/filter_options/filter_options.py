@@ -8,12 +8,16 @@ from src.db.models import (
     Distributor,
     Doctor,
     Employee,
+    GeoIndicator,
     MedicalFacility,
     Pharmacy,
     Position,
     PrimarySalesAndStock,
     ProductGroup,
+    PromotionType,
     SecondarySales,
+    Segment,
+    Speciality,
     TertiarySalesAndStock,
     User,
     Visit,
@@ -117,33 +121,79 @@ def apply_scope_filter(stmt, target_ref: ReferencesType, scope_ref: ScopeType):
 
 
 def apply_sales_scope(stmt, target_ref: ReferencesType, scope_ref: ScopeType):
-    if target_ref == "clients_distributors" and scope_ref == "sales_primary":
-        distributor_ids = select(distinct(PrimarySalesAndStock.distributor_id))
-        return stmt.where(Distributor.id.in_(distributor_ids))
-
-    if target_ref == "products_brands":
-        if scope_ref == "sales_primary":
-            sku_ids = select(distinct(PrimarySalesAndStock.sku_id))
-        elif scope_ref == "sales_secondary":
-            sku_ids = select(distinct(SecondarySales.sku_id))
+    if target_ref == "clients_geo_indicators":
+        if scope_ref == "sales_secondary":
+            pharmacy_ids = select(distinct(SecondarySales.pharmacy_id))
+        elif scope_ref == "sales_tertiary":
+            pharmacy_ids = select(distinct(TertiarySalesAndStock.pharmacy_id))
         else:
-            sku_ids = select(distinct(TertiarySalesAndStock.sku_id))
+            return stmt
 
-        brand_ids = select(distinct(SKU.brand_id)).where(SKU.id.in_(sku_ids))
-        return stmt.where(Brand.id.in_(brand_ids))
-
-    if target_ref == "products_product_groups":
-        if scope_ref == "sales_primary":
-            sku_ids = select(distinct(PrimarySalesAndStock.sku_id))
-        elif scope_ref == "sales_secondary":
-            sku_ids = select(distinct(SecondarySales.sku_id))
-        else:
-            sku_ids = select(distinct(TertiarySalesAndStock.sku_id))
-
-        product_group_ids = select(distinct(SKU.product_group_id)).where(
-            SKU.id.in_(sku_ids)
+        geo_indicator_ids = select(distinct(Pharmacy.geo_indicator_id)).where(
+            Pharmacy.id.in_(pharmacy_ids),
+            Pharmacy.geo_indicator_id.is_not(None),
         )
-        return stmt.where(ProductGroup.id.in_(product_group_ids))
+        return stmt.where(GeoIndicator.id.in_(geo_indicator_ids))
+
+    if target_ref == "clients_distributors":
+        if scope_ref == "sales_primary":
+            distributor_ids = select(distinct(PrimarySalesAndStock.distributor_id))
+            return stmt.where(Distributor.id.in_(distributor_ids))
+
+        if scope_ref in ("sales_secondary", "sales_tertiary"):
+            if scope_ref == "sales_secondary":
+                pharmacy_ids = select(distinct(SecondarySales.pharmacy_id))
+            else:
+                pharmacy_ids = select(distinct(TertiarySalesAndStock.pharmacy_id))
+
+            distributor_ids = select(distinct(Pharmacy.distributor_id)).where(
+                Pharmacy.id.in_(pharmacy_ids),
+                Pharmacy.distributor_id.is_not(None),
+            )
+            return stmt.where(Distributor.id.in_(distributor_ids))
+
+    if target_ref == "products_skus":
+        if scope_ref == "sales_primary":
+            sku_ids = select(distinct(PrimarySalesAndStock.sku_id))
+        elif scope_ref == "sales_secondary":
+            sku_ids = select(distinct(SecondarySales.sku_id))
+        else:
+            sku_ids = select(distinct(TertiarySalesAndStock.sku_id))
+        return stmt.where(SKU.id.in_(sku_ids))
+
+    if target_ref in (
+        "products_brands",
+        "products_product_groups",
+        "products_promotion_types",
+        "products_segments",
+    ):
+        if scope_ref == "sales_primary":
+            sku_ids = select(distinct(PrimarySalesAndStock.sku_id))
+        elif scope_ref == "sales_secondary":
+            sku_ids = select(distinct(SecondarySales.sku_id))
+        else:
+            sku_ids = select(distinct(TertiarySalesAndStock.sku_id))
+
+        if target_ref == "products_brands":
+            ids = select(distinct(SKU.brand_id)).where(SKU.id.in_(sku_ids))
+            return stmt.where(Brand.id.in_(ids))
+
+        if target_ref == "products_product_groups":
+            ids = select(distinct(SKU.product_group_id)).where(SKU.id.in_(sku_ids))
+            return stmt.where(ProductGroup.id.in_(ids))
+
+        if target_ref == "products_promotion_types":
+            ids = select(distinct(SKU.promotion_type_id)).where(
+                SKU.id.in_(sku_ids),
+                SKU.promotion_type_id.is_not(None),
+            )
+            return stmt.where(PromotionType.id.in_(ids))
+        if target_ref == "products_segments":
+            ids = select(distinct(SKU.segment_id)).where(
+                SKU.id.in_(sku_ids),
+                SKU.segment_id.is_not(None),
+            )
+            return stmt.where(Segment.id.in_(ids))
 
     if target_ref == "clients_pharmacies" and scope_ref in (
         "sales_secondary",
@@ -165,6 +215,16 @@ def apply_visits_scope(stmt, target_ref: ReferencesType):
         )
         return stmt.where(Pharmacy.id.in_(pharmacy_ids))
 
+    if target_ref == "clients_geo_indicators":
+        pharmacy_ids = select(distinct(Visit.pharmacy_id)).where(
+            Visit.pharmacy_id.is_not(None)
+        )
+        geo_indicator_ids = select(distinct(Pharmacy.geo_indicator_id)).where(
+            Pharmacy.id.in_(pharmacy_ids),
+            Pharmacy.geo_indicator_id.is_not(None),
+        )
+        return stmt.where(GeoIndicator.id.in_(geo_indicator_ids))
+
     if target_ref == "employees_employees":
         employee_ids = select(distinct(Visit.employee_id))
         return stmt.where(Employee.id.in_(employee_ids))
@@ -176,6 +236,16 @@ def apply_visits_scope(stmt, target_ref: ReferencesType):
             .scalar_subquery()
         )
         return stmt.where(Position.id.in_(position_ids))
+
+    if target_ref == "clients_specialities":
+        doctor_ids = select(distinct(Visit.doctor_id)).where(
+            Visit.doctor_id.is_not(None)
+        )
+        speciality_ids = select(distinct(Doctor.speciality_id)).where(
+            Doctor.id.in_(doctor_ids),
+            Doctor.speciality_id.is_not(None),
+        )
+        return stmt.where(Speciality.id.in_(speciality_ids))
 
     if target_ref == "products_product_groups":
         group_ids = select(distinct(Visit.product_group_id))
