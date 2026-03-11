@@ -10,6 +10,8 @@ from src.api.dependencies.company import (
     can_view_tertiary_sales,
 )
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.utils.pivot_distributore_share import pivot_distributor_share
+from src.api.utils.pivot_sales_by_distributors import pivot_sales_by_distributors
 from src.db.models import (
     SKU,
     Pharmacy,
@@ -195,11 +197,12 @@ async def get_distributor_shares_chart(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await primary_sales_service.get_distributor_share_chart(
+    rows = await primary_sales_service.get_distributor_share_chart(
         session,
         filters,
         company_id=current_user.company_id,
     )
+    return pivot_distributor_share(rows)
 
 
 @router.patch(
@@ -400,11 +403,12 @@ async def get_sales_report_by_distributors_chart(
     current_user: Annotated[User, Depends(current_active_user)],
     filters: sale.ChartSalesByDistributorFilter,
 ):
-    return await secondary_sales_service.get_total_sales_by_distributor(
+    rows = await secondary_sales_service.get_total_sales_by_distributor(
         session=session,
         company_id=current_user.company_id,
         filters=filters,
     )
+    return pivot_sales_by_distributors(rows)
 
 
 @router.patch(

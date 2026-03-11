@@ -827,7 +827,9 @@ class PrimarySalesAndStockService(
                             func.sum(
                                 case(
                                     (
-                                        PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                                        PrimarySalesAndStock.indicator.ilike(
+                                            "%продаж%"
+                                        ),
                                         sales_col,
                                     ),
                                     else_=0,
@@ -920,8 +922,10 @@ class PrimarySalesAndStockService(
             func.json_object_agg(
                 period_agg.c.period,
                 func.json_build_object(
-                    "coverage_months_amount", period_agg.c.coverage_months_amount,
-                    "coverage_months_packages", period_agg.c.coverage_months_packages,
+                    "coverage_months_amount",
+                    period_agg.c.coverage_months_amount,
+                    "coverage_months_packages",
+                    period_agg.c.coverage_months_packages,
                 ),
             ).label("periods_data"),
         )
