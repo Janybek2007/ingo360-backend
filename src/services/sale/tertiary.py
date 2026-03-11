@@ -382,8 +382,16 @@ class TertiarySalesService(
                     stmt, SKU.brand_id, filters.brand_ids
                 )
 
-            if filters.indicator:
-                stmt = stmt.where(self.model.indicator.ilike(f"%{filters.indicator}%"))
+            if filters.indicators:
+                raw = (
+                    filters.indicators
+                    if isinstance(filters.indicators, list)
+                    else [filters.indicators]
+                )
+
+                stmt = stmt.where(
+                    or_(*(self.model.indicator.ilike(f"%{v}%") for v in raw))
+                )
 
             if filters.sort_by == "distributors" and not joined_pharmacy:
                 stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)

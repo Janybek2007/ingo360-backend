@@ -372,8 +372,10 @@ class PrimarySalesAndStockService(
                     if isinstance(filters.indicators, list)
                     else [filters.indicators]
                 )
-                values = [v.lower() for v in raw]
-                stmt = stmt.where(func.lower(self.model.indicator).in_(values))
+
+                stmt = stmt.where(
+                    or_(*(self.model.indicator.ilike(f"%{v}%") for v in raw))
+                )
 
             if filters.sort_by == "brands" and not joined_sku:
                 stmt = stmt.join(SKU, self.model.sku_id == SKU.id)

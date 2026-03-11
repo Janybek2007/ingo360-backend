@@ -149,7 +149,7 @@ class SecondaryTertiarySalesListRequest(BaseDbFilter):
     months: list[int] | None = None
     quarters: list[int] | None = None
     year: str | None = None
-    indicator: str | None = None
+    indicators: list[str] | str | None = None
     published: list[str] | None = None
     amount: str | None = None
     packages: str | None = None
