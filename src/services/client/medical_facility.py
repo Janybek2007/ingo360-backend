@@ -49,9 +49,9 @@ class MedicalFacilityService(
         sort_map = {
             "name": self.model.name,
             "facility_type": self.model.facility_type,
-            "settlements": self.model.settlement_id,
-            "districts": self.model.district_id,
-            "geo_indicators": self.model.geo_indicator_id,
+            "settlement": self.model.settlement_id,
+            "district": self.model.district_id,
+            "geo_indicator": self.model.geo_indicator_id,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,

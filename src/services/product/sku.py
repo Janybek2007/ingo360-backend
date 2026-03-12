@@ -45,13 +45,13 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
 
         sort_map = {
             "name": self.model.name,
-            "brands": self.model.brand_id,
-            "promotion_types": self.model.promotion_type_id,
-            "product_groups": self.model.product_group_id,
-            "dosage_forms": self.model.dosage_form_id,
-            "dosages": self.model.dosage_id,
-            "segments": self.model.segment_id,
-            "companies": self.model.company_id,
+            "brand": self.model.brand_id,
+            "promotion_type": self.model.promotion_type_id,
+            "product_group": self.model.product_group_id,
+            "dosage_form": self.model.dosage_form_id,
+            "dosage": self.model.dosage_id,
+            "segment": self.model.segment_id,
+            "company": self.model.company_id,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,

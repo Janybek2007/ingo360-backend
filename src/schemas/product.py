@@ -204,9 +204,9 @@ ProductGroupSortField = Literal["name", "companies"]
 BrandSortField = Literal[
     "name",
     "ims_name",
-    "promotion_types",
-    "product_groups",
-    "companies",
+    "promotion_type",
+    "product_group",
+    "company",
 ]
 PromotionTypeSortField = Literal["name"]
 DosageFormSortField = Literal["name"]
@@ -214,13 +214,13 @@ DosageSortField = Literal["name"]
 SegmentSortField = Literal["name"]
 SKUSortField = Literal[
     "name",
-    "brands",
-    "promotion_types",
-    "product_groups",
-    "dosage_forms",
-    "dosages",
-    "segments",
-    "companies",
+    "brand",
+    "promotion_type",
+    "product_group",
+    "dosage_form",
+    "dosage",
+    "segment",
+    "company",
 ]
 
 

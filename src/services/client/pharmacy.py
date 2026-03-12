@@ -48,14 +48,14 @@ class PharmacyService(
 
         sort_map = {
             "name": self.model.name,
-            "companies": self.model.company_id,
-            "distributors": self.model.distributor_id,
-            "responsible_employees": self.model.responsible_employee_id,
-            "settlements": self.model.settlement_id,
-            "districts": self.model.district_id,
-            "client_categories": self.model.client_category_id,
-            "product_groups": self.model.product_group_id,
-            "geo_indicators": self.model.geo_indicator_id,
+            "company": self.model.company_id,
+            "distributor": self.model.distributor_id,
+            "responsible_employe": self.model.responsible_employee_id,
+            "settlement": self.model.settlement_id,
+            "district": self.model.district_id,
+            "client_category": self.model.client_category_id,
+            "product_group": self.model.product_group_id,
+            "geo_indicator": self.model.geo_indicator_id,
         }
 
         stmt = ListQueryHelper.apply_sorting_with_default(

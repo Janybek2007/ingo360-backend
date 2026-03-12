@@ -46,11 +46,11 @@ class EmployeeService(
 
         sort_map = {
             "full_name": self.model.full_name,
-            "positions": self.model.position_id,
-            "product_groups": self.model.product_group_id,
-            "regions": self.model.region_id,
-            "districts": self.model.district_id,
-            "companies": self.model.company_id,
+            "position": self.model.position_id,
+            "product_group": self.model.product_group_id,
+            "region": self.model.region_id,
+            "district": self.model.district_id,
+            "company": self.model.company_id,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,

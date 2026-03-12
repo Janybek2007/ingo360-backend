@@ -3,7 +3,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict
 
 from src.schemas.base_filter import BaseReferenceFilter
-from src.schemas.company import CompanySimpleResponse
+from src.schemas.company import CompanyMinimalResponse
 from src.schemas.employee import EmployeeSimpleResponse
 from src.schemas.geography import DistrictSimpleResponse, SettlementSimpleResponse
 from src.schemas.product import ProductGroupSimpleResponse
@@ -77,6 +77,7 @@ class DoctorUpdate(BaseModel):
     speciality_id: int | None = None
     client_category_id: int | None = None
     product_group_id: int | None = None
+    company_id: int | None = None
 
 
 class PharmacyUpdate(BaseModel):
@@ -165,6 +166,7 @@ class DoctorResponse(BaseModel):
     medical_facility: MedicalFacilitySimpleResponse | None
     speciality: SpecialityResponse
     client_category: ClientCategoryResponse
+    company: CompanyMinimalResponse
     product_group: ProductGroupSimpleResponse | None
 
 
@@ -178,7 +180,7 @@ class PharmacyResponse(BaseModel):
     district: DistrictSimpleResponse | None
     client_category: ClientCategoryResponse | None
     product_group: ProductGroupSimpleResponse
-    company: CompanySimpleResponse
+    company: CompanyMinimalResponse
     geo_indicator: GeoIndicatorResponse | None
 
 
@@ -240,14 +242,14 @@ class PharmacyListRequest(BaseReferenceFilter):
     sort_by: (
         Literal[
             "name",
-            "companies",
-            "distributors",
-            "responsible_employees",
-            "settlements",
-            "districts",
-            "client_categories",
-            "product_groups",
-            "geo_indicators",
+            "company",
+            "distributor",
+            "responsible_employe",
+            "settlement",
+            "district",
+            "client_category",
+            "product_group",
+            "geo_indicator",
         ]
         | None
     ) = None
@@ -260,6 +262,7 @@ class DoctorListRequest(BaseReferenceFilter):
     speciality_ids: list[int] | None = None
     client_category_ids: list[int] | None = None
     product_group_ids: list[int] | None = None
+    company_ids: list[int] | None = None
     sort_by: (
         Literal[
             "full_name",
@@ -268,6 +271,7 @@ class DoctorListRequest(BaseReferenceFilter):
             "speciality",
             "client_category",
             "product_group",
+            "company",
         ]
         | None
     ) = None
@@ -301,6 +305,6 @@ class MedicalFacilityListRequest(BaseReferenceFilter):
     district_ids: list[int] | None = None
     geo_indicator_ids: list[int] | None = None
     sort_by: (
-        Literal["name", "facility_type", "settlements", "districts", "geo_indicators"]
+        Literal["name", "facility_type", "settlement", "district", "geo_indicator"]
         | None
     ) = None

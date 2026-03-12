@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from src.schemas.base_filter import BaseReferenceFilter
-from src.schemas.company import CompanySimpleResponse
+from src.schemas.company import CompanyMinimalResponse
 from src.schemas.geography import DistrictSimpleResponse, RegionSimpleResponse
 from src.schemas.product import ProductGroupSimpleResponse
 
@@ -54,16 +54,7 @@ class EmployeeResponse(BaseModel):
     product_group: ProductGroupSimpleResponse
     region: RegionSimpleResponse
     district: DistrictSimpleResponse | None
-    company: CompanySimpleResponse
-
-
-class EmployeeFilter(BaseReferenceFilter):
-    full_name: str | None = None
-    positions: str | None = None
-    product_groups: str | None = None
-    regions: str | None = None
-    districts: str | None = None
-    companies: str | None = None
+    company: CompanyMinimalResponse
 
 
 class PositionFilter(BaseReferenceFilter):
@@ -72,11 +63,11 @@ class PositionFilter(BaseReferenceFilter):
 
 EmployeeSortField = Literal[
     "full_name",
-    "positions",
-    "product_groups",
-    "regions",
-    "districts",
-    "companies",
+    "position",
+    "product_group",
+    "region",
+    "district",
+    "company",
 ]
 PositionSortField = Literal["name"]
 

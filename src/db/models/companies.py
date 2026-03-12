@@ -11,6 +11,7 @@ if TYPE_CHECKING:
         SKU,
         Brand,
         District,
+        Doctor,
         Employee,
         ImportLogs,
         Pharmacy,
@@ -52,6 +53,7 @@ class Company(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="companies"
     )
+    doctors: Mapped[list["Doctor"]] = relationship(back_populates="company")
     __table_args__ = (
         Index("idx_company_name", "name"),
         Index("idx_companny_ims_name", "ims_name"),

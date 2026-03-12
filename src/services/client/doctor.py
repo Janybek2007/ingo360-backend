@@ -50,6 +50,7 @@ class DoctorService(
             "speciality": self.model.speciality_id,
             "client_category": self.model.client_category_id,
             "product_group": self.model.product_group_id,
+            "company": self.model.company_id,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
@@ -78,6 +79,7 @@ class DoctorService(
                     InOrNullSpec(
                         self.model.product_group_id, filters.product_group_ids
                     ),
+                    InOrNullSpec(self.model.company_id, filters.company_ids),
                 ],
             )
             # Count before pagination

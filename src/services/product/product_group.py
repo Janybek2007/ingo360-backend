@@ -38,7 +38,7 @@ class ProductGroupService(
 
         sort_map = {
             "name": self.model.name,
-            "companies": self.model.company_id,
+            "company": self.model.company_id,
         }
 
         stmt = ListQueryHelper.apply_sorting_with_default(

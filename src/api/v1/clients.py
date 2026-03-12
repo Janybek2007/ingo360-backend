@@ -143,6 +143,7 @@ async def get_doctors(
         joinedload(Doctor.speciality),
         joinedload(Doctor.client_category),
         joinedload(Doctor.product_group),
+        joinedload(Doctor.company),
     ]
     return await client_service.doctor_service.get_multi(
         session, load_options=load_options, filters=filters

@@ -74,6 +74,7 @@ class Doctor(Base):
     company_id: Mapped[int] = mapped_column(
         ForeignKey("companies.id"),
     )
+    company: Mapped["Company"] = relationship(back_populates="doctors")
 
     __table_args__ = (
         Index("idx_doctor_speciality", "speciality_id"),

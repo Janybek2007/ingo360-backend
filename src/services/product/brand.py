@@ -44,9 +44,9 @@ class BrandService(
         sort_map = {
             "name": self.model.name,
             "ims_name": self.model.ims_name,
-            "promotion_types": self.model.promotion_type_id,
-            "product_groups": self.model.product_group_id,
-            "companies": self.model.company_id,
+            "promotion_type": self.model.promotion_type_id,
+            "product_group": self.model.product_group_id,
+            "company": self.model.company_id,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
