@@ -725,6 +725,13 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
 
         stmt = select(*select_fields).select_from(Visit)
 
+        if company_id:
+            stmt = stmt.where(
+                Visit.employee_id.in_(
+                    select(Employee.id).where(Employee.company_id == company_id)
+                )
+            )
+
         tables_to_join = set()
         for dim in group_by_dimensions:
             dim_config = VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING[dim]
@@ -760,7 +767,6 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         stmt = ListQueryHelper.apply_specs(
             stmt,
             [
-                InOrNullSpec(Employee.company_id, [company_id] if company_id else None),
                 InOrNullSpec(Visit.pharmacy_id, filters.pharmacy_ids),
                 InOrNullSpec(Visit.employee_id, filters.employee_ids),
                 InOrNullSpec(Position.id, filters.position_ids),
