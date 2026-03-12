@@ -259,7 +259,7 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
         return build_import_result(
             total=len(records),
             imported=len(inserted_ids),
-            skipped_records=[],
+            skipped_records=skipped_records,
             inserted=len(inserted_ids),
             deduplicated=len(data_to_insert) - len(inserted_ids),
         )
