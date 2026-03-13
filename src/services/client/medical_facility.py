@@ -129,6 +129,8 @@ class MedicalFacilityService(
             {
                 "название|name",
                 "населенный пункт|settlement",
+                "область|region",
+                "компания|company"
             },
         )
 
