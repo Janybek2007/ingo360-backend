@@ -33,6 +33,7 @@ if TYPE_CHECKING:
         TertiarySalesAndStock,
         User,
         Visit,
+        PromotionType
     )
 
 
@@ -132,5 +133,9 @@ class ImportLogs(Base):
     )
 
     visits: Mapped[list["Visit"]] = relationship(
+        back_populates="import_log", cascade="all, delete-orphan"
+    )
+
+    promotion_type: Mapped[list["PromotionType"]] = relationship(
         back_populates="import_log", cascade="all, delete-orphan"
     )

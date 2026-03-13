@@ -48,6 +48,12 @@ class PromotionType(Base):
     name: Mapped[str] = mapped_column(String(256), unique=True)
     brands: Mapped[list["Brand"]] = relationship(back_populates="promotion_type")
     sku: Mapped[list["SKU"]] = relationship(back_populates="promotion_type")
+    import_log_id: Mapped[int | None] = mapped_column(
+        ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
+    )
+    import_log: Mapped[Optional["ImportLogs"]] = relationship(
+        back_populates="promotion_type"
+    )
     __table_args__ = (Index("idx_promotion_type_name", "name"),)
 
 
