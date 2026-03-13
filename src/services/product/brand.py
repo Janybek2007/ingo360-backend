@@ -143,11 +143,26 @@ class BrandService(
         promotion_type_map, missing_promotion_types = await self.get_id_map(
             session, PromotionType, "name", {r["тип промоции"] for r in records}
         )
-        product_group_map, missing_product_groups = await self.get_id_map(
-            session, ProductGroup, "name", {r["группа"] for r in records}
-        )
         company_map, missing_companies = await self.get_id_map(
             session, Company, "name", {r["компания"] for r in records}
+        )
+
+        product_group_pairs = {
+            (r["группа"], company_map.get(r["компания"]))
+            for r in records
+            if r["компания"] in company_map
+        }
+        product_group_map, missing_product_groups = (
+            await self.get_id_map(
+                session,
+                ProductGroup,
+                "name",
+                product_group_pairs,
+                filter_field="company_id",
+                filter_values=set(company_map.values()),
+            )
+            if product_group_pairs
+            else ({}, set())
         )
 
         existing_rows = await session.execute(select(Brand.name, Brand.ims_name))
@@ -167,10 +182,10 @@ class BrandService(
             missing_keys = []
             if r["тип промоции"] in missing_promotion_types:
                 missing_keys.append(f"тип промоции: {r['тип промоции']}")
-            if r["группа"] in missing_product_groups:
-                missing_keys.append(f"группа: {r['группа']}")
             if r["компания"] in missing_companies:
                 missing_keys.append(f"компания: {r['компания']}")
+            if (r["группа"], company_map.get(r["компания"])) in missing_product_groups:
+                missing_keys.append(f"группа: {r['группа']}")
 
             if missing_keys:
                 skipped_records.append({"row": r.get("row"), "missing": missing_keys})
@@ -189,7 +204,7 @@ class BrandService(
 
             relation_fields = {
                 "promotion_type_id": promotion_type_map[r["тип промоции"]],
-                "product_group_id": product_group_map[r["группа"]],
+                "product_group_id": product_group_map[(r["группа"], company_map[r["компания"]])],
                 "company_id": company_map[r["компания"]],
                 "import_log_id": import_log.id,
             }
