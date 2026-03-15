@@ -4,14 +4,15 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from src.db.models import Country, ImportLogs, geography
-from src.mapping.geography import region_mapping
+from src.db.models import ImportLogs
+from src.db.models import geography as geography_models
+from src.import_fields import geography
 from src.schemas import geography as geography_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -22,7 +23,9 @@ from src.schemas.base_filter import PaginatedResponse
 
 class RegionService(
     BaseService[
-        geography.Region, geography_schema.RegionCreate, geography_schema.RegionUpdate
+        geography_models.Region,
+        geography_schema.RegionCreate,
+        geography_schema.RegionUpdate,
     ]
 ):
     async def import_excel(
@@ -30,7 +33,7 @@ class RegionService(
     ):
         records = await parse_excel_file(file)
 
-        validate_required_columns(records, {"страна|country", "название|name"})
+        validate_required_columns(records, geography.region_fields)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -41,28 +44,32 @@ class RegionService(
         session.add(import_log)
         await session.flush()
 
-        country_map, missing_countries = await self.get_id_map(
-            session, Country, "name", {r["страна"] for r in records}
+        resolved = await resolve_records_fields(
+            session, records, geography.region_fields, self.get_id_map
         )
 
         skipped_records = []
         data_to_insert = []
 
         for idx, r in enumerate(records):
-            missing_keys = []
+            missing_keys = resolved.collect_missing_keys(r, geography.region_fields)
 
-            if r["страна"] in missing_countries:
-                missing_keys.append(f"страна: {r['страна']}")
+            ids, null_keys = resolved.resolve_id_fields(r, geography.region_fields)
+            if null_keys:
+                missing_keys.extend(null_keys)
 
             if missing_keys:
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
 
-            relation_fields = {
-                "country_id": country_map[r["страна"]],
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(map_record(r, region_mapping, relation_fields))
+            data_to_insert.append(
+                {
+                    "name": r.get("название"),
+                    "country_id": ids.get("country_id"),
+                    "import_log_id": import_log.id,
+                }
+            )
+
         inserted_ids = []
         if data_to_insert:
             stmt = (
@@ -154,7 +161,7 @@ class RegionService(
         session: "AsyncSession",
         load_options: list[Any] | None = None,
         chunk_size: int = 1000,
-    ) -> AsyncIterator[geography.Region]:
+    ) -> AsyncIterator[geography_models.Region]:
         stmt = select(self.model)
 
         if load_options:

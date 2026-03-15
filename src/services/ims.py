@@ -8,6 +8,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import and_, case, distinct, func, insert, literal, or_, select, union
 
 from src.db.models import IMS, Brand, Company, ImportLogs
+from src.import_fields import ims
 from src.mapping.ims import ims_mapping
 from src.schemas.ims import (
     IMSCreate,
@@ -27,6 +28,7 @@ from src.utils.list_query_helper import (
     StringTypedSpec,
 )
 from src.utils.mapping import map_record
+from src.utils.records_resolver import normalize_record
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -180,14 +182,12 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                 raise HTTPException(status_code=400, detail="Файл пустой")
 
             _, first_record = first_row
-            validate_required_columns(
-                [first_record],
-                {
-                    "компания|company",
-                    "бренд|brand",
-                    "период|period",
-                },
-            )
+            try:
+                validate_required_columns(
+                    [first_record], ims.ims_fields, raise_exception=False
+                )
+            except Exception as e:
+                raise ValueError(str(e))
 
             total_records = 0
             import_log = ImportLogs(
@@ -205,6 +205,8 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
             with open(file_path, "rb") as f:
                 for _, record in iter_excel_records(f):
                     total_records += 1
+                    normalize_record(record, ims.ims_fields)
+
                     relation_fields = {"import_log_id": import_log.id}
                     data_to_insert.append(
                         map_record(record, ims_mapping, relation_fields)

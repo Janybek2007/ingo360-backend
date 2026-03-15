@@ -4,14 +4,15 @@ from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from src.db.models import ImportLogs, geography
-from src.mapping.geography import region_mapping
+from src.db.models import ImportLogs
+from src.db.models import geography as geography_models
+from src.import_fields import base
 from src.schemas import geography as geography_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import ListQueryHelper
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -22,7 +23,7 @@ from src.schemas.base_filter import PaginatedResponse
 
 class CountryService(
     BaseService[
-        geography.Country,
+        geography_models.Country,
         geography_schema.CountryCreate,
         geography_schema.CountryUpdate,
     ]
@@ -32,7 +33,7 @@ class CountryService(
     ):
         records = await parse_excel_file(file)
 
-        validate_required_columns(records, {"название|name"})
+        validate_required_columns(records, geography.country_fields)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -43,13 +44,11 @@ class CountryService(
         session.add(import_log)
         await session.flush()
 
-        data_to_insert = []
-        for r in records:
-            relation_fields = {
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(map_record(r, region_mapping, relation_fields))
-        stmt = insert(self.model).on_conflict_do_nothing()
+        await resolve_records_fields(session, records, [base.name], self.get_id_map)
+
+        data_to_insert = [
+            {"name": r.get("название"), "import_log_id": import_log.id} for r in records
+        ]
 
         inserted_ids = []
         if data_to_insert:
@@ -125,7 +124,7 @@ class CountryService(
         session: "AsyncSession",
         load_options: list[Any] | None = None,
         chunk_size: int = 1000,
-    ) -> AsyncIterator[geography.Country]:
+    ) -> AsyncIterator[geography_models.Country]:
         stmt = select(self.model)
 
         if load_options:

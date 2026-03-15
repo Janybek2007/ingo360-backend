@@ -5,22 +5,21 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
-    ClientCategory,
-    Company,
-    Employee,
     ImportLogs,
-    MedicalFacility,
-    ProductGroup,
-    Speciality,
     clients,
 )
-from src.mapping.clients import doctor_mapping
-from src.schemas import client
+from src.import_fields import client
+from src.schemas.client import (
+    DoctorCreate,
+    DoctorListRequest,
+    DoctorResponse,
+    DoctorUpdate,
+)
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -29,15 +28,13 @@ if TYPE_CHECKING:
 from src.schemas.base_filter import PaginatedResponse
 
 
-class DoctorService(
-    BaseService[clients.Doctor, client.DoctorCreate, client.DoctorUpdate]
-):
+class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: client.DoctorListRequest | None = None,
+        filters: DoctorListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[client.DoctorResponse]:
+    ) -> PaginatedResponse[DoctorResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -132,16 +129,7 @@ class DoctorService(
     ):
         records = await parse_excel_file(file)
 
-        validate_required_columns(
-            records,
-            {
-                "фио|фио врача|ФИО|full_name|name",
-                "специальность|speciality|специальность врача",
-                "компания|company",
-                "лпу|medical_facility",
-                "группа|product_group",
-            },
-        )
+        validate_required_columns(records, client.doctor_fields)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -149,113 +137,39 @@ class DoctorService(
             records_count=len(records),
             target_table_name=self.model.__tablename__,
         )
-
         session.add(import_log)
         await session.flush()
 
-        for r in records:
-            if "фио врача" in r and "фио" not in r:
-                r["фио"] = r.get("фио врача")
-            if "ФИО" in r and "фио" not in r:
-                r["фио"] = r.get("ФИО")
-            if "full_name" in r and "фио" not in r:
-                r["фио"] = r.get("full_name")
-            if "name" in r and "фио" not in r:
-                r["фио"] = r.get("name")
-            if (
-                "ответственный сотрудник" in r
-                and "фио ответственного сотрудника" not in r
-            ):
-                r["фио ответственного сотрудника"] = r.get("ответственный сотрудник")
-            if (
-                "фио ответственного сотрудника" in r
-                and "ответственный сотрудник" not in r
-            ):
-                r["ответственный сотрудник"] = r.get("фио ответственного сотрудника")
-
-        speciality_map, missing_specialities = await self.get_id_map(
-            session, Speciality, "name", {r["специальность"] for r in records}
-        )
-
-        client_category_values = {
-            r.get("категория") for r in records if r.get("категория") is not None
-        }
-        client_category_map, missing_client_categories = (
-            await self.get_id_map(
-                session, ClientCategory, "name", client_category_values
-            )
-            if client_category_values
-            else ({}, set())
-        )
-
-        employee_values = {
-            r.get("фио ответственного сотрудника")
-            for r in records
-            if r.get("фио ответственного сотрудника") is not None
-        }
-        employee_map, missing_employees = (
-            await self.get_id_map(session, Employee, "full_name", employee_values)
-            if employee_values
-            else ({}, set())
-        )
-
-        medical_facility_map, missing_medical_facilities = await self.get_id_map(
-            session, MedicalFacility, "name", {r["лпу"] for r in records}
-        )
-
-        product_group_map, missing_product_groups = await self.get_id_map(
-            session, ProductGroup, "name", {r["группа"] for r in records}
-        )
-
-        company_map, missing_companies = await self.get_id_map(
-            session, Company, "name", {r["компания"] for r in records}
+        resolved = await resolve_records_fields(
+            session, records, client.doctor_fields, self.get_id_map
         )
 
         skipped_records = []
         data_to_insert = []
 
         for idx, r in enumerate(records):
-            missing_keys = []
+            missing_keys = resolved.collect_missing_keys(r, client.doctor_fields)
 
-            if r["специальность"] in missing_specialities:
-                missing_keys.append(f"специальность: {r['специальность']}")
-
-            if r.get("категория") and r.get("категория") in missing_client_categories:
-                missing_keys.append(f"категория: {r['категория']}")
-
-            if (
-                r.get("фио ответственного сотрудника")
-                and r.get("фио ответственного сотрудника") in missing_employees
-            ):
-                missing_keys.append(
-                    f"сотрудник: {r.get('фио ответственного сотрудника')}"
-                )
-
-            if r["лпу"] in missing_medical_facilities:
-                missing_keys.append(f"ЛПУ: {r['лпу']}")
-
-            if r["группа"] in missing_product_groups:
-                missing_keys.append(f"группа: {r['группа']}")
-
-            if r["компания"] in missing_companies:
-                missing_keys.append(f"компания: {r['компания']}")
+            ids, null_keys = resolved.resolve_id_fields(r, client.doctor_fields)
+            if null_keys:
+                missing_keys.extend(null_keys)
 
             if missing_keys:
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
 
-            relation_fields = {
-                "responsible_employee_id": employee_map.get(
-                    r.get("фио ответственного сотрудника")
-                ),
-                "medical_facility_id": medical_facility_map[r["лпу"]],
-                "speciality_id": speciality_map[r["специальность"]],
-                "client_category_id": client_category_map.get(r.get("категория")),
-                "product_group_id": product_group_map[r["группа"]],
-                "company_id": company_map[r["компания"]],
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(map_record(r, doctor_mapping, relation_fields))
+            data_to_insert.append(
+                {
+                    "full_name": r.get("фио"),
+                    "company_id": ids.get("company_id"),
+                    "medical_facility_id": ids.get("medical_facility_id"),
+                    "speciality_id": ids.get("speciality_id"),
+                    "product_group_id": ids.get("product_group_id"),
+                    "client_category_id": ids.get("client_category_id"),
+                    "responsible_employee_id": ids.get("responsible_employee_id"),
+                    "import_log_id": import_log.id,
+                }
+            )
 
         inserted_ids = []
         if data_to_insert:

@@ -4,14 +4,14 @@ from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from src.db.models import Company, ImportLogs, products
-from src.mapping.products import product_group_mapping
-from src.schemas import product
+from src.db.models import ImportLogs, products
+from src.import_fields import product
+from src.schemas import product as product_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -22,15 +22,17 @@ from src.schemas.base_filter import PaginatedResponse
 
 class ProductGroupService(
     BaseService[
-        products.ProductGroup, product.ProductGroupCreate, product.ProductGroupUpdate
+        products.ProductGroup,
+        product_schema.ProductGroupCreate,
+        product_schema.ProductGroupUpdate,
     ]
 ):
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.ProductGroupListRequest | None = None,
+        filters: product_schema.ProductGroupListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[product.ProductGroupResponse]:
+    ) -> PaginatedResponse[product_schema.ProductGroupResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -106,14 +108,8 @@ class ProductGroupService(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
+        validate_required_columns(records, product.product_group_fields)
 
-        validate_required_columns(
-            records,
-            {
-                "название|name",
-                "компания|company",
-            },
-        )
         import_log = ImportLogs(
             uploaded_by=user_id,
             target_table="Группы",
@@ -123,28 +119,33 @@ class ProductGroupService(
         session.add(import_log)
         await session.flush()
 
-        company_map, missing_companies = await self.get_id_map(
-            session, Company, "name", {r["компания"] for r in records}
+        resolved = await resolve_records_fields(
+            session, records, product.product_group_fields, self.get_id_map
         )
 
         skipped_records = []
         data_to_insert = []
 
         for idx, r in enumerate(records):
-            missing_keys = []
+            missing_keys = resolved.collect_missing_keys(
+                r, product.product_group_fields
+            )
 
-            if r["компания"] in missing_companies:
-                missing_keys.append(f"компания: {r['компания']}")
+            ids, null_keys = resolved.resolve_id_fields(r, product.product_group_fields)
+            if null_keys:
+                missing_keys.extend(null_keys)
 
             if missing_keys:
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
 
-            relation_fields = {
-                "company_id": company_map[r["компания"]],
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(map_record(r, product_group_mapping, relation_fields))
+            data_to_insert.append(
+                {
+                    "name": r.get("название"),
+                    "company_id": ids.get("company_id"),
+                    "import_log_id": import_log.id,
+                }
+            )
 
         inserted_ids = []
         if data_to_insert:
@@ -158,7 +159,6 @@ class ProductGroupService(
             inserted_ids = result.scalars().all()
 
         await session.commit()
-
         return build_import_result(
             total=len(records),
             imported=len(inserted_ids),

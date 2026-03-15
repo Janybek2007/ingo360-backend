@@ -5,25 +5,18 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
-    ClientCategory,
-    Company,
-    Distributor,
     District,
-    Employee,
-    GeoIndicator,
     ImportLogs,
-    ProductGroup,
-    Region,
     Settlement,
     clients,
 )
-from src.mapping.clients import pharmacy_mapping
-from src.schemas import client
+from src.import_fields import client
+from src.schemas import client as client_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -33,14 +26,16 @@ from src.schemas.base_filter import PaginatedResponse
 
 
 class PharmacyService(
-    BaseService[clients.Pharmacy, client.PharmacyCreate, client.PharmacyUpdate]
+    BaseService[
+        clients.Pharmacy, client_schema.PharmacyCreate, client_schema.PharmacyUpdate
+    ]
 ):
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: client.PharmacyListRequest | None = None,
+        filters: client_schema.PharmacyListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[client.PharmacyResponse]:
+    ) -> PaginatedResponse[client_schema.PharmacyResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -139,24 +134,7 @@ class PharmacyService(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
-
-        validate_required_columns(
-            records,
-            {
-                "название|name",
-                "компания|company",
-                "группа|product_group",
-            },
-        )
-
-        for r in records:
-            if "дистрибьютор/сеть" in r and "дистрибьютор / сеть" not in r:
-                r["дистрибьютор / сеть"] = r.get("дистрибьютор/сеть")
-            if (
-                "ответственный сотрудник" in r
-                and "фио ответственного сотрудника" not in r
-            ):
-                r["фио ответственного сотрудника"] = r.get("ответственный сотрудник")
+        validate_required_columns(records, client.pharmacy_fields)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -167,143 +145,53 @@ class PharmacyService(
         session.add(import_log)
         await session.flush()
 
-        has_region_column = any("область" in r for r in records)
-
-        group_values = {r.get("группа") for r in records if r.get("группа") is not None}
-        company_values = {
-            r.get("компания") for r in records if r.get("компания") is not None
-        }
-        region_values = (
-            {r.get("область") for r in records if r.get("область") is not None}
-            if has_region_column
-            else set()
+        resolved = await resolve_records_fields(
+            session, records, client.pharmacy_fields, self.get_id_map
         )
 
-        if group_values:
-            product_group_map, missing_product_groups = await self.get_id_map(
-                session, ProductGroup, "name", group_values
-            )
-        else:
-            product_group_map, missing_product_groups = ({}, set())
+        region_map = resolved.maps.get("область", {})
+        company_map = resolved.maps["компания"]
 
-        if company_values:
-            company_map, missing_companies = await self.get_id_map(
-                session, Company, "name", company_values
-            )
-        else:
-            company_map, missing_companies = ({}, set())
-
-        if region_values:
-            region_map, missing_regions = await self.get_id_map(
-                session, Region, "name", region_values
-            )
-        else:
-            region_map, missing_regions = ({}, set())
-
-        employee_values = {
-            r.get("фио ответственного сотрудника")
+        settlement_pairs = {
+            (r.get("населенный пункт"), region_map.get(r.get("область")))
             for r in records
-            if r.get("фио ответственного сотрудника") is not None
+            if r.get("населенный пункт") is not None and r.get("область") in region_map
         }
-        employee_map, missing_employees = (
-            await self.get_id_map(session, Employee, "full_name", employee_values)
-            if employee_values
-            else ({}, set())
-        )
-
-        client_category_values = {
-            r.get("категория") for r in records if r.get("категория") is not None
-        }
-        client_category_map, missing_client_categories = (
+        settlement_map, missing_settlements = (
             await self.get_id_map(
-                session, ClientCategory, "name", client_category_values
+                session,
+                Settlement,
+                "name",
+                settlement_pairs,
+                filter_field="region_id",
+                filter_values=set(region_map.values()),
             )
-            if client_category_values
+            if settlement_pairs
             else ({}, set())
         )
 
-        distributor_values = {
-            r.get("дистрибьютор / сеть")
+        district_triples = {
+            (
+                r.get("район"),
+                region_map.get(r.get("область")),
+                company_map.get(r.get("компания")),
+            )
             for r in records
-            if r.get("дистрибьютор / сеть") is not None
+            if r.get("район") is not None
+            and r.get("область") in region_map
+            and r.get("компания") in company_map
         }
-        distributor_map, missing_distributors = (
-            await self.get_id_map(session, Distributor, "name", distributor_values)
-            if distributor_values
-            else ({}, set())
-        )
-
-        geo_indicator_values = {
-            r.get("индикатор") for r in records if r.get("индикатор") is not None
-        }
-        geo_indicator_map, missing_geo_indicators = (
-            await self.get_id_map(session, GeoIndicator, "name", geo_indicator_values)
-            if geo_indicator_values
-            else ({}, set())
-        )
-
-        if has_region_column and region_map:
-            settlement_pairs = {
-                (r.get("населенный пункт"), region_map.get(r.get("область")))
-                for r in records
-                if r.get("населенный пункт") is not None
-                and r.get("область") in region_map
-            }
-            settlement_map, missing_settlements = (
-                await self.get_id_map(
-                    session,
-                    Settlement,
-                    "name",
-                    settlement_pairs,
-                    filter_field="region_id",
-                    filter_values=set(region_map.values()),
-                )
-                if settlement_pairs
-                else ({}, set())
-            )
-        else:
-            settlement_values = {
-                r.get("населенный пункт")
-                for r in records
-                if r.get("населенный пункт") is not None
-            }
-            settlement_map, missing_settlements = (
-                await self.get_id_map(session, Settlement, "name", settlement_values)
-                if settlement_values
-                else ({}, set())
-            )
-
-        district_triples = (
-            {
-                (
-                    r.get("район"),
-                    region_map.get(r.get("область")),
-                    company_map.get(r.get("компания")),
-                )
-                for r in records
-                if r.get("район") is not None
-                and r.get("область") in region_map
-                and r.get("компания") in company_map
-            }
-            if has_region_column and region_map
-            else set()
-        )
         district_map = {}
         missing_districts = set()
 
         if district_triples:
-            district_names = {t[0] for t in district_triples}
-            region_ids = {t[1] for t in district_triples}
-            company_ids = {t[2] for t in district_triples}
-
             stmt = select(District).where(
-                District.name.in_(district_names),
-                District.region_id.in_(region_ids),
-                District.company_id.in_(company_ids),
+                District.name.in_({t[0] for t in district_triples}),
+                District.region_id.in_({t[1] for t in district_triples}),
+                District.company_id.in_({t[2] for t in district_triples}),
             )
             result = await session.execute(stmt)
             districts = result.scalars().all()
-
             district_map = {
                 (d.name, d.region_id, d.company_id): d.id for d in districts
             }
@@ -313,60 +201,29 @@ class PharmacyService(
         data_to_insert = []
 
         for idx, r in enumerate(records):
-            missing_keys = []
-            group_name = r.get("группа")
-            company_name = r.get("компания")
+            missing_keys = resolved.collect_missing_keys(r, client.pharmacy_fields)
 
-            if not group_name:
-                missing_keys.append("группа: значение не заполнено")
+            ids, null_keys = resolved.resolve_id_fields(r, client.pharmacy_fields)
+            if null_keys:
+                missing_keys.extend(null_keys)
 
-            if group_name in missing_product_groups:
-                missing_keys.append(f"группа: {group_name}")
-
-            if not company_name:
-                missing_keys.append("компания: значение не заполнено")
-
-            if company_name in missing_companies:
-                missing_keys.append(f"компания: {company_name}")
-
-            if has_region_column and r.get("область") in missing_regions:
-                missing_keys.append(f"область: {r['область']}")
-
-            if (
-                r.get("фио ответственного сотрудника")
-                and r.get("фио ответственного сотрудника") in missing_employees
-            ):
-                missing_keys.append(f"сотрудник: {r['фио ответственного сотрудника']}")
-
-            if r.get("категория") and r.get("категория") in missing_client_categories:
-                missing_keys.append(f"категория: {r['категория']}")
-
-            if (
-                r.get("дистрибьютор / сеть")
-                and r.get("дистрибьютор / сеть") in missing_distributors
-            ):
-                missing_keys.append(f"дистрибьютор: {r['дистрибьютор / сеть']}")
-
-            if r.get("индикатор") and r.get("индикатор") in missing_geo_indicators:
-                missing_keys.append(f"индикатор: {r['индикатор']}")
-
-            region_id = region_map.get(r.get("область")) if has_region_column else None
-            company_id = company_map.get(r.get("компания"))
+            region_id = ids.get("region_id")
+            company_id = ids.get("company_id")
 
             settlement_id = None
             if r.get("населенный пункт") is not None:
-                if has_region_column and region_id:
+                if region_id:
                     settlement_key = (r.get("населенный пункт"), region_id)
                     if settlement_key in missing_settlements:
                         missing_keys.append(
-                            f"населенный пункт: {r['населенный пункт']}"
+                            f"населенный пункт: {r.get('населенный пункт')}"
                         )
                     else:
                         settlement_id = settlement_map.get(settlement_key)
                 else:
                     if r.get("населенный пункт") in missing_settlements:
                         missing_keys.append(
-                            f"населенный пункт: {r['населенный пункт']}"
+                            f"населенный пункт: {r.get('населенный пункт')}"
                         )
                     else:
                         settlement_id = settlement_map.get(r.get("населенный пункт"))
@@ -375,7 +232,7 @@ class PharmacyService(
             if r.get("район") is not None and region_id and company_id:
                 district_key = (r.get("район"), region_id, company_id)
                 if district_key in missing_districts:
-                    missing_keys.append(f"район: {r['район']}")
+                    missing_keys.append(f"район: {r.get('район')}")
                 else:
                     district_id = district_map.get(district_key)
 
@@ -383,20 +240,20 @@ class PharmacyService(
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
 
-            relation_fields = {
-                "responsible_employee_id": employee_map.get(
-                    r.get("фио ответственного сотрудника")
-                ),
-                "client_category_id": client_category_map.get(r.get("категория")),
-                "product_group_id": product_group_map.get(group_name),
-                "distributor_id": distributor_map.get(r.get("дистрибьютор / сеть")),
-                "district_id": district_id,
-                "settlement_id": settlement_id,
-                "company_id": company_id,
-                "import_log_id": import_log.id,
-                "geo_indicator_id": geo_indicator_map.get(r.get("индикатор")),
-            }
-            data_to_insert.append(map_record(r, pharmacy_mapping, relation_fields))
+            data_to_insert.append(
+                {
+                    "name": r.get("название"),
+                    "company_id": company_id,
+                    "product_group_id": ids.get("product_group_id"),
+                    "client_category_id": ids.get("client_category_id"),
+                    "distributor_id": ids.get("distributor_id"),
+                    "responsible_employee_id": ids.get("responsible_employee_id"),
+                    "settlement_id": settlement_id,
+                    "district_id": district_id,
+                    "geo_indicator_id": ids.get("geo_indicator_id"),
+                    "import_log_id": import_log.id,
+                }
+            )
 
         inserted_ids = []
         if data_to_insert:
@@ -410,7 +267,6 @@ class PharmacyService(
             inserted_ids = result.scalars().all()
 
         await session.commit()
-
         return build_import_result(
             total=len(records),
             imported=len(inserted_ids),

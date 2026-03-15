@@ -318,7 +318,7 @@ def apply_dynamic_filters(
       3. FK filter_model → target → WHERE target.id IN (
              SELECT DISTINCT fk_col FROM filter_model WHERE id IN values
          )
-      Если связь не найдена — фильтр молча пропускается.
+      Если связь не найдена - фильтр молча пропускается.
     """
     target_model, _ = REFERENCE_CONFIG[reference]
 
@@ -335,7 +335,7 @@ def apply_dynamic_filters(
         # ── Резолвим filter_key в (filter_model, filter_id_col) ───────────
         filter_info = FILTER_KEY_TO_MODEL.get(filter_key)
         if filter_info is None:
-            # Неизвестный ключ — пропускаем
+            # Неизвестный ключ - пропускаем
             continue
 
         filter_model, filter_id_col = filter_info

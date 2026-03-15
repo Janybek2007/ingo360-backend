@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         Position,
         PrimarySalesAndStock,
         ProductGroup,
+        PromotionType,
         Region,
         SecondarySales,
         Segment,
@@ -33,7 +34,6 @@ if TYPE_CHECKING:
         TertiarySalesAndStock,
         User,
         Visit,
-        PromotionType
     )
 
 

@@ -5,13 +5,13 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import ImportLogs, clients
-from src.mapping.clients import client_category_mapping
-from src.schemas import client
+from src.import_fields import client
+from src.schemas import client as client_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import ListQueryHelper
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -22,15 +22,17 @@ from src.schemas.base_filter import PaginatedResponse
 
 class ClientCategoryService(
     BaseService[
-        clients.ClientCategory, client.ClientCategoryCreate, client.ClientCategoryUpdate
+        clients.ClientCategory,
+        client_schema.ClientCategoryCreate,
+        client_schema.ClientCategoryUpdate,
     ]
 ):
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: client.ClientCategoryListRequest | None = None,
+        filters: client_schema.ClientCategoryListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[client.ClientCategoryResponse]:
+    ) -> PaginatedResponse[client_schema.ClientCategoryResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -97,8 +99,7 @@ class ClientCategoryService(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
-
-        validate_required_columns(records, {"название|name"})
+        validate_required_columns(records, client.client_category_fields)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -109,14 +110,13 @@ class ClientCategoryService(
         session.add(import_log)
         await session.flush()
 
-        data_to_insert = []
-        for r in records:
-            relation_fields = {
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(
-                map_record(r, client_category_mapping, relation_fields)
-            )
+        await resolve_records_fields(
+            session, records, client.client_category_fields, self.get_id_map
+        )
+
+        data_to_insert = [
+            {"name": r.get("название"), "import_log_id": import_log.id} for r in records
+        ]
 
         inserted_ids = []
         if data_to_insert:
@@ -130,7 +130,6 @@ class ClientCategoryService(
             inserted_ids = result.scalars().all()
 
         await session.commit()
-
         return build_import_result(
             total=len(records),
             imported=len(inserted_ids),

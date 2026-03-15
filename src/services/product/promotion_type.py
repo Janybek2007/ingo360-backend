@@ -5,13 +5,13 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import ImportLogs, products
-from src.mapping.products import promotion_type_mapping
-from src.schemas import product
+from src.import_fields import product
+from src.schemas import product as product_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import ListQueryHelper
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -22,15 +22,17 @@ from src.schemas.base_filter import PaginatedResponse
 
 class PromotionTypeService(
     BaseService[
-        products.PromotionType, product.PromotionTypeCreate, product.PromotionTypeUpdate
+        products.PromotionType,
+        product_schema.PromotionTypeCreate,
+        product_schema.PromotionTypeUpdate,
     ]
 ):
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.PromotionTypeListRequest | None = None,
+        filters: product_schema.PromotionTypeListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[product.PromotionTypeResponse]:
+    ) -> PaginatedResponse[product_schema.PromotionTypeResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -98,8 +100,7 @@ class PromotionTypeService(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
-
-        validate_required_columns(records, {"название|name"})
+        validate_required_columns(records, product.promotion_type_fields)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -110,14 +111,13 @@ class PromotionTypeService(
         session.add(import_log)
         await session.flush()
 
-        data_to_insert = []
-        for r in records:
-            relation_fields = {
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(
-                map_record(r, promotion_type_mapping, relation_fields)
-            )
+        await resolve_records_fields(
+            session, records, product.promotion_type_fields, self.get_id_map
+        )
+
+        data_to_insert = [
+            {"name": r.get("название"), "import_log_id": import_log.id} for r in records
+        ]
 
         inserted_ids = []
         if data_to_insert:
@@ -131,7 +131,6 @@ class PromotionTypeService(
             inserted_ids = result.scalars().all()
 
         await session.commit()
-
         return build_import_result(
             total=len(records),
             imported=len(inserted_ids),

@@ -15,13 +15,18 @@ from src.db.models import (
     ProductGroup,
     PromotionType,
 )
+from src.import_fields import sale
 from src.mapping.dimension_mapping.sale import BASE_SALE_DIMENSTION_MAPPING
 from src.mapping.sales import primary_sales_mapping
-from src.schemas import sale
+from src.schemas import sale as sale_schema
+from src.schemas.base_filter import PaginatedResponse
 from src.services.base import BaseService, ModelType
+from src.services.sale.utils import upsert_batch_with_stats
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
+from src.utils.case_insensitive_dict import CaseInsensitiveDict
+from src.utils.case_insensitive_set import CaseInsensitiveSet
 from src.utils.excel_parser import iter_excel_records
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import (
@@ -32,23 +37,19 @@ from src.utils.list_query_helper import (
     SearchSpec,
 )
 from src.utils.mapping import map_record
+from src.utils.records_resolver import normalize_record
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from fastapi import UploadFile
     from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.schemas.base_filter import PaginatedResponse
-from src.services.sale.utils import upsert_batch_with_stats
-from src.utils.case_insensitive_dict import CaseInsensitiveDict
-from src.utils.case_insensitive_set import CaseInsensitiveSet
-
 
 class PrimarySalesAndStockService(
     BaseService[
         PrimarySalesAndStock,
-        sale.PrimarySalesAndStockCreate,
-        sale.PrimarySalesAndStockUpdate,
+        sale_schema.PrimarySalesAndStockCreate,
+        sale_schema.PrimarySalesAndStockUpdate,
     ]
 ):
     async def import_sales(
@@ -108,16 +109,12 @@ class PrimarySalesAndStockService(
                 raise HTTPException(status_code=400, detail="Файл пустой")
 
             _, first_record = first_row
-            validate_required_columns(
-                [first_record],
-                {
-                    "дистрибьютор|distributor",
-                    "sku",
-                    "месяц|month",
-                    "год|year",
-                    "показатель|indicator",
-                },
-            )
+            try:
+                validate_required_columns(
+                    [first_record], sale.primary_sales_fields, raise_exception=False
+                )
+            except Exception as e:
+                raise ValueError(str(e))
             total_records = 0
 
             import_log = ImportLogs(
@@ -247,6 +244,7 @@ class PrimarySalesAndStockService(
             with open(file_path, "rb") as f:
                 for row_index, record in iter_excel_records(f):
                     total_records += 1
+                    normalize_record(record, sale.primary_sales_fields)
                     distributor_name = record.get("дистрибьютор")
                     sku_name = record.get("sku")
                     month_value = record.get("месяц")
@@ -314,9 +312,9 @@ class PrimarySalesAndStockService(
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: sale.PrimarySalesAndStockListRequest | None = None,
+        filters: sale_schema.PrimarySalesAndStockListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[sale.PrimarySalesAndStockResponse]:
+    ) -> PaginatedResponse[sale_schema.PrimarySalesAndStockResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -430,7 +428,7 @@ class PrimarySalesAndStockService(
         session: "AsyncSession",
         indicator: str,
         company_id: int | None,
-        filters: sale.ShipmentStockFilter | None = None,
+        filters: sale_schema.ShipmentStockFilter | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)
         period_values = build_period_values(
@@ -545,7 +543,7 @@ class PrimarySalesAndStockService(
     @staticmethod
     async def get_period_totals(
         session: "AsyncSession",
-        filters: sale.PeriodFilter,
+        filters: sale_schema.PeriodFilter,
         company_id: int | None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)
@@ -781,7 +779,7 @@ class PrimarySalesAndStockService(
     @staticmethod
     async def get_stock_coverage(
         session: "AsyncSession",
-        filters: sale.StockCoverageFilter | None = None,
+        filters: sale_schema.StockCoverageFilter | None = None,
         company_id: int | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)
@@ -954,7 +952,7 @@ class PrimarySalesAndStockService(
     @staticmethod
     async def get_distributor_share_report(
         session: "AsyncSession",
-        filters: "sale.DistributorShareFilter",
+        filters: "sale_schema.DistributorShareFilter",
         company_id: int | None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)
@@ -1115,7 +1113,7 @@ class PrimarySalesAndStockService(
     @staticmethod
     async def get_distributor_share_chart(
         session: "AsyncSession",
-        filters: sale.SalesReportFilter,
+        filters: sale_schema.SalesReportFilter,
         company_id: int | None,
     ):
         period_key = build_period_key(filters.group_by_period, PrimarySalesAndStock)

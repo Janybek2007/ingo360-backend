@@ -302,7 +302,7 @@ class ListQueryHelper:
                 elif v.lower() == "false":
                     bools.append(False)
 
-        # если пришли оба значения — фильтр не нужен
+        # если пришли оба значения - фильтр не нужен
         if len(set(bools)) == 2:
             return stmt
 

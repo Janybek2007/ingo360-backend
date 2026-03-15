@@ -18,12 +18,13 @@ from src.db.models import (
     Speciality,
     Visit,
 )
+from src.import_fields import visit
 from src.mapping.dimension_mapping.visits import (
     VISITS_DOCTOR_COUNT_DIMENSTIONS_MAPPING,
     VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING,
 )
 from src.mapping.visits import visit_mapping
-from src.schemas import visit
+from src.schemas import visit as visit_schema
 from src.schemas.visit import VisitsRequest
 from src.services.base import ModelType
 from src.utils.build_dimensions import build_dimensions
@@ -40,6 +41,7 @@ from src.utils.list_query_helper import (
     SearchSpec,
 )
 from src.utils.mapping import map_record
+from src.utils.records_resolver import normalize_record
 from src.utils.validate_required_columns import validate_required_columns
 
 from .base import BaseService
@@ -51,7 +53,9 @@ if TYPE_CHECKING:
 from src.schemas.base_filter import PaginatedResponse
 
 
-class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
+class VisitService(
+    BaseService[Visit, visit_schema.VisitCreate, visit_schema.VisitUpdate]
+):
     async def import_sales(
         self,
         session: "AsyncSession",
@@ -96,7 +100,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         session: "AsyncSession",
         filters: VisitsRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[visit.VisitResponse]:
+    ) -> PaginatedResponse[visit_schema.VisitResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -189,7 +193,6 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         user_id: int,
         batch_size: int = 2000,
     ):
-
         try:
             with open(file_path, "rb") as f:
                 first_row = next(iter_excel_records(f), None)
@@ -198,15 +201,12 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
                 raise HTTPException(status_code=400, detail="Файл пустой")
 
             _, first_record = first_row
-            validate_required_columns(
-                [first_record],
-                {
-                    "сотрудник|employee",
-                    "группа|product_group",
-                    "месяц|month",
-                    "год|year",
-                },
-            )
+            try:
+                validate_required_columns(
+                    [first_record], visit.visit_fields, raise_exception=False
+                )
+            except Exception as e:
+                raise ValueError(str(e))
             total_records = 0
 
             import_log = ImportLogs(
@@ -341,6 +341,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
             with open(file_path, "rb") as f:
                 for row_index, r in iter_excel_records(f):
                     total_records += 1
+                    normalize_record(r, visit.visit_fields)
 
                     pending_records.append((row_index, r))
 
@@ -400,9 +401,9 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
     @staticmethod
     async def get_doctor_count_by_speciality(
         session: "AsyncSession",
-        filters: visit.DoctorsCountFilter,
+        filters: visit_schema.DoctorsCountFilter,
         company_id: int | None,
-    ) -> list[visit.DoctorsBySpecialtyResponse]:
+    ) -> list[visit_schema.DoctorsBySpecialtyResponse]:
         quarter_expr = func.ceil(Visit.month / 3.0)
         period_values = build_period_values(
             filters.group_by_period, filters.period_values
@@ -485,12 +486,14 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
         )
 
         result = await session.execute(stmt)
-        return [visit.DoctorsBySpecialtyResponse(**row) for row in result.mappings()]
+        return [
+            visit_schema.DoctorsBySpecialtyResponse(**row) for row in result.mappings()
+        ]
 
     @staticmethod
     async def get_doctor_count_with_visits_by_speciality(
         session: "AsyncSession",
-        filters: visit.DoctorsCountWithVisitFilter,
+        filters: visit_schema.DoctorsCountWithVisitFilter,
         company_id: int | None,
     ):
 
@@ -685,7 +688,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
     @staticmethod
     async def get_visits_sum_for_period(
         session: "AsyncSession",
-        filters: visit.VisitSumForPeriodFilter,
+        filters: visit_schema.VisitSumForPeriodFilter,
         company_id: int | None,
     ):
         period_values = build_period_values(
@@ -868,7 +871,7 @@ class VisitService(BaseService[Visit, visit.VisitCreate, visit.VisitUpdate]):
     @staticmethod
     async def get_visits_by_period(
         session: "AsyncSession",
-        filters: visit.VisitCountFilter | None = None,
+        filters: visit_schema.VisitCountFilter | None = None,
         company_id: int | None = None,
     ):
         period_values = build_period_values(

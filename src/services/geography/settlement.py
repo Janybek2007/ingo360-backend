@@ -4,14 +4,15 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from src.db.models import ImportLogs, Region, geography
-from src.mapping.geography import region_mapping
+from src.db.models import ImportLogs
+from src.db.models import geography as geography_models
+from src.import_fields import geography
 from src.schemas import geography as geography_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -22,7 +23,7 @@ from src.schemas.base_filter import PaginatedResponse
 
 class SettlementService(
     BaseService[
-        geography.Settlement,
+        geography_models.Settlement,
         geography_schema.SettlementCreate,
         geography_schema.SettlementUpdate,
     ]
@@ -31,15 +32,7 @@ class SettlementService(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
-
-        validate_required_columns(records, {"область|region", "название|name"})
-
-        for r in records:
-            if "name" in r and "название" not in r:
-                r["название"] = r.get("name")
-            if "region.name" in r and "область" not in r:
-                r["область"] = r.get("region.name")
-
+        validate_required_columns(records, geography.settlement_fields)
         import_log = ImportLogs(
             uploaded_by=user_id,
             target_table="Населенные пункты",
@@ -48,30 +41,28 @@ class SettlementService(
         )
         session.add(import_log)
         await session.flush()
-
-        region_map, missing_regions = await self.get_id_map(
-            session, Region, "name", {r["область"] for r in records}
+        resolved = await resolve_records_fields(
+            session, records, geography.settlement_fields, self.get_id_map
         )
-
         skipped_records = []
         data_to_insert = []
-
         for idx, r in enumerate(records):
-            missing_keys = []
+            missing_keys = resolved.collect_missing_keys(r, geography.settlement_fields)
 
-            if r["область"] in missing_regions:
-                missing_keys.append(f"область: {r['область']}")
+            ids, null_keys = resolved.resolve_id_fields(r, geography.settlement_fields)
+            if null_keys:
+                missing_keys.extend(null_keys)
 
             if missing_keys:
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
-
-            relation_fields = {
-                "region_id": region_map[r["область"]],
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(map_record(r, region_mapping, relation_fields))
-
+            data_to_insert.append(
+                {
+                    "name": r.get("название"),
+                    "region_id": ids.get("region_id"),
+                    "import_log_id": import_log.id,
+                }
+            )
         inserted_ids = []
         if data_to_insert:
             stmt = (
@@ -82,9 +73,7 @@ class SettlementService(
             )
             result = await session.execute(stmt)
             inserted_ids = result.scalars().all()
-
         await session.commit()
-
         return build_import_result(
             total=len(records),
             imported=len(inserted_ids),
@@ -164,7 +153,7 @@ class SettlementService(
         session: "AsyncSession",
         load_options: list[Any] | None = None,
         chunk_size: int = 1000,
-    ) -> AsyncIterator[geography.Settlement]:
+    ) -> AsyncIterator[geography_models.Settlement]:
         stmt = select(self.model)
 
         if load_options:

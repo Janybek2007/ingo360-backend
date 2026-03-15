@@ -1,4 +1,3 @@
-import asyncio
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from fastapi import UploadFile
@@ -6,23 +5,17 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
-    Brand,
-    Company,
-    Dosage,
-    DosageForm,
     ImportLogs,
     ProductGroup,
-    PromotionType,
-    Segment,
     products,
 )
-from src.mapping.products import sku_mapping
-from src.schemas import product
+from src.import_fields import product
+from src.schemas import product as product_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -31,13 +24,15 @@ if TYPE_CHECKING:
 from src.schemas.base_filter import PaginatedResponse
 
 
-class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]):
+class SKUService(
+    BaseService[products.SKU, product_schema.SKUCreate, product_schema.SKUUpdate]
+):
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: product.SKUListRequest | None = None,
+        filters: product_schema.SKUListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[product.SKUResponse]:
+    ) -> PaginatedResponse[product_schema.SKUResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -128,18 +123,7 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
-
-        validate_required_columns(
-            records,
-            {
-                "название|name",
-                "бренд|brand",
-                "форма выпуска|dosage_form|форма",
-                "тип промоции|promotion_type|промоция",
-                "компания|company",
-                "группа|group|группа продуктов",
-            },
-        )
+        validate_required_columns(records, product.sku_fields)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -150,35 +134,15 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
         session.add(import_log)
         await session.flush()
 
-        results = await asyncio.gather(
-            self.get_id_map(session, Brand, "name", {r["бренд"] for r in records}),
-            self.get_id_map(
-                session, DosageForm, "name", {r["форма выпуска"] for r in records}
-            ),
-            self.get_id_map(
-                session, PromotionType, "name", {r["тип промоции"] for r in records}
-            ),
-            self.get_id_map(session, Company, "name", {r["компания"] for r in records}),
-            self.get_id_map(
-                session, Segment, "name", {r.get("сегмент") for r in records}
-            ),
-            self.get_id_map(
-                session, Dosage, "name", {r.get("дозировка") for r in records}
-            ),
-            return_exceptions=True,
+        resolved = await resolve_records_fields(
+            session, records, product.sku_fields, self.get_id_map
         )
 
-        brand_map, missing_brands = results[0]
-        dosage_form_map, missing_dosage_forms = results[1]
-        promotion_type_map, missing_promotion_types = results[2]
-        company_map, missing_companies = results[3]
-        segment_map, missing_segments = results[4]
-        dosage_map, missing_dosages = results[5]
-
+        company_map = resolved.maps["компания"]
         product_group_pairs = {
-            (r["группа"], company_map.get(r["компания"]))
+            (r.get("группа"), company_map.get(r.get("компания")))
             for r in records
-            if r["компания"] in company_map
+            if r.get("компания") in company_map
         }
         product_group_map, missing_product_groups = (
             await self.get_id_map(
@@ -186,8 +150,8 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
                 ProductGroup,
                 "name",
                 product_group_pairs,
-                "company_id",
-                set(company_map.values()),
+                filter_field="company_id",
+                filter_values=set(company_map.values()),
             )
             if product_group_pairs
             else ({}, set())
@@ -197,51 +161,35 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
         data_to_insert = []
 
         for idx, r in enumerate(records):
-            missing_keys = []
+            missing_keys = resolved.collect_missing_keys(r, product.sku_fields)
 
-            if r["бренд"] in missing_brands:
-                missing_keys.append(f"бренд: {r['бренд']}")
+            ids, null_keys = resolved.resolve_id_fields(r, product.sku_fields)
+            if null_keys:
+                missing_keys.extend(null_keys)
 
-            if r["форма выпуска"] in missing_dosage_forms:
-                missing_keys.append(f"форма выпуска: {r['форма выпуска']}")
-
-            if r["тип промоции"] in missing_promotion_types:
-                missing_keys.append(f"тип промоции: {r['тип промоции']}")
-
-            if r["компания"] in missing_companies:
-                missing_keys.append(f"компания: {r['компания']}")
-
-            segment_value = r.get("сегмент")
-            if segment_value and segment_value in missing_segments:
-                missing_keys.append(f"сегмент: {segment_value}")
-
-            dosage_value = r.get("дозировка")
-            if dosage_value and dosage_value in missing_dosages:
-                missing_keys.append(f"дозировка: {dosage_value}")
-
-            company_id = company_map.get(r["компания"])
-            if company_id:
-                product_group_key = (r["группа"], company_id)
-                if product_group_key in missing_product_groups:
-                    missing_keys.append(f"группа: {r['группа']}")
+            company_id = ids.get("company_id")
+            if company_id and (r.get("группа"), company_id) in missing_product_groups:
+                missing_keys.append(f"группа: {r.get('группа')}")
 
             if missing_keys:
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
 
-            relation_fields = {
-                "brand_id": brand_map[r["бренд"]],
-                "dosage_form_id": dosage_form_map[r["форма выпуска"]],
-                "product_group_id": product_group_map[(r["группа"], company_id)],
-                "promotion_type_id": promotion_type_map[r["тип промоции"]],
-                "company_id": company_id,
-                "import_log_id": import_log.id,
-            }
-            if dosage_value:
-                relation_fields["dosage_id"] = dosage_map[dosage_value]
-            if segment_value:
-                relation_fields["segment_id"] = segment_map[segment_value]
-            data_to_insert.append(map_record(r, sku_mapping, relation_fields))
+            data_to_insert.append(
+                {
+                    "name": r.get("название"),
+                    "brand_id": ids.get("brand_id"),
+                    "dosage_form_id": ids.get("dosage_form_id"),
+                    "promotion_type_id": ids.get("promotion_type_id"),
+                    "product_group_id": product_group_map.get(
+                        (r.get("группа"), company_id)
+                    ),
+                    "company_id": company_id,
+                    "dosage_id": ids.get("dosage_id"),
+                    "segment_id": ids.get("segment_id"),
+                    "import_log_id": import_log.id,
+                }
+            )
 
         inserted_ids = []
         if data_to_insert:
@@ -255,7 +203,6 @@ class SKUService(BaseService[products.SKU, product.SKUCreate, product.SKUUpdate]
             inserted_ids = result.scalars().all()
 
         await session.commit()
-
         return build_import_result(
             total=len(records),
             imported=len(inserted_ids),

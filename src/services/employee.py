@@ -1,4 +1,3 @@
-import asyncio
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from fastapi import UploadFile
@@ -6,20 +5,16 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.db.models import (
-    Company,
     District,
     ImportLogs,
-    Position,
-    ProductGroup,
-    Region,
     employees,
 )
-from src.mapping.employees import employee_mapping, position_mapping
-from src.schemas import employee
+from src.import_fields import employee
+from src.schemas import employee as employee_schema
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 from .base import BaseService
@@ -31,14 +26,18 @@ from src.schemas.base_filter import PaginatedResponse
 
 
 class EmployeeService(
-    BaseService[employees.Employee, employee.EmployeeCreate, employee.EmployeeUpdate]
+    BaseService[
+        employees.Employee,
+        employee_schema.EmployeeCreate,
+        employee_schema.EmployeeUpdate,
+    ]
 ):
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: employee.EmployeeListRequest | None = None,
+        filters: employee_schema.EmployeeListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[employee.EmployeeResponse]:
+    ) -> PaginatedResponse[employee_schema.EmployeeResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -123,16 +122,7 @@ class EmployeeService(
     ):
         records = await parse_excel_file(file)
 
-        validate_required_columns(
-            records,
-            {
-                "фио|ФИО|full_name|name",
-                "область|region|область",
-                "компания|company",
-                "должность|position",
-                "группа|group",
-            },
-        )
+        validate_required_columns(records, employee.employee_fields)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -143,33 +133,23 @@ class EmployeeService(
         session.add(import_log)
         await session.flush()
 
-        results = await asyncio.gather(
-            self.get_id_map(session, Region, "name", {r["область"] for r in records}),
-            self.get_id_map(session, Company, "name", {r["компания"] for r in records}),
-            self.get_id_map(
-                session, Position, "name", {r["должность"] for r in records}
-            ),
-            self.get_id_map(
-                session, ProductGroup, "name", {r["группа"] for r in records}
-            ),
-            return_exceptions=True,
+        resolved = await resolve_records_fields(
+            session, records, employee.employee_fields, self.get_id_map
         )
 
-        region_map, missing_regions = results[0]
-        company_map, missing_companies = results[1]
-        position_map, missing_positions = results[2]
-        product_group_map, missing_product_groups = results[3]
+        region_map = resolved.maps.get("область")
+        company_map = resolved.maps["компания"]
 
         district_triples = {
             (
                 r.get("район"),
-                region_map.get(r["область"]),
-                company_map.get(r["компания"]),
+                region_map.get(r.get("область")),
+                company_map.get(r.get("компания")),
             )
             for r in records
             if r.get("район") is not None
-            and r["область"] in region_map
-            and r["компания"] in company_map
+            and r.get("область") in region_map
+            and r.get("компания") in company_map
         }
 
         district_map = {}
@@ -197,22 +177,14 @@ class EmployeeService(
         data_to_insert = []
 
         for idx, r in enumerate(records):
-            missing_keys = []
+            missing_keys = resolved.collect_missing_keys(r, employee.employee_fields)
 
-            if r["область"] in missing_regions:
-                missing_keys.append(f"область: {r['область']}")
+            ids, null_keys = resolved.resolve_id_fields(r, employee.employee_fields)
+            if null_keys:
+                missing_keys.extend(null_keys)
 
-            if r["компания"] in missing_companies:
-                missing_keys.append(f"компания: {r['компания']}")
-
-            if r["должность"] in missing_positions:
-                missing_keys.append(f"должность: {r['должность']}")
-
-            if r["группа"] in missing_product_groups:
-                missing_keys.append(f"группа: {r['группа']}")
-
-            region_id = region_map.get(r["область"])
-            company_id = company_map.get(r["компания"])
+            region_id = ids.get("region_id")
+            company_id = ids.get("company_id")
 
             district_id = None
             if r.get("район") is not None and region_id and company_id:
@@ -226,16 +198,19 @@ class EmployeeService(
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
 
-            relation_fields = {
-                "company_id": company_id,
-                "region_id": region_id,
-                "position_id": position_map[r["должность"]],
-                "product_group_id": product_group_map[r["группа"]],
-                "district_id": district_id,
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(map_record(r, employee_mapping, relation_fields))
+            data_to_insert.append(
+                {
+                    "full_name": r.get("фио"),
+                    "company_id": ids.get("company_id"),
+                    "region_id": ids.get("region_id"),
+                    "position_id": ids.get("position_id"),
+                    "product_group_id": ids.get("product_group_id"),
+                    "district_id": district_id,
+                    "import_log_id": import_log.id,
+                }
+            )
 
+        inserted_ids = []
         if data_to_insert:
             stmt = (
                 insert(self.model)
@@ -247,26 +222,29 @@ class EmployeeService(
             inserted_ids = result.scalars().all()
 
         await session.commit()
-        inserted_count = len(inserted_ids)
 
         return build_import_result(
             total=len(records),
-            imported=len(data_to_insert),
+            imported=len(inserted_ids),
             skipped_records=skipped_records,
-            inserted=inserted_count,
-            deduplicated=len(data_to_insert) - inserted_count,
+            inserted=len(inserted_ids),
+            deduplicated=len(data_to_insert) - len(inserted_ids),
         )
 
 
 class PositionService(
-    BaseService[employees.Position, employee.PositionCreate, employee.PositionUpdate]
+    BaseService[
+        employees.Position,
+        employee_schema.PositionCreate,
+        employee_schema.PositionUpdate,
+    ]
 ):
     async def get_multi(
         self,
         session: "AsyncSession",
-        filters: employee.PositionListRequest | None = None,
+        filters: employee_schema.PositionListRequest | None = None,
         load_options: list[Any] | None = None,
-    ) -> PaginatedResponse[employee.PositionResponse]:
+    ) -> PaginatedResponse[employee_schema.PositionResponse]:
         stmt = select(self.model)
 
         if load_options:
@@ -335,7 +313,7 @@ class PositionService(
     ):
         records = await parse_excel_file(file)
 
-        validate_required_columns(records, {"название|name"})
+        validate_required_columns(records, employee.position_fields)
 
         import_log = ImportLogs(
             uploaded_by=user_id,
@@ -346,12 +324,13 @@ class PositionService(
         session.add(import_log)
         await session.flush()
 
-        data_to_insert = []
-        for r in records:
-            relation_fields = {
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(map_record(r, position_mapping, relation_fields))
+        await resolve_records_fields(
+            session, records, employee.position_fields, self.get_id_map
+        )
+
+        data_to_insert = [
+            {"name": r.get("название"), "import_log_id": import_log.id} for r in records
+        ]
 
         inserted_ids = []
         if data_to_insert:

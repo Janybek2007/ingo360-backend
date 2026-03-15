@@ -4,14 +4,15 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from src.db.models import Company, ImportLogs, Region, Settlement, geography
-from src.mapping.geography import district_mapping
+from src.db.models import ImportLogs
+from src.db.models import geography as geography_models
+from src.import_fields import geography
 from src.schemas import geography as geography_schema
 from src.services.base import BaseService
 from src.utils.excel_parser import parse_excel_file
 from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import InOrNullSpec, ListQueryHelper, StringTypedSpec
-from src.utils.mapping import map_record
+from src.utils.records_resolver import resolve_records_fields
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
@@ -22,7 +23,7 @@ from src.schemas.base_filter import PaginatedResponse
 
 class DistrictService(
     BaseService[
-        geography.District,
+        geography_models.District,
         geography_schema.DistrictCreate,
         geography_schema.DistrictUpdate,
     ]
@@ -31,42 +32,28 @@ class DistrictService(
         self, session: "AsyncSession", file: "UploadFile", user_id: int
     ):
         records = await parse_excel_file(file)
-
-        validate_required_columns(
-            records,
-            {
-                "область|region",
-                "компания|company",
-                "название|name",
-            },
-        )
-
+        validate_required_columns(records, geography.district_fields)
         import_log = ImportLogs(
             uploaded_by=user_id,
-            target_table="Районы",
+            target_table="Район",
             records_count=len(records),
             target_table_name=self.model.__tablename__,
         )
         session.add(import_log)
         await session.flush()
-
-        region_map, missing_regions = await self.get_id_map(
-            session, Region, "name", {r["область"] for r in records}
+        resolved = await resolve_records_fields(
+            session, records, geography.district_fields, self.get_id_map
         )
-        company_map, missing_companies = await self.get_id_map(
-            session, Company, "name", {r["компания"] for r in records}
-        )
-
+        region_map = resolved.maps["область"]
         settlement_pairs = {
-            (r.get("населенный пункт"), region_map.get(r["область"]))
+            (r.get("населенный пункт"), region_map.get(r.get("область")))
             for r in records
-            if r.get("населенный пункт") is not None and r["область"] in region_map
+            if r.get("населенный пункт") is not None and r.get("область") in region_map
         }
-
         settlement_map, missing_settlements = (
             await self.get_id_map(
                 session,
-                Settlement,
+                geography_models.Settlement,
                 "name",
                 settlement_pairs,
                 filter_field="region_id",
@@ -75,43 +62,39 @@ class DistrictService(
             if settlement_pairs
             else ({}, set())
         )
-
         skipped_records = []
         data_to_insert = []
-
         for idx, r in enumerate(records):
-            missing_keys = []
+            missing_keys = resolved.collect_missing_keys(r, geography.district_fields)
 
-            if r["область"] in missing_regions:
-                missing_keys.append(f"область: {r['область']}")
-            if r["компания"] in missing_companies:
-                missing_keys.append(f"компания: {r['компания']}")
+            ids, null_keys = resolved.resolve_id_fields(r, geography.district_fields)
+            if null_keys:
+                missing_keys.extend(null_keys)
 
-            region_id = region_map.get(r["область"])
+            region_id = ids.get("region_id")
             if r.get("населенный пункт") is not None and region_id:
                 settlement_key = (r.get("населенный пункт"), region_id)
                 if settlement_key in missing_settlements:
                     missing_keys.append(
                         f"населенный пункт: {r.get('населенный пункт')}"
                     )
-
             if missing_keys:
                 skipped_records.append({"row": idx + 1, "missing": missing_keys})
                 continue
-
             settlement_id = None
-            if r.get("населенный пункт") is not None:
-                settlement_key = (r.get("населенный пункт"), region_id)
-                settlement_id = settlement_map.get(settlement_key)
-
-            relation_fields = {
-                "company_id": company_map[r["компания"]],
-                "region_id": region_id,
-                "settlement_id": settlement_id,
-                "import_log_id": import_log.id,
-            }
-            data_to_insert.append(map_record(r, district_mapping, relation_fields))
-
+            if r.get("населенный пункт") and region_id:
+                settlement_id = settlement_map.get(
+                    (r.get("населенный пункт"), region_id)
+                )
+            data_to_insert.append(
+                {
+                    "name": r.get("название"),
+                    "company_id": ids.get("company_id"),
+                    "region_id": region_id,
+                    "settlement_id": settlement_id,
+                    "import_log_id": import_log.id,
+                }
+            )
         inserted_ids = []
         if data_to_insert:
             stmt = (
@@ -122,9 +105,7 @@ class DistrictService(
             )
             result = await session.execute(stmt)
             inserted_ids = result.scalars().all()
-
         await session.commit()
-
         return build_import_result(
             total=len(records),
             imported=len(inserted_ids),
@@ -208,7 +189,7 @@ class DistrictService(
         session: "AsyncSession",
         load_options: list[Any] | None = None,
         chunk_size: int = 1000,
-    ) -> AsyncIterator[geography.District]:
+    ) -> AsyncIterator[geography_models.District]:
         stmt = select(self.model)
 
         if load_options:
