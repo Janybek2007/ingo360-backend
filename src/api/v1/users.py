@@ -82,7 +82,7 @@ async def resend_password_setup(
 
 
 @router.get(
-    "", response_model=list[UserRead], dependencies=[Depends(current_superuser)]
+    "", response_model=list[UserRead], dependencies=[Depends(current_admin_user)]
 )
 async def get_users(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
@@ -221,7 +221,7 @@ async def update_me(
 
 
 @router.get(
-    "/{user_id}", response_model=UserRead, dependencies=[Depends(current_superuser)]
+    "/{user_id}", response_model=UserRead, dependencies=[Depends(current_admin_user)]
 )
 async def get_user(
     user_id: int,
@@ -235,7 +235,7 @@ async def get_user(
 
 
 @router.patch(
-    "/{user_id}", response_model=UserRead, dependencies=[Depends(current_superuser)]
+    "/{user_id}", response_model=UserRead, dependencies=[Depends(current_admin_user)]
 )
 async def update_user(
     user_id: int,
@@ -287,7 +287,7 @@ async def update_user(
         raise
 
 
-@router.delete("/{user_id}", dependencies=[Depends(current_superuser)])
+@router.delete("/{user_id}", dependencies=[Depends(current_admin_user)])
 async def delete_user(
     user_id: int,
     user_manager: Annotated[UserManager, Depends(get_user_manager)],
