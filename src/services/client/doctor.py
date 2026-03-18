@@ -171,16 +171,19 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                 }
             )
 
+        BATCH_SIZE = 3000
         inserted_ids = []
         if data_to_insert:
-            stmt = (
-                insert(self.model)
-                .values(data_to_insert)
-                .on_conflict_do_nothing()
-                .returning(self.model.id)
-            )
-            result = await session.execute(stmt)
-            inserted_ids = result.scalars().all()
+            for i in range(0, len(data_to_insert), BATCH_SIZE):
+                batch = data_to_insert[i:i + BATCH_SIZE]
+                stmt = (
+                    insert(self.model)
+                    .values(batch)
+                    .on_conflict_do_nothing()
+                    .returning(self.model.id)
+                )
+                result = await session.execute(stmt)
+                inserted_ids.extend(result.scalars().all())
 
         await session.commit()
 
