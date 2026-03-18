@@ -133,8 +133,10 @@ class SecondarySalesService(
 
             pharmacy_cache: CaseInsensitiveDict = CaseInsensitiveDict()
             sku_cache: CaseInsensitiveDict = CaseInsensitiveDict()
+            distributor_cache: CaseInsensitiveDict = CaseInsensitiveDict()
             missing_pharmacies: CaseInsensitiveSet = CaseInsensitiveSet()
             missing_skus: CaseInsensitiveSet = CaseInsensitiveSet()
+            missing_distributors: CaseInsensitiveSet = CaseInsensitiveSet()
 
             skipped_records = []
             skipped_total = 0
@@ -143,6 +145,7 @@ class SecondarySalesService(
             pending_records: list[tuple[int, dict[str, Any]]] = []
             pending_pharmacies: set[str] = set()
             pending_skus: set[str] = set()
+            pending_distributors: set[str] = set()
             imported = 0
             inserted = 0
             updated = 0
@@ -165,6 +168,14 @@ class SecondarySalesService(
                     missing_skus.update(missing)
                     pending_skus.clear()
 
+                if pending_distributors:
+                    distributor_map, missing = await self.get_id_map(
+                        session, Distributor, "name", pending_distributors
+                    )
+                    distributor_cache.update(distributor_map)
+                    missing_distributors.update(missing)
+                    pending_distributors.clear()
+
             async def process_pending_records():
                 nonlocal skipped_total, imported, inserted, updated, deduplicated
                 nonlocal data_to_insert
@@ -178,6 +189,7 @@ class SecondarySalesService(
                     missing_keys = []
                     pharmacy_name = record.get("аптека")
                     sku_name = record.get("sku")
+                    distributor_name = record.get("дистрибьютор")
 
                     if not pharmacy_name:
                         missing_keys.append("аптека: (пусто)")
@@ -188,6 +200,11 @@ class SecondarySalesService(
                         missing_keys.append("SKU: (пусто)")
                     elif sku_name in missing_skus:
                         missing_keys.append(f"SKU: {sku_name}")
+
+                    if not distributor_name:
+                        missing_keys.append("дистрибьютор: (пусто)")
+                    elif distributor_name in missing_distributors:
+                        missing_keys.append(f"дистрибьютор: {distributor_name}")
 
                     for excel_col in ("упаковки", "сумма"):
                         val = record.get(excel_col)
@@ -213,6 +230,7 @@ class SecondarySalesService(
                     relation_fields = {
                         "pharmacy_id": pharmacy_cache[pharmacy_name],
                         "sku_id": sku_cache[sku_name],
+                        "distributor_id": distributor_cache[distributor_name],
                         "import_log_id": import_log.id,
                     }
                     data_to_insert.append(
@@ -252,6 +270,7 @@ class SecondarySalesService(
                     normalize_record(record, sale.secondary_sales_fields)
                     pharmacy_name = record.get("аптека")
                     sku_name = record.get("sku")
+                    distributor_name = record.get("дистрибьютор")
                     month_value = record.get("месяц")
                     record["квартал"] = (
                         (int(month_value) - 1) // 3 + 1 if month_value else None
@@ -270,6 +289,12 @@ class SecondarySalesService(
                         and sku_name not in missing_skus
                     ):
                         pending_skus.add(sku_name)
+                    if (
+                        distributor_name
+                        and distributor_name not in distributor_cache
+                        and distributor_name not in missing_distributors
+                    ):
+                        pending_distributors.add(distributor_name)
 
                     if len(pending_records) >= batch_size:
                         await process_pending_records()
