@@ -352,7 +352,7 @@ class SecondarySalesService(
 
         sort_map = {
             "pharmacy": self.model.pharmacy_id,
-            "distributor": Pharmacy.distributor_id,
+            "distributor": self.model.distributor_id,
             "brand": SKU.brand_id,
             "sku": self.model.sku_id,
             "month": self.model.month,
@@ -376,6 +376,7 @@ class SecondarySalesService(
                 [
                     InOrNullSpec(self.model.pharmacy_id, filters.pharmacy_ids),
                     InOrNullSpec(self.model.sku_id, filters.sku_ids),
+                    InOrNullSpec(self.model.distributor_id, filters.distributor_ids),
                     InOrNullSpec(self.model.month, filters.months),
                     InOrNullSpec(self.model.quarter, filters.quarters),
                     NumberTypedSpec(self.model.year, filters.year),
@@ -387,14 +388,6 @@ class SecondarySalesService(
                     ),
                 ],
             )
-
-            joined_pharmacy = False
-            if filters.distributor_ids:
-                stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
-                joined_pharmacy = True
-                stmt = ListQueryHelper.apply_in_or_null(
-                    stmt, Pharmacy.distributor_id, filters.distributor_ids
-                )
 
             joined_sku = False
             if filters.brand_ids:
@@ -414,9 +407,6 @@ class SecondarySalesService(
                 stmt = stmt.where(
                     or_(*(self.model.indicator.ilike(f"%{v}%") for v in raw))
                 )
-
-            if filters.sort_by == "distributors" and not joined_pharmacy:
-                stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
 
             if filters.sort_by == "brands" and not joined_sku:
                 stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
@@ -494,7 +484,7 @@ class SecondarySalesService(
             .join(PromotionType, SKU.promotion_type_id == PromotionType.id)
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Pharmacy, SecondarySales.pharmacy_id == Pharmacy.id)
-            .outerjoin(Distributor, Pharmacy.distributor_id == Distributor.id)
+            .outerjoin(Distributor, SecondarySales.distributor_id == Distributor.id)
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
                 SecondarySales.indicator.ilike("%продаж%"),
@@ -510,7 +500,7 @@ class SecondarySalesService(
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
-                InOrNullSpec(Distributor.id, filters.distributor_ids),
+                InOrNullSpec(SecondarySales.distributor_id, filters.distributor_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
                 InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
                 SearchSpec(
@@ -604,9 +594,8 @@ class SecondarySalesService(
             )
             .select_from(SecondarySales)
             .join(SKU, SecondarySales.sku_id == SKU.id)
-            .where(
-                SecondarySales.indicator.ilike("%продаж%"),
-            )
+            .join(Pharmacy, SecondarySales.pharmacy_id == Pharmacy.id)
+            .where(SecondarySales.indicator.ilike("%продаж%"))
         )
 
         if company_id is not None:
@@ -617,7 +606,7 @@ class SecondarySalesService(
             [
                 InOrNullSpec(SKU.brand_id, filters.brand_ids),
                 InOrNullSpec(SKU.product_group_id, filters.product_group_ids),
-                InOrNullSpec(Pharmacy.distributor_id, filters.distributor_ids),
+                InOrNullSpec(SecondarySales.distributor_id, filters.distributor_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
                 InOrNullSpec(Pharmacy.geo_indicator_id, filters.geo_indicator_ids),
             ],
@@ -682,8 +671,7 @@ class SecondarySalesService(
                 func.round(func.sum(SecondarySales.amount)).label("total_amount"),
             )
             .select_from(SecondarySales)
-            .join(Pharmacy, SecondarySales.pharmacy_id == Pharmacy.id)
-            .join(Distributor, Pharmacy.distributor_id == Distributor.id)
+            .outerjoin(Distributor, SecondarySales.distributor_id == Distributor.id)
             .join(SKU, SecondarySales.sku_id == SKU.id)
             .join(Brand, SKU.brand_id == Brand.id)
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
@@ -701,7 +689,7 @@ class SecondarySalesService(
         )
 
         if filters.distributor_ids:
-            base_stmt = base_stmt.where(Distributor.id.in_(filters.distributor_ids))
+            base_stmt = base_stmt.where(SecondarySales.distributor_id.in_(filters.distributor_ids))
 
         if filters.brand_ids:
             base_stmt = base_stmt.where(Brand.id.in_(filters.brand_ids))
@@ -802,8 +790,7 @@ class SecondarySalesService(
                 func.round(func.sum(SecondarySales.amount)).label("total_amount"),
             )
             .select_from(SecondarySales)
-            .join(Pharmacy, SecondarySales.pharmacy_id == Pharmacy.id)
-            .join(Distributor, Pharmacy.distributor_id == Distributor.id)
+            .outerjoin(Distributor, SecondarySales.distributor_id == Distributor.id)
             .join(SKU, SecondarySales.sku_id == SKU.id)
         )
 
@@ -812,7 +799,7 @@ class SecondarySalesService(
             [
                 InOrNullSpec(SKU.brand_id, filters.brand_ids),
                 InOrNullSpec(SKU.product_group_id, filters.product_group_ids),
-                InOrNullSpec(Distributor.id, filters.distributor_ids),
+                InOrNullSpec(SecondarySales.distributor_id, filters.distributor_ids),
                 InOrNullSpec(Pharmacy.geo_indicator_id, filters.geo_indicator_ids),
             ],
         )
