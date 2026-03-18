@@ -88,6 +88,8 @@ class SecondarySales(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="secondary_sales"
     )
+    distributor_id: Mapped[int] = mapped_column(ForeignKey("distributors.id"))
+    distributor: Mapped["Distributor"] = relationship(back_populates="secondary_sales")
 
     __table_args__ = (
         UniqueConstraint(
