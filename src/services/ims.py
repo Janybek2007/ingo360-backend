@@ -172,7 +172,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
         session: "AsyncSession",
         file_path: str,
         user_id: int,
-        batch_size: int = 2000,
+        batch_size: int = 10_000,
     ):
         try:
             with open(file_path, "rb") as f:

@@ -23,18 +23,14 @@ from src.mapping.dimension_mapping.sale import (
     BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR,
     BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR_AND_SEGMENT,
 )
-from src.mapping.sales import secondary_sales_mapping
+from src.mapping.sales import tertiary_sales_mapping
 from src.schemas import sale as sale_schema
 from src.schemas.base_filter import PaginatedResponse
 from src.services.base import BaseService, ModelType
-from src.services.sale.utils import upsert_batch_with_stats
+from src.services.sale.utils import RelationSpec, import_sales_from_excel
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
-from src.utils.case_insensitive_dict import CaseInsensitiveDict
-from src.utils.case_insensitive_set import CaseInsensitiveSet
-from src.utils.excel_parser import iter_excel_records
-from src.utils.import_result import build_import_result
 from src.utils.list_query_helper import (
     BoolListSpec,
     InOrNullSpec,
@@ -42,9 +38,6 @@ from src.utils.list_query_helper import (
     NumberTypedSpec,
     SearchSpec,
 )
-from src.utils.mapping import map_record
-from src.utils.records_resolver import normalize_record
-from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from fastapi import UploadFile
@@ -63,7 +56,7 @@ class TertiarySalesService(
         session: "AsyncSession",
         file: "UploadFile",
         user_id: int,
-        batch_size: int = 5000,
+        batch_size: int = 10_000,
     ):
         from src.db.models.excel_tasks import ExcelTaskType
         from src.tasks.sale_imports import create_excel_task_record, import_sales_task
@@ -108,211 +101,40 @@ class TertiarySalesService(
         batch_size: int = 5000,
     ):
         try:
-            with open(file_path, "rb") as f:
-                first_row = next(iter_excel_records(f), None)
-
-            if first_row is None:
-                raise HTTPException(status_code=400, detail="Файл пустой")
-
-            _, first_record = first_row
-
-            try:
-                validate_required_columns(
-                    [first_record], sale.tertiary_sales_fields, raise_exception=False
-                )
-            except Exception as e:
-                raise ValueError(str(e))
-
-            total_records = 0
-
-            import_log = ImportLogs(
-                uploaded_by=user_id,
+            return await import_sales_from_excel(
+                session=session,
+                file_path=file_path,
+                user_id=user_id,
+                batch_size=batch_size,
+                model=self.model,
+                import_log_model=ImportLogs,
                 target_table="Третичные продажи",
-                records_count=0,
-                target_table_name=self.model.__tablename__,
-            )
-            session.add(import_log)
-            await session.flush()
-
-            pharmacy_cache: CaseInsensitiveDict = CaseInsensitiveDict()
-            sku_cache: CaseInsensitiveDict = CaseInsensitiveDict()
-            missing_pharmacies: CaseInsensitiveSet = CaseInsensitiveSet()
-            missing_skus: CaseInsensitiveSet = CaseInsensitiveSet()
-
-            skipped_records = []
-            skipped_total = 0
-            skipped_limit = 1000
-            data_to_insert = []
-            pending_records: list[tuple[int, dict[str, Any]]] = []
-            pending_pharmacies: set[str] = set()
-            pending_skus: set[str] = set()
-            imported = 0
-            inserted = 0
-            updated = 0
-            deduplicated = 0
-
-            async def resolve_pending_names():
-                if pending_pharmacies:
-                    pharmacy_map, missing = await self.get_id_map(
-                        session, Pharmacy, "name", pending_pharmacies
-                    )
-                    pharmacy_cache.update(pharmacy_map)
-                    missing_pharmacies.update(missing)
-                    pending_pharmacies.clear()
-
-                if pending_skus:
-                    sku_map, missing = await self.get_id_map(
-                        session, SKU, "name", pending_skus
-                    )
-                    sku_cache.update(sku_map)
-                    missing_skus.update(missing)
-                    pending_skus.clear()
-
-            async def process_pending_records():
-                nonlocal skipped_total, imported, inserted, updated, deduplicated
-                nonlocal data_to_insert
-
-                if not pending_records:
-                    return
-
-                await resolve_pending_names()
-
-                for row_index, record in pending_records:
-                    missing_keys = []
-                    pharmacy_name = record.get("аптека")
-                    sku_name = record.get("sku")
-
-                    if not pharmacy_name:
-                        missing_keys.append("аптека: (пусто)")
-                    elif pharmacy_name in missing_pharmacies:
-                        missing_keys.append(f"аптека: {pharmacy_name}")
-
-                    if not sku_name:
-                        missing_keys.append("SKU: (пусто)")
-                    elif sku_name in missing_skus:
-                        missing_keys.append(f"SKU: {sku_name}")
-
-                    for excel_col in ("упаковки", "сумма"):
-                        val = record.get(excel_col)
-                        if val is None:
-                            record[excel_col] = 0
-                        elif not isinstance(val, (int, float)):
-                            cleaned = str(val).replace(" ", "").replace(",", ".")
-                            try:
-                                record[excel_col] = float(cleaned)
-                            except ValueError:
-                                missing_keys.append(
-                                    f"некорректное число в '{excel_col}': {val}"
-                                )
-
-                    if missing_keys:
-                        skipped_total += 1
-                        if len(skipped_records) < skipped_limit:
-                            skipped_records.append(
-                                {"row": row_index, "missing": missing_keys}
-                            )
-                        continue
-
-                    relation_fields = {
-                        "pharmacy_id": pharmacy_cache[pharmacy_name],
-                        "sku_id": sku_cache[sku_name],
-                        "import_log_id": import_log.id,
-                    }
-                    data_to_insert.append(
-                        map_record(record, secondary_sales_mapping, relation_fields)
-                    )
-
-                    if len(data_to_insert) >= batch_size:
-                        (
-                            batch_imported,
-                            batch_inserted,
-                            batch_updated,
-                            batch_deduplicated,
-                        ) = await upsert_batch_with_stats(
-                            session=session,
-                            model=self.model,
-                            rows=data_to_insert,
-                            key_fields=(
-                                "pharmacy_id",
-                                "sku_id",
-                                "month",
-                                "year",
-                                "indicator",
-                            ),
-                            constraint_name="uq_tertiary_sales_business_key",
-                        )
-                        imported += batch_imported
-                        inserted += batch_inserted
-                        updated += batch_updated
-                        deduplicated += batch_deduplicated
-                        data_to_insert = []
-
-                pending_records.clear()
-
-            with open(file_path, "rb") as f:
-                for row_index, record in iter_excel_records(f):
-                    total_records += 1
-                    normalize_record(record, sale.tertiary_sales_fields)
-                    pharmacy_name = record.get("аптека")
-                    sku_name = record.get("sku")
-                    month_value = record.get("месяц")
-                    record["квартал"] = (
-                        (int(month_value) - 1) // 3 + 1 if month_value else None
-                    )
-
-                    pending_records.append((row_index, record))
-                    if (
-                        pharmacy_name
-                        and pharmacy_name not in pharmacy_cache
-                        and pharmacy_name not in missing_pharmacies
-                    ):
-                        pending_pharmacies.add(pharmacy_name)
-                    if (
-                        sku_name
-                        and sku_name not in sku_cache
-                        and sku_name not in missing_skus
-                    ):
-                        pending_skus.add(sku_name)
-
-                    if len(pending_records) >= batch_size:
-                        await process_pending_records()
-
-            await process_pending_records()
-
-            if data_to_insert:
-                (
-                    batch_imported,
-                    batch_inserted,
-                    batch_updated,
-                    batch_deduplicated,
-                ) = await upsert_batch_with_stats(
-                    session=session,
-                    model=self.model,
-                    rows=data_to_insert,
-                    key_fields=(
-                        "pharmacy_id",
-                        "sku_id",
-                        "month",
-                        "year",
-                        "indicator",
+                required_fields=sale.tertiary_sales_fields,
+                mapping=tertiary_sales_mapping,
+                key_fields=(
+                    "pharmacy_id",
+                    "sku_id",
+                    "month",
+                    "year",
+                    "indicator",
+                ),
+                constraint_name="uq_tertiary_sales_business_key",
+                relations=[
+                    RelationSpec(
+                        model=Pharmacy,
+                        name_key="аптека",
+                        missing_label="аптека",
+                        id_field="pharmacy_id",
                     ),
-                    constraint_name="uq_tertiary_sales_business_key",
-                )
-                imported += batch_imported
-                inserted += batch_inserted
-                updated += batch_updated
-                deduplicated += batch_deduplicated
-
-            import_log.records_count = total_records
-            await session.commit()
-
-            return build_import_result(
-                total=total_records,
-                imported=imported,
-                skipped_records=skipped_records,
-                skipped_total=skipped_total,
-                inserted=inserted,
-                deduplicated=deduplicated,
+                    RelationSpec(
+                        model=Distributor,
+                        name_key="дистрибьютор",
+                        missing_label="дистрибьютор",
+                        id_field=None,
+                        required=False,
+                    ),
+                ],
+                get_id_map=self.get_id_map,
             )
         finally:
             pass

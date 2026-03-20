@@ -72,6 +72,9 @@ def _clean_excel_dataframe(df: pl.DataFrame, read_as_str: bool = False) -> pl.Da
     # 4. Конвертируем в строки если нужно
     if read_as_str:
         df = df.with_columns(pl.all().cast(pl.Utf8))
+        df = df.with_columns(
+            [pl.col(col).str.strip_chars().alias(col) for col in df.columns]
+        )
 
     # 5. Финальная фильтрация: убираем строки, которые полностью null
     df = df.filter(~pl.all_horizontal(pl.col("*").is_null()))

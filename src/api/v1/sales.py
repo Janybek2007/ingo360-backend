@@ -276,6 +276,7 @@ async def list_secondary_sales(
     load_options = [
         joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.geo_indicator),
         joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.distributor),
+        joinedload(SecondarySales.distributor),
         joinedload(SecondarySales.sku).joinedload(SKU.brand),
     ]
     return await secondary_sales_service.get_multi(

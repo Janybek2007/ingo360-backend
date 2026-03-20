@@ -8,7 +8,6 @@ from src.api.dependencies.current_user import (
     current_active_user,
     current_admin_or_operator_user,
     current_admin_user,
-    current_superuser,
 )
 from src.api.dependencies.user_manager import get_user_manager
 from src.core.auth.user_manager import UserManager

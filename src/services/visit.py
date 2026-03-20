@@ -61,7 +61,7 @@ class VisitService(
         session: "AsyncSession",
         file: "UploadFile",
         user_id: int,
-        batch_size: int = 2000,
+        batch_size: int = 10_000,
     ):
         from src.db.models.excel_tasks import ExcelTaskType
         from src.tasks.sale_imports import create_excel_task_record, import_sales_task

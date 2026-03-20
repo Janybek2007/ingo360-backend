@@ -227,7 +227,9 @@ class Distributor(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="distributors"
     )
-    secondary_sales: Mapped[list["SecondarySales"]] = relationship(back_populates="distributor")
+    secondary_sales: Mapped[list["SecondarySales"]] = relationship(
+        back_populates="distributor"
+    )
 
     __table_args__ = (Index("idx_distributor_name", "name"),)
 

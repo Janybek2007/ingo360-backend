@@ -248,7 +248,7 @@ class MedicalFacilityService(
         inserted_ids = []
         if data_to_insert:
             for i in range(0, len(data_to_insert), BATCH_SIZE):
-                batch = data_to_insert[i:i + BATCH_SIZE]
+                batch = data_to_insert[i : i + BATCH_SIZE]
                 stmt = (
                     insert(self.model)
                     .values(batch)
