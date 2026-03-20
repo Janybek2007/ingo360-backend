@@ -38,8 +38,7 @@ def _format_error_message(exc: Exception) -> str:
     if not raw:
         return exc.__class__.__name__
 
-    first_line = raw.splitlines()[0].strip()
-    return first_line[:500]
+    return raw[:2000]
 
 
 def _extract_import_error(result: object) -> str | None:
