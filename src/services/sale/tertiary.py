@@ -130,8 +130,8 @@ class TertiarySalesService(
                         model=Distributor,
                         name_key="дистрибьютор",
                         missing_label="дистрибьютор",
-                        id_field=None,
-                        required=False,
+                        id_field="distributor_id",
+                        required=True,
                     ),
                 ],
                 get_id_map=self.get_id_map,
@@ -152,7 +152,7 @@ class TertiarySalesService(
 
         sort_map = {
             "pharmacy": self.model.pharmacy_id,
-            "distributor": Pharmacy.distributor_id,
+            "distributor": self.model.distributor_id,
             "brand": SKU.brand_id,
             "sku": self.model.sku_id,
             "month": self.model.month,
@@ -176,6 +176,7 @@ class TertiarySalesService(
                 [
                     InOrNullSpec(self.model.pharmacy_id, filters.pharmacy_ids),
                     InOrNullSpec(self.model.sku_id, filters.sku_ids),
+                    InOrNullSpec(self.model.distributor_id, filters.distributor_ids),
                     InOrNullSpec(self.model.month, filters.months),
                     InOrNullSpec(self.model.quarter, filters.quarters),
                     NumberTypedSpec(self.model.year, filters.year),
@@ -187,14 +188,6 @@ class TertiarySalesService(
                     ),
                 ],
             )
-
-            joined_pharmacy = False
-            if filters.distributor_ids:
-                stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
-                joined_pharmacy = True
-                stmt = ListQueryHelper.apply_in_or_null(
-                    stmt, Pharmacy.distributor_id, filters.distributor_ids
-                )
 
             joined_sku = False
             if filters.brand_ids:
@@ -214,9 +207,6 @@ class TertiarySalesService(
                 stmt = stmt.where(
                     or_(*(self.model.indicator.ilike(f"%{v}%") for v in raw))
                 )
-
-            if filters.sort_by == "distributors" and not joined_pharmacy:
-                stmt = stmt.join(Pharmacy, self.model.pharmacy_id == Pharmacy.id)
 
             if filters.sort_by == "brands" and not joined_sku:
                 stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
@@ -294,7 +284,7 @@ class TertiarySalesService(
             .join(PromotionType, SKU.promotion_type_id == PromotionType.id)
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Pharmacy, TertiarySalesAndStock.pharmacy_id == Pharmacy.id)
-            .outerjoin(Distributor, Pharmacy.distributor_id == Distributor.id)
+            .outerjoin(Distributor, TertiarySalesAndStock.distributor_id == Distributor.id)
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
                 TertiarySalesAndStock.indicator.ilike("%продаж%"),
@@ -310,7 +300,7 @@ class TertiarySalesService(
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
-                InOrNullSpec(Distributor.id, filters.distributor_ids),
+                InOrNullSpec(TertiarySalesAndStock.distributor_id, filters.distributor_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
                 InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
                 SearchSpec(
@@ -429,7 +419,7 @@ class TertiarySalesService(
         if company_id is not None:
             stmt = stmt.where(SKU.company_id == company_id)
 
-        need_pharmacy_join = bool(filters.distributor_ids or filters.geo_indicator_ids)
+        need_pharmacy_join = bool(filters.geo_indicator_ids)
 
         if need_pharmacy_join:
             stmt = stmt.join(Pharmacy, TertiarySalesAndStock.pharmacy_id == Pharmacy.id)
@@ -437,11 +427,7 @@ class TertiarySalesService(
         stmt = ListQueryHelper.apply_specs(
             stmt,
             [
-                (
-                    InOrNullSpec(Pharmacy.distributor_id, filters.distributor_ids)
-                    if need_pharmacy_join
-                    else None
-                ),
+                InOrNullSpec(TertiarySalesAndStock.distributor_id, filters.distributor_ids),
                 (
                     InOrNullSpec(Pharmacy.geo_indicator_id, filters.geo_indicator_ids)
                     if need_pharmacy_join
@@ -483,7 +469,7 @@ class TertiarySalesService(
         total_pharmacies_cte = (
             select(
                 period_key.label("period"),
-                Pharmacy.distributor_id.label("distributor_id"),
+                TertiarySalesAndStock.distributor_id.label("distributor_id"),
                 Pharmacy.geo_indicator_id.label("geo_indicator_id"),
                 func.count(func.distinct(TertiarySalesAndStock.pharmacy_id)).label(
                     "total_pharmacies"
@@ -502,7 +488,9 @@ class TertiarySalesService(
         )
 
         total_pharmacies_cte = total_pharmacies_cte.group_by(
-            Pharmacy.distributor_id, Pharmacy.geo_indicator_id, period_key
+            TertiarySalesAndStock.distributor_id,
+            Pharmacy.geo_indicator_id,
+            period_key,
         ).cte("total_pharmacies")
 
         select_fields, group_by_fields, search_cols = build_dimensions(
@@ -535,12 +523,12 @@ class TertiarySalesService(
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Segment, SKU.segment_id == Segment.id)
             .join(Pharmacy, TertiarySalesAndStock.pharmacy_id == Pharmacy.id)
-            .join(Distributor, Pharmacy.distributor_id == Distributor.id)
+            .outerjoin(Distributor, TertiarySalesAndStock.distributor_id == Distributor.id)
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .join(
                 total_pharmacies_cte,
                 and_(
-                    Distributor.id == total_pharmacies_cte.c.distributor_id,
+                    TertiarySalesAndStock.distributor_id == total_pharmacies_cte.c.distributor_id,
                     or_(
                         and_(
                             Pharmacy.geo_indicator_id.is_not(None),
@@ -570,7 +558,7 @@ class TertiarySalesService(
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(Segment.id, filters.segment_ids),
-                InOrNullSpec(Distributor.id, filters.distributor_ids),
+                InOrNullSpec(TertiarySalesAndStock.distributor_id, filters.distributor_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
                 InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
                 SearchSpec(
@@ -589,7 +577,7 @@ class TertiarySalesService(
 
         group_by_fields.extend(
             [
-                Distributor.id,
+                TertiarySalesAndStock.distributor_id,
                 Pharmacy.geo_indicator_id,
                 period_key,
                 total_pharmacies_cte.c.total_pharmacies,
@@ -680,7 +668,7 @@ class TertiarySalesService(
             .join(PromotionType, SKU.promotion_type_id == PromotionType.id)
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Pharmacy, TertiarySalesAndStock.pharmacy_id == Pharmacy.id)
-            .outerjoin(Distributor, Pharmacy.distributor_id == Distributor.id)
+            .outerjoin(Distributor, TertiarySalesAndStock.distributor_id == Distributor.id)
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
                 TertiarySalesAndStock.indicator.ilike("%остат%"),
@@ -696,7 +684,7 @@ class TertiarySalesService(
                 InOrNullSpec(Brand.id, filters.brand_ids),
                 InOrNullSpec(ProductGroup.id, filters.product_group_ids),
                 InOrNullSpec(PromotionType.id, filters.promotion_type_ids),
-                InOrNullSpec(Distributor.id, filters.distributor_ids),
+                InOrNullSpec(TertiarySalesAndStock.distributor_id, filters.distributor_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
                 InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
                 SearchSpec(

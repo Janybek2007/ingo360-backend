@@ -37,6 +37,7 @@ tertiary_sales_fields = [
     month.as_required(),
     year.as_required(),
     indicator.as_required(),
+    distributor.as_required(),
     packages,
     amount,
 ]
