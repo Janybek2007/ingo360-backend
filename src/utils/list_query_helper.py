@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 from typing import Any, Iterable, Tuple
 
-from sqlalchemy import and_, asc, desc, or_
+from sqlalchemy import and_, asc, desc, func, or_
 
 
 @dataclass(frozen=True)
 class InOrNullSpec:
     column: Any
-    values: list[int] | None
+    values: list[int | str] | None
 
 
 @dataclass(frozen=True)
@@ -223,11 +223,35 @@ class ListQueryHelper:
         return stmt
 
     @staticmethod
-    def apply_in_or_null(stmt, column, values: list[int] | None):
+    def apply_in_or_null(stmt, column, values: list[int | str] | None):
         if not values:
             return stmt
 
-        include_null = 0 in values
+        # проверяем тип значений
+        is_string = any(isinstance(v, str) for v in values)
+
+        include_null = 0 in values if not is_string else any(v is None for v in values)
+
+        if is_string:
+            # нормализуем строки
+            normalized_values = [
+                v.lower() for v in values if isinstance(v, str) and v.strip() != ""
+            ]
+
+            if include_null and normalized_values:
+                return stmt.where(
+                    or_(
+                        func.lower(column).in_(normalized_values),
+                        column.is_(None),
+                    )
+                )
+
+            if include_null:
+                return stmt.where(column.is_(None))
+
+            return stmt.where(func.lower(column).in_(normalized_values))
+
+        # старое поведение для чисел
         non_zero_values = [value for value in values if value != 0]
 
         if include_null and non_zero_values:

@@ -142,6 +142,13 @@ class VisitService(
                     NumberTypedSpec(self.model.year, filters.year),
                 ],
             )
+            if filters.doctor_or_pharmacy_ids:
+                stmt = stmt.where(
+                    or_(
+                        self.model.doctor_id.in_(filters.doctor_or_pharmacy_ids),
+                        self.model.pharmacy_id.in_(filters.doctor_or_pharmacy_ids),
+                    )
+                )
 
         # Count before pagination
         count_stmt = select(func.count()).select_from(stmt.subquery())

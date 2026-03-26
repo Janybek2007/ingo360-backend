@@ -82,6 +82,9 @@ def apply_scope_filter(stmt, target_ref: ReferencesType, scope_ref: ScopeType):
     if scope_ref in ("sales_primary", "sales_secondary", "sales_tertiary"):
         return apply_sales_scope(stmt, target_ref, scope_ref)
 
+    if scope_ref in ("clients_pharmacies", "clients_doctors"):
+        return apply_visits_scope(stmt, target_ref)
+
     if scope_ref == "visits":
         return apply_visits_scope(stmt, target_ref)
 
