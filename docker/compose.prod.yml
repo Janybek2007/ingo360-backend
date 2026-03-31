@@ -61,7 +61,7 @@ services:
       start_period: 5s
 
   celery_worker:
-    image: ingo360-backend:latest
+    image: ingo360-backend:prod
     container_name: ingo360_celery_worker
     command: celery -A src.celery_app worker --loglevel=info
     volumes:
@@ -78,7 +78,7 @@ services:
   nginx:
     build:
       context: .
-      dockerfile: docker/Dockerfile.nginx
+      dockerfile: Dockerfile.nginx
     container_name: ingo360_nginx
     ports:
       - "80:80"
