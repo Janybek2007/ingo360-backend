@@ -114,8 +114,8 @@ async def redis_to_ws_bridge():
                 status=status,
                 result=result,
             )
-    except Exception as e:
-        print(f"Ошибка в мосту WebSocket: {e}")
+    except Exception:
+        pass
     finally:
         await pubsub.unsubscribe("celery_excel_status")
         await redis.close()

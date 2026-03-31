@@ -95,5 +95,6 @@ class District(Base):
 
     __table_args__ = (
         Index("idx_district_name", "name"),
+        Index("idx_district_composite", "name", "region_id", "company_id"),
         UniqueConstraint("name", "region_id", name="uq_district_name_region"),
     )

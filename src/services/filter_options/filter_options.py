@@ -47,7 +47,7 @@ def normalize_options(rows, value_field: str = "name") -> list[FilterOption]:
             {"product_group_ids": product_group_ids} if product_group_ids else None
         )
         result.append(
-            FilterOption(
+            FilterOption.model_construct(
                 id=row_mapping["id"], name=str(value), scope_values=scope_values
             )
         )
@@ -62,7 +62,12 @@ def find_fk_column(from_model, to_model):
     return None
 
 
-def apply_scope_filter(stmt, target_ref: ReferencesType, scope_ref: ScopeType):
+def apply_scope_filter(
+    stmt,
+    target_ref: ReferencesType,
+    scope_ref: ScopeType,
+    prefetched_sku_ids: list[int] | None = None,
+):
     if scope_ref == "all" or target_ref == scope_ref:
         return stmt
 
@@ -80,7 +85,7 @@ def apply_scope_filter(stmt, target_ref: ReferencesType, scope_ref: ScopeType):
         return stmt.where(Company.id.in_(company_ids))
 
     if scope_ref in ("sales_primary", "sales_secondary", "sales_tertiary"):
-        return apply_sales_scope(stmt, target_ref, scope_ref)
+        return apply_sales_scope(stmt, target_ref, scope_ref, prefetched_sku_ids)
 
     if scope_ref in ("clients_pharmacies", "clients_doctors"):
         return apply_visits_scope(stmt, target_ref)
@@ -123,7 +128,12 @@ def apply_scope_filter(stmt, target_ref: ReferencesType, scope_ref: ScopeType):
     return stmt
 
 
-def apply_sales_scope(stmt, target_ref: ReferencesType, scope_ref: ScopeType):
+def apply_sales_scope(
+    stmt,
+    target_ref: ReferencesType,
+    scope_ref: ScopeType,
+    prefetched_sku_ids: list[int] | None = None,
+):
     if target_ref == "clients_geo_indicators":
         if scope_ref == "sales_secondary":
             pharmacy_ids = select(distinct(SecondarySales.pharmacy_id))
@@ -143,58 +153,54 @@ def apply_sales_scope(stmt, target_ref: ReferencesType, scope_ref: ScopeType):
             distributor_ids = select(distinct(PrimarySalesAndStock.distributor_id))
             return stmt.where(Distributor.id.in_(distributor_ids))
 
-        if scope_ref in ("sales_secondary", "sales_tertiary"):
-            if scope_ref == "sales_secondary":
-                pharmacy_ids = select(distinct(SecondarySales.pharmacy_id))
-            else:
-                pharmacy_ids = select(distinct(TertiarySalesAndStock.pharmacy_id))
-
-            distributor_ids = select(distinct(Pharmacy.distributor_id)).where(
-                Pharmacy.id.in_(pharmacy_ids),
-                Pharmacy.distributor_id.is_not(None),
-            )
+        if scope_ref == "sales_tertiary":
+            distributor_ids = select(
+                distinct(TertiarySalesAndStock.distributor_id)
+            ).where(TertiarySalesAndStock.distributor_id.is_not(None))
             return stmt.where(Distributor.id.in_(distributor_ids))
 
-    if target_ref == "products_skus":
-        if scope_ref == "sales_primary":
-            sku_ids = select(distinct(PrimarySalesAndStock.sku_id))
-        elif scope_ref == "sales_secondary":
-            sku_ids = select(distinct(SecondarySales.sku_id))
-        else:
-            sku_ids = select(distinct(TertiarySalesAndStock.sku_id))
-        return stmt.where(SKU.id.in_(sku_ids))
+        if scope_ref == "sales_secondary":
+            distributor_ids = select(distinct(SecondarySales.distributor_id))
+            return stmt.where(Distributor.id.in_(distributor_ids))
 
     if target_ref in (
+        "products_skus",
         "products_brands",
         "products_product_groups",
         "products_promotion_types",
         "products_segments",
     ):
-        if scope_ref == "sales_primary":
-            sku_ids = select(distinct(PrimarySalesAndStock.sku_id))
-        elif scope_ref == "sales_secondary":
-            sku_ids = select(distinct(SecondarySales.sku_id))
+        if prefetched_sku_ids is not None:
+            sku_filter = SKU.id.in_(prefetched_sku_ids)
         else:
-            sku_ids = select(distinct(TertiarySalesAndStock.sku_id))
+            if scope_ref == "sales_primary":
+                sku_ids_sq = select(distinct(PrimarySalesAndStock.sku_id)).subquery()
+            elif scope_ref == "sales_secondary":
+                sku_ids_sq = select(distinct(SecondarySales.sku_id)).subquery()
+            else:
+                sku_ids_sq = select(distinct(TertiarySalesAndStock.sku_id)).subquery()
+            sku_filter = SKU.id.in_(select(sku_ids_sq))
+
+        if target_ref == "products_skus":
+            return stmt.where(sku_filter)
 
         if target_ref == "products_brands":
-            ids = select(distinct(SKU.brand_id)).where(SKU.id.in_(sku_ids))
+            ids = select(distinct(SKU.brand_id)).where(sku_filter)
             return stmt.where(Brand.id.in_(ids))
 
         if target_ref == "products_product_groups":
-            ids = select(distinct(SKU.product_group_id)).where(SKU.id.in_(sku_ids))
+            ids = select(distinct(SKU.product_group_id)).where(sku_filter)
             return stmt.where(ProductGroup.id.in_(ids))
 
         if target_ref == "products_promotion_types":
             ids = select(distinct(SKU.promotion_type_id)).where(
-                SKU.id.in_(sku_ids),
-                SKU.promotion_type_id.is_not(None),
+                sku_filter, SKU.promotion_type_id.is_not(None)
             )
             return stmt.where(PromotionType.id.in_(ids))
+
         if target_ref == "products_segments":
             ids = select(distinct(SKU.segment_id)).where(
-                SKU.id.in_(sku_ids),
-                SKU.segment_id.is_not(None),
+                sku_filter, SKU.segment_id.is_not(None)
             )
             return stmt.where(Segment.id.in_(ids))
 
@@ -382,11 +388,31 @@ async def get_grouped_filter_options(
 
     scope_ref = scope or "all"
 
+    _product_refs = {
+        "products_skus",
+        "products_brands",
+        "products_product_groups",
+        "products_promotion_types",
+        "products_segments",
+    }
+    prefetched_sku_ids: list[int] | None = None
+    if scope_ref in ("sales_primary", "sales_secondary", "sales_tertiary") and any(
+        k in _product_refs for k in include_values
+    ):
+        if scope_ref == "sales_primary":
+            sku_stmt = select(distinct(PrimarySalesAndStock.sku_id))
+        elif scope_ref == "sales_secondary":
+            sku_stmt = select(distinct(SecondarySales.sku_id))
+        else:
+            sku_stmt = select(distinct(TertiarySalesAndStock.sku_id))
+        sku_result = await session.execute(sku_stmt)
+        prefetched_sku_ids = sku_result.scalars().all()
+
     for key in include_values:
         stmt = build_reference_stmt(key, company_id)
 
         if key not in IMS_REFERENCE_CONFIG:
-            stmt = apply_scope_filter(stmt, key, scope_ref)
+            stmt = apply_scope_filter(stmt, key, scope_ref, prefetched_sku_ids)
 
         if filters and key not in IMS_REFERENCE_CONFIG:
             stmt = apply_dynamic_filters(stmt, key, filters)

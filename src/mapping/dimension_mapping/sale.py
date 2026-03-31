@@ -1,4 +1,4 @@
-from src.db.models.clients import Distributor, GeoIndicator
+from src.db.models.clients import Distributor, GeoIndicator, Pharmacy
 from src.db.models.employees import Employee
 from src.db.models.products import SKU, Brand, ProductGroup, PromotionType, Segment
 
@@ -42,6 +42,12 @@ BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR = {
         "name": GeoIndicator.name.label("geo_indicator_name"),
         "group_fields": [GeoIndicator.id, GeoIndicator.name],
         "search": GeoIndicator.name,
+    },
+    "pharmacy": {
+        "id": Pharmacy.id.label("pharmacy_id"),
+        "name": Pharmacy.name.label("pharmacy_name"),
+        "group_fields": [Pharmacy.id, Pharmacy.name],
+        "search": Pharmacy.name,
     },
 }
 

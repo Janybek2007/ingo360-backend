@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -138,4 +138,12 @@ class ImportLogs(Base):
 
     promotion_type: Mapped[list["PromotionType"]] = relationship(
         back_populates="import_log", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index(
+            "idx_import_logs_created_at",
+            "created_at",
+            postgresql_ops={"created_at": "DESC"},
+        ),
     )

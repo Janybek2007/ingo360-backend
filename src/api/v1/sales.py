@@ -1,8 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from src.api.dependencies.company import (
     can_view_primary_sales,
@@ -10,6 +10,7 @@ from src.api.dependencies.company import (
     can_view_tertiary_sales,
 )
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.dependencies.excel_file import ExcelFile
 from src.api.utils.pivot_distributore_share import pivot_distributor_share
 from src.api.utils.pivot_sales_by_distributors import pivot_sales_by_distributors
 from src.db.models import (
@@ -101,15 +102,10 @@ async def create_primary_sales(
 
 @router.post("/primary/import-excel", dependencies=[Depends(current_operator_user)])
 async def bulk_insert_primary_sales(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await primary_sales_service.import_sales(
         session, file, user_id=current_user.id
     )
@@ -205,18 +201,6 @@ async def get_distributor_shares_chart(
     return pivot_distributor_share(rows)
 
 
-@router.patch(
-    "/primary/publish-unpublished",
-    response_model=list[sale.PublishUnpublishedItem],
-    dependencies=[Depends(current_operator_user)],
-)
-async def publish_unpublished_primary_sales(
-    payload: sale.PublishUnpublishedRequest,
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-):
-    return await primary_sales_service.publish_unpublished(session, payload.ids)
-
-
 @router.get(
     "/primary/{primary_sales_id}",
     response_model=sale.PrimarySalesAndStockResponse,
@@ -274,11 +258,11 @@ async def list_secondary_sales(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):
     load_options = [
-        joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.geo_indicator),
-        joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.distributor),
-        joinedload(SecondarySales.distributor),
+        selectinload(SecondarySales.pharmacy).selectinload(Pharmacy.geo_indicator),
+        selectinload(SecondarySales.pharmacy).selectinload(Pharmacy.distributor),
         joinedload(SecondarySales.sku).joinedload(SKU.brand),
     ]
+
     return await secondary_sales_service.get_multi(
         session, payload, load_options=load_options
     )
@@ -338,15 +322,10 @@ async def create_secondary_sales(
 
 @router.post("/secondary/import-excel", dependencies=[Depends(current_operator_user)])
 async def bulk_insert_secondary_sales(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await secondary_sales_service.import_sales(
         session, file, user_id=current_user.id
     )
@@ -410,18 +389,6 @@ async def get_sales_report_by_distributors_chart(
         filters=filters,
     )
     return pivot_sales_by_distributors(rows)
-
-
-@router.patch(
-    "/secondary/publish-unpublished",
-    response_model=list[sale.PublishUnpublishedItem],
-    dependencies=[Depends(current_operator_user)],
-)
-async def publish_unpublished_secondary_sales(
-    payload: sale.PublishUnpublishedRequest,
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-):
-    return await secondary_sales_service.publish_unpublished(session, payload.ids)
 
 
 @router.get(
@@ -546,15 +513,10 @@ async def create_tertiary_sales(
 
 @router.post("/tertiary/import-excel", dependencies=[Depends(current_operator_user)])
 async def bulk_insert_tertiary_sales(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await tertiary_sales_service.import_sales(
         session, file, user_id=current_user.id
     )
@@ -581,18 +543,6 @@ async def get_tertiary_sales_chart(
     return await tertiary_sales_service.get_period_totals(
         session, filters, company_id=current_user.company_id
     )
-
-
-@router.patch(
-    "/tertiary/publish-unpublished",
-    response_model=list[sale.PublishUnpublishedItem],
-    dependencies=[Depends(current_operator_user)],
-)
-async def publish_unpublished_tertiary_sales(
-    payload: sale.PublishUnpublishedRequest,
-    session: Annotated[AsyncSession, Depends(db_session.get_session)],
-):
-    return await tertiary_sales_service.publish_unpublished(session, payload.ids)
 
 
 @router.get(
@@ -678,14 +628,19 @@ async def get_last_year(
 ):
     from sqlalchemy import func, select
 
-    primary = await session.scalar(select(func.max(PrimarySalesAndStock.year)))
-    secondary = await session.scalar(select(func.max(SecondarySales.year)))
-    tertiary = await session.scalar(select(func.max(TertiarySalesAndStock.year)))
-    visits = await session.scalar(select(func.max(Visit.year)))
+    stmt = select(
+        select(func.max(PrimarySalesAndStock.year)).scalar_subquery().label("primary"),
+        select(func.max(SecondarySales.year)).scalar_subquery().label("secondary"),
+        select(func.max(TertiarySalesAndStock.year))
+        .scalar_subquery()
+        .label("tertiary"),
+        select(func.max(Visit.year)).scalar_subquery().label("visits"),
+    )
+    row = (await session.execute(stmt)).one()
 
     return {
-        "primary": primary,
-        "secondary": secondary,
-        "tertiary": tertiary,
-        "visits": visits,
+        "primary": row.primary,
+        "secondary": row.secondary,
+        "tertiary": row.tertiary,
+        "visits": row.visits,
     }

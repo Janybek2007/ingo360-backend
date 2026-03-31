@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, String
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
@@ -50,6 +50,7 @@ class ExcelTask(Base):
             "length(error) <= 500",
             name="ck_excel_tasks_error_len",
         ),
+        Index("idx_excel_task_user_status", "started_by", "status", "is_deleted"),
     )
 
     @validates("error")

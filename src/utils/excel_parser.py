@@ -34,36 +34,17 @@ def _clean_excel_dataframe(df: pl.DataFrame, read_as_str: bool = False) -> pl.Da
         if df[col].dtype in (pl.Utf8, pl.String) or df[col].dtype == pl.Null
     ]
 
-    # 1. Заменяем "-" на null ТОЛЬКО В СТРОКОВЫХ колонках (vectorized)
+    # Очистка строковых колонок: заменяем "-" и "#N/A"/"nan" на null, trim
     if string_cols:
         df = df.with_columns(
             [
                 pl.when(pl.col(col).cast(pl.Utf8) == "-")
                 .then(None)
-                .otherwise(pl.col(col))
-                .alias(col)
-                for col in string_cols
-            ]
-        )
-
-    # 2. Strip для строковых колонок (vectorized)
-    if string_cols:
-        df = df.with_columns(
-            [
-                pl.col(col).cast(pl.Utf8).str.strip_chars().alias(col)
-                for col in string_cols
-            ]
-        )
-
-    # 3. Заменяем ошибочные значения ("#N/A", "nan") на null (vectorized, case-insensitive)
-    if string_cols:
-        df = df.with_columns(
-            [
-                pl.when(
+                .when(
                     pl.col(col).cast(pl.Utf8).str.to_lowercase().is_in(["#n/a", "nan"])
                 )
                 .then(None)
-                .otherwise(pl.col(col))
+                .otherwise(pl.col(col).cast(pl.Utf8).str.strip_chars())
                 .alias(col)
                 for col in string_cols
             ]

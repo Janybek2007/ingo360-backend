@@ -3,8 +3,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
-from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select
 
 from src.db.models import (
     SKU,
@@ -30,7 +29,6 @@ from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
 from src.utils.list_query_helper import (
-    BoolListSpec,
     InOrNullSpec,
     ListQueryHelper,
     NumberTypedSpec,
@@ -157,7 +155,6 @@ class SecondarySalesService(
             "indicator": self.model.indicator,
             "packages": self.model.packages,
             "amount": self.model.amount,
-            "published": self.model.published,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
@@ -179,10 +176,6 @@ class SecondarySalesService(
                     NumberTypedSpec(self.model.year, filters.year),
                     NumberTypedSpec(self.model.packages, filters.packages),
                     NumberTypedSpec(self.model.amount, filters.amount),
-                    BoolListSpec(
-                        self.model.published,
-                        filters.published,
-                    ),
                 ],
             )
 
@@ -220,9 +213,6 @@ class SecondarySalesService(
         result = await session.execute(stmt)
 
         items = result.unique().scalars().all()
-        for item in items:
-            if item.distributor and item.pharmacy and item.pharmacy.distributor is None:
-                item.pharmacy.distributor = item.distributor
 
         hasPrev = filters.offset > 0 if filters else False
         hasNext = len(items) == filters.limit if filters and filters.limit else False
@@ -303,6 +293,7 @@ class SecondarySalesService(
                 InOrNullSpec(SecondarySales.distributor_id, filters.distributor_ids),
                 InOrNullSpec(SKU.id, filters.sku_ids),
                 InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
+                InOrNullSpec(SecondarySales.pharmacy_id, filters.pharmacy_ids),
                 SearchSpec(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
@@ -358,6 +349,7 @@ class SecondarySalesService(
             "product_group": getattr(period_agg.c, "product_group_name", None),
             "distributor": getattr(period_agg.c, "distributor_name", None),
             "geo_indicator": getattr(period_agg.c, "geo_indicator_name", None),
+            "pharmacy": getattr(period_agg.c, "pharmacy_name", None),
         }
 
         final_stmt = ListQueryHelper.apply_sorting_with_default(
@@ -634,43 +626,3 @@ class SecondarySalesService(
 
         result = await session.execute(final_stmt)
         return result.mappings().all()
-
-    @staticmethod
-    async def get_unpublish(session: "AsyncSession") -> ModelType:
-        stmt = select(SecondarySales).where(~SecondarySales.published)
-        result = await session.execute(stmt)
-
-        return result.scalars().all()
-
-    @staticmethod
-    async def publish_unpublished(
-        session: "AsyncSession", ids: list[int], batch_size: int = 1000
-    ) -> list[dict[str, int | bool]]:
-        if not ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Список ids пуст"
-            )
-
-        updated_items: list[dict[str, int | bool]] = []
-        for start in range(0, len(ids), batch_size):
-            batch_ids = ids[start : start + batch_size]
-            stmt = (
-                update(SecondarySales)
-                .where(
-                    SecondarySales.id.in_(batch_ids),
-                    SecondarySales.published.is_(False),
-                )
-                .values(published=True)
-                .returning(SecondarySales.id, SecondarySales.published)
-            )
-            result = await session.execute(stmt)
-            updated_items.extend(result.mappings().all())
-
-        if not updated_items:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Нет неопубликованных записей для указанных ids",
-            )
-
-        await session.commit()
-        return updated_items

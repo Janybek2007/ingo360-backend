@@ -62,7 +62,14 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
         filters: FilterSchemaType | None = None,
         load_options: list[Any] | None = None,
     ) -> Sequence[ModelType]:
-        stmt = select(self.model)
+        stmt = (
+            select(
+                self.model,
+                func.count(User.id).filter(User.is_active).label("active_users"),
+            )
+            .outerjoin(User, User.company_id == self.model.id)
+            .group_by(self.model.id)
+        )
         if load_options:
             stmt = stmt.options(*load_options)
 
@@ -95,23 +102,10 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
-        companies = result.scalars().all()
-
-        if not companies:
-            return []
-
-        company_ids = [c.id for c in companies]
-        count_stmt = (
-            select(User.company_id, func.count(User.id).label("active_users"))
-            .where(User.company_id.in_(company_ids), User.is_active)
-            .group_by(User.company_id)
-        )
-
-        count_result = await session.execute(count_stmt)
-        counts_dict = {row[0]: row[1] for row in count_result.all()}
-
-        for company in companies:
-            company.active_users = counts_dict.get(company.id, 0)
+        companies = []
+        for company, active_users in result.all():
+            company.active_users = active_users
+            companies.append(company)
 
         return companies
 
@@ -234,14 +228,12 @@ class CompanyService(BaseService[Company, CompanyCreate, CompanyUpdate]):
             if will_activate:
                 await self._activate_company_users(session, company.id)
 
-            await session.flush()
+            await session.commit()
 
             if load_options:
                 await session.refresh(company, load_options)
             else:
                 await session.refresh(company)
-
-            await session.commit()
 
             if will_deactivate:
                 await self._notify_company_deactivation(session, company.id)

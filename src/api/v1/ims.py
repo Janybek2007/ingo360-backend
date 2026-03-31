@@ -1,8 +1,9 @@
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.dependencies.excel_file import ExcelFile
 from src.db.session import db_session
 from src.schemas.base_filter import PaginatedResponse
 from src.schemas.export import ExportExcelRequest
@@ -77,7 +78,7 @@ async def create_ims(
 
 @router.post("/import-excel")
 async def ims_import_excel(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
     current_user: Annotated["User", Depends(current_operator_user)],
 ):

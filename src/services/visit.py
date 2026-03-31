@@ -471,7 +471,7 @@ class VisitService(
                 doctors_with_visits_subquery,
                 Speciality.id == doctors_with_visits_subquery.c.speciality_id,
             )
-            .where(Doctor.company_id == 3)
+            .where(Doctor.company_id == company_id if company_id is not None else True)
         )
 
         stmt = ListQueryHelper.apply_specs(

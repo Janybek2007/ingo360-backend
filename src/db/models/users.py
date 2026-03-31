@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTable, SQLAlchemyUserDatabase
-from sqlalchemy import Boolean, ForeignKey, Integer, String
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -30,6 +30,8 @@ class User(Base, SQLAlchemyBaseUserTable[int]):
     import_logs: Mapped[list["ImportLogs"]] = relationship(back_populates="user")
     excel_tasks: Mapped[list["ExcelTask"]] = relationship(back_populates="user")
     position: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+    __table_args__ = (Index("idx_user_company_is_active", "company_id", "is_active"),)
 
     @classmethod
     def get_db(cls, session: "AsyncSession"):

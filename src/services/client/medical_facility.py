@@ -238,8 +238,6 @@ class MedicalFacilityService(
                     "settlement_id": settlement_id,
                     "district_id": district_id,
                     "geo_indicator_id": ids.get("geo_indicator_id"),
-                    "region_id": region_id,
-                    "company_id": company_id,
                     "import_log_id": import_log.id,
                 }
             )

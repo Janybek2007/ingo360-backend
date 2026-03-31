@@ -1,11 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.company import can_view_visits
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.dependencies.excel_file import ExcelFile
 from src.db.models import MedicalFacility, Pharmacy, User, Visit
 from src.db.session import db_session
 from src.schemas.base_filter import PaginatedResponse
@@ -155,15 +156,10 @@ async def delete_visit(
 
 @router.post("/import-excel", dependencies=[Depends(current_operator_user)])
 async def bulk_insert_visits(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Импорт только для эксель файлов",
-        )
     result = await visit_service.import_sales(session, file, user_id=current_user.id)
     return result
 

@@ -3,8 +3,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
-from fastapi import HTTPException, status
-from sqlalchemy import Float, Numeric, and_, case, func, or_, select, update
+from sqlalchemy import Float, Numeric, and_, case, func, or_, select
 
 from src.db.models import (
     SKU,
@@ -32,7 +31,6 @@ from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
 from src.utils.list_query_helper import (
-    BoolListSpec,
     InOrNullSpec,
     ListQueryHelper,
     NumberTypedSpec,
@@ -160,7 +158,6 @@ class TertiarySalesService(
             "indicator": self.model.indicator,
             "packages": self.model.packages,
             "amount": self.model.amount,
-            "published": self.model.published,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
@@ -182,10 +179,6 @@ class TertiarySalesService(
                     NumberTypedSpec(self.model.year, filters.year),
                     NumberTypedSpec(self.model.packages, filters.packages),
                     NumberTypedSpec(self.model.amount, filters.amount),
-                    BoolListSpec(
-                        self.model.published,
-                        filters.published,
-                    ),
                 ],
             )
 
@@ -271,6 +264,8 @@ class TertiarySalesService(
             BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR, filters.group_by_dimensions
         )
 
+        indicator_filter = TertiarySalesAndStock.indicator.ilike("%продаж%")
+
         base_stmt = (
             select(
                 *select_fields,
@@ -288,9 +283,7 @@ class TertiarySalesService(
                 Distributor, TertiarySalesAndStock.distributor_id == Distributor.id
             )
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
-            .where(
-                TertiarySalesAndStock.indicator.ilike("%продаж%"),
-            )
+            .where(indicator_filter)
         )
 
         if company_id is not None:
@@ -307,6 +300,7 @@ class TertiarySalesService(
                 ),
                 InOrNullSpec(SKU.id, filters.sku_ids),
                 InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
+                InOrNullSpec(TertiarySalesAndStock.pharmacy_id, filters.pharmacy_ids),
                 SearchSpec(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
@@ -350,7 +344,7 @@ class TertiarySalesService(
                     "packages", period_agg.c.packages, "amount", period_agg.c.amount
                 ),
             ).label("periods_data"),
-        )
+        ).select_from(period_agg)
 
         if final_group_by_fields:
             final_stmt = final_stmt.group_by(*final_group_by_fields)
@@ -362,6 +356,7 @@ class TertiarySalesService(
             "product_group": getattr(period_agg.c, "product_group_name", None),
             "distributor": getattr(period_agg.c, "distributor_name", None),
             "geo_indicator": getattr(period_agg.c, "geo_indicator_name", None),
+            "pharmacy": getattr(period_agg.c, "pharmacy_name", None),
         }
 
         final_stmt = ListQueryHelper.apply_sorting_with_default(
@@ -467,6 +462,7 @@ class TertiarySalesService(
         session: "AsyncSession",
         filters: sale_schema.NumericDistributionFilter | None = None,
         company_id: int | None = None,
+        explain: bool = False,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
         period_values = build_period_values(
@@ -538,17 +534,8 @@ class TertiarySalesService(
                 and_(
                     TertiarySalesAndStock.distributor_id
                     == total_pharmacies_cte.c.distributor_id,
-                    or_(
-                        and_(
-                            Pharmacy.geo_indicator_id.is_not(None),
-                            Pharmacy.geo_indicator_id
-                            == total_pharmacies_cte.c.geo_indicator_id,
-                        ),
-                        and_(
-                            Pharmacy.geo_indicator_id.is_(None),
-                            total_pharmacies_cte.c.geo_indicator_id.is_(None),
-                        ),
-                    ),
+                    func.coalesce(Pharmacy.geo_indicator_id, 0)
+                    == func.coalesce(total_pharmacies_cte.c.geo_indicator_id, 0),
                     period_key == total_pharmacies_cte.c.period,
                 ),
             )
@@ -648,6 +635,11 @@ class TertiarySalesService(
             final_stmt, filters.limit, filters.offset
         )
 
+        if explain:
+            from src.utils.explain_analyze import explain_analyze
+
+            return await explain_analyze(session, final_stmt)
+
         result = await session.execute(final_stmt)
         return result.mappings().all()
 
@@ -656,6 +648,7 @@ class TertiarySalesService(
         session: "AsyncSession",
         filters: sale_schema.SecTerSalesReportFilter | None = None,
         company_id: int | None = None,
+        explain: bool = False,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
         period_values = build_period_values(
@@ -665,6 +658,8 @@ class TertiarySalesService(
         select_fields, group_by_fields, search_cols = build_dimensions(
             BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR, filters.group_by_dimensions
         )
+
+        indicator_filter = TertiarySalesAndStock.indicator.ilike("%остат%")
 
         base_stmt = (
             select(
@@ -683,9 +678,7 @@ class TertiarySalesService(
                 Distributor, TertiarySalesAndStock.distributor_id == Distributor.id
             )
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
-            .where(
-                TertiarySalesAndStock.indicator.ilike("%остат%"),
-            )
+            .where(indicator_filter)
         )
 
         if company_id is not None:
@@ -702,6 +695,7 @@ class TertiarySalesService(
                 ),
                 InOrNullSpec(SKU.id, filters.sku_ids),
                 InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
+                InOrNullSpec(TertiarySalesAndStock.pharmacy_id, filters.pharmacy_ids),
                 SearchSpec(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
@@ -745,7 +739,7 @@ class TertiarySalesService(
                     "packages", period_agg.c.packages, "amount", period_agg.c.amount
                 ),
             ).label("periods_data"),
-        )
+        ).select_from(period_agg)
 
         if final_group_by_fields:
             final_stmt = final_stmt.group_by(*final_group_by_fields)
@@ -757,6 +751,7 @@ class TertiarySalesService(
             "product_group": getattr(period_agg.c, "product_group_name", None),
             "distributor": getattr(period_agg.c, "distributor_name", None),
             "geo_indicator": getattr(period_agg.c, "geo_indicator_name", None),
+            "pharmacy": getattr(period_agg.c, "pharmacy_name", None),
         }
 
         final_stmt = ListQueryHelper.apply_sorting_with_default(
@@ -770,45 +765,10 @@ class TertiarySalesService(
             final_stmt, filters.limit, filters.offset
         )
 
+        if explain:
+            from src.utils.explain_analyze import explain_analyze
+
+            return await explain_analyze(session, final_stmt)
+
         result = await session.execute(final_stmt)
         return result.mappings().all()
-
-    @staticmethod
-    async def get_unpublish(session: "AsyncSession") -> ModelType:
-        stmt = select(TertiarySalesAndStock).where(~TertiarySalesAndStock.published)
-        result = await session.execute(stmt)
-
-        return result.scalars().all()
-
-    @staticmethod
-    async def publish_unpublished(
-        session: "AsyncSession", ids: list[int], batch_size: int = 1000
-    ) -> list[dict[str, int | bool]]:
-        if not ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Список ids пуст"
-            )
-
-        updated_items: list[dict[str, int | bool]] = []
-        for start in range(0, len(ids), batch_size):
-            batch_ids = ids[start : start + batch_size]
-            stmt = (
-                update(TertiarySalesAndStock)
-                .where(
-                    TertiarySalesAndStock.id.in_(batch_ids),
-                    TertiarySalesAndStock.published.is_(False),
-                )
-                .values(published=True)
-                .returning(TertiarySalesAndStock.id, TertiarySalesAndStock.published)
-            )
-            result = await session.execute(stmt)
-            updated_items.extend(result.mappings().all())
-
-        if not updated_items:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Нет неопубликованных записей для указанных ids",
-            )
-
-        await session.commit()
-        return updated_items

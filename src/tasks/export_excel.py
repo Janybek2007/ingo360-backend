@@ -1,25 +1,23 @@
 import asyncio
-import contextlib
-import importlib
 import json
 import os
 from pathlib import Path
 from typing import Any, Iterator
 
 import polars as pl
-import redis
-from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from src.celery_app import celery_app
-from src.core.settings import settings
-from src.db.models.excel_tasks import ExcelTask, ExcelTaskStatus, ExcelTaskType
-from src.db.session import db_session
+from src.db.models.excel_tasks import ExcelTaskStatus, ExcelTaskType
+from src.tasks.utils import (
+    create_excel_task_record,
+    format_error_message,
+    get_async_session_context,
+    import_class,
+    publish_excel_status,
+    update_excel_task_result,
+)
 from src.utils.export_excel import build_export_row_values
-
-get_async_session_context = contextlib.asynccontextmanager(db_session.get_session)
-
-redis_sync = redis.from_url(settings.CELERY_BROKER_URL)
 
 
 def _sanitize_file_name(file_name: str) -> str:
@@ -27,10 +25,18 @@ def _sanitize_file_name(file_name: str) -> str:
     return cleaned or "export"
 
 
-def import_class(path: str):
-    module_path, class_name = path.rsplit(".", 1)
-    module = importlib.import_module(module_path)
-    return getattr(module, class_name)
+async def create_export_task_record(
+    *,
+    task_id: str,
+    started_by: int,
+    file_path: str = "",
+) -> None:
+    await create_excel_task_record(
+        task_id=task_id,
+        started_by=started_by,
+        file_path=file_path,
+        task_type=ExcelTaskType.EXPORT,
+    )
 
 
 def _build_export_file_path(task_id: str, file_name: str) -> str:
@@ -153,62 +159,6 @@ async def _write_export_file_from_service(
     df.write_excel(output_path)
 
 
-def _format_error_message(exc: Exception) -> str:
-    raw = str(exc).strip()
-    if not raw:
-        return exc.__class__.__name__
-    return raw.splitlines()[0].strip()[:500]
-
-
-async def _update_excel_task_result(
-    *,
-    task_id: str,
-    status: ExcelTaskStatus,
-    saved_file_path: str,
-    error: str | None = None,
-) -> None:
-    async with get_async_session_context() as session:
-        stmt = select(ExcelTask).where(ExcelTask.task_id == task_id)
-        result = await session.execute(stmt)
-        excel_task = result.scalar_one_or_none()
-        if excel_task is None:
-            return
-
-        excel_task.status = status
-        excel_task.file_path = saved_file_path
-        excel_task.error = error
-        if status == ExcelTaskStatus.COMPLETED:
-            excel_task.is_file_download = False
-            excel_task.download_started_at = None
-            excel_task.download_confirmed_at = None
-        await session.commit()
-        await session.refresh(excel_task)
-        return excel_task
-
-
-def _publish_excel_status(payload: dict) -> None:
-    redis_sync.publish("celery_excel_status", json.dumps(payload))
-
-
-async def create_export_task_record(
-    *,
-    task_id: str,
-    started_by: int,
-    file_path: str = "",
-) -> None:
-    async with get_async_session_context() as session:
-        excel_task = ExcelTask(
-            task_type=ExcelTaskType.EXPORT,
-            task_id=task_id,
-            status=ExcelTaskStatus.PENDING,
-            started_by=started_by,
-            file_path=file_path,
-            error=None,
-        )
-        session.add(excel_task)
-        await session.commit()
-
-
 @celery_app.task(bind=True)
 def export_excel_task(
     self,
@@ -227,14 +177,16 @@ def export_excel_task(
     custom_map: dict[str, dict[str, str]] | None = None,
 ):
     task_id = self.request.id
-    try:
+
+    async def _run():
+        from src.db.session import db_session
+
+        await db_session.engine.dispose()
+
         saved_file_path = _build_export_file_path(task_id, file_name)
-
-        loop = asyncio.get_event_loop()
-
-        if service_path and model_path and serializer_path:
-            loop.run_until_complete(
-                _write_export_file_from_service(
+        try:
+            if service_path and model_path and serializer_path:
+                await _write_export_file_from_service(
                     output_path=saved_file_path,
                     header_map=header_map,
                     service_path=service_path,
@@ -246,73 +198,79 @@ def export_excel_task(
                     boolean_map=boolean_map,
                     custom_map=custom_map,
                 )
-            )
-        elif rows_file_path:
-            _write_export_file_from_jsonl(
-                rows_file_path=rows_file_path,
-                output_path=saved_file_path,
-                header_map=header_map,
-                fields_map=fields_map,
-                boolean_map=boolean_map,
-                custom_map=custom_map,
-            )
-        else:
-            raise ValueError(
-                "Не передан источник данных: rows_file_path или service/model/serializer"
-            )
+            elif rows_file_path:
+                _write_export_file_from_jsonl(
+                    rows_file_path=rows_file_path,
+                    output_path=saved_file_path,
+                    header_map=header_map,
+                    fields_map=fields_map,
+                    boolean_map=boolean_map,
+                    custom_map=custom_map,
+                )
+            else:
+                raise ValueError(
+                    "Не передан источник данных: rows_file_path или service/model/serializer"
+                )
 
-        updated_task = loop.run_until_complete(
-            _update_excel_task_result(
+            updated_task = await update_excel_task_result(
                 task_id=task_id,
                 status=ExcelTaskStatus.COMPLETED,
                 saved_file_path=saved_file_path,
+                reset_download=True,
             )
-        )
-        payload = {
-            "type": "excel_exported",
-            "user_id": user_id,
-            "task_id": task_id,
-            "status": "completed",
-            "result": {
-                "saved_file_path": saved_file_path,
-                "file_name": f"{_sanitize_file_name(file_name)}.xlsx",
-                "created_at": (
-                    updated_task.created_at.isoformat()
-                    if updated_task and updated_task.created_at
-                    else None
-                ),
-            },
-        }
-        _publish_excel_status(payload)
-        return {"saved_file_path": saved_file_path}
+            return "completed", saved_file_path, updated_task
 
-    except Exception as e:
-        error_message = _format_error_message(e)
-        updated_task = loop.run_until_complete(
-            _update_excel_task_result(
+        except Exception as e:
+            error_message = format_error_message(e)
+            updated_task = await update_excel_task_result(
                 task_id=task_id,
                 status=ExcelTaskStatus.FAILED,
                 saved_file_path="",
                 error=error_message,
             )
-        )
-        payload = {
-            "type": "excel_exported",
-            "user_id": user_id,
-            "task_id": task_id,
-            "status": "failed",
-            "result": {
-                "saved_file_path": None,
-                "file_name": f"{_sanitize_file_name(file_name)}.xlsx",
-                "created_at": (
-                    updated_task.created_at.isoformat()
-                    if updated_task and updated_task.created_at
-                    else None
-                ),
-            },
-        }
-        _publish_excel_status(payload)
-        raise
+            return "failed", saved_file_path, (updated_task, error_message)
+
+    try:
+        status, saved_file_path, extra = asyncio.run(_run())
+
+        if status == "completed":
+            updated_task = extra
+            payload = {
+                "type": "excel_exported",
+                "user_id": user_id,
+                "task_id": task_id,
+                "status": "completed",
+                "result": {
+                    "saved_file_path": saved_file_path,
+                    "file_name": f"{_sanitize_file_name(file_name)}.xlsx",
+                    "created_at": (
+                        updated_task.created_at.isoformat()
+                        if updated_task and updated_task.created_at
+                        else None
+                    ),
+                },
+            }
+            publish_excel_status(payload)
+            return {"saved_file_path": saved_file_path}
+        else:
+            updated_task, error_message = extra
+            payload = {
+                "type": "excel_exported",
+                "user_id": user_id,
+                "task_id": task_id,
+                "status": "failed",
+                "result": {
+                    "saved_file_path": None,
+                    "file_name": f"{_sanitize_file_name(file_name)}.xlsx",
+                    "created_at": (
+                        updated_task.created_at.isoformat()
+                        if updated_task and updated_task.created_at
+                        else None
+                    ),
+                },
+            }
+            publish_excel_status(payload)
+            raise RuntimeError(error_message)
     finally:
         try:
             if rows_file_path and Path(rows_file_path).exists():

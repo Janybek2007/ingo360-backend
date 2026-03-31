@@ -21,6 +21,30 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     def __init__(self, model: Type[ModelType]):
         self.model = model
 
+    async def _rollback_and_raise_integrity(self, e: IntegrityError) -> None:
+        error_type = type(e.orig.__cause__).__name__
+
+        if "ForeignKey" in error_type:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Связанная запись не найдена",
+            )
+        elif "Unique" in error_type:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{self.model.__name__} с такими данными уже существует",
+            )
+        elif "NotNull" in error_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Обязательное поле не заполнено",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ошибка целостности данных",
+            )
+
     async def create(
         self,
         session: "AsyncSession",
@@ -44,29 +68,7 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return db_obj
         except IntegrityError as e:
             await session.rollback()
-
-            error_type = type(e.orig.__cause__).__name__
-
-            if "ForeignKey" in error_type:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Связанная запись не найдена",
-                )
-            elif "Unique" in error_type:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"{self.model.__name__} с такими данными уже существует",
-                )
-            elif "NotNull" in error_type:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Обязательное поле не заполнено",
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Ошибка целостности данных",
-                )
+            await self._rollback_and_raise_integrity(e)
         except Exception:
             await session.rollback()
             raise HTTPException(
@@ -88,7 +90,7 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         stmt = stmt.where(self.model.id == item_id)
 
         result = await session.execute(stmt)
-        return result.unique().scalar_one_or_none()
+        return result.scalar_one_or_none()
 
     async def get_or_404(
         self,
@@ -129,29 +131,7 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return db_obj
         except IntegrityError as e:
             await session.rollback()
-
-            error_type = type(e.orig.__cause__).__name__
-
-            if "ForeignKey" in error_type:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Связанная запись не найдена",
-                )
-            elif "Unique" in error_type:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"{self.model.__name__} с такими данными уже существует",
-                )
-            elif "NotNull" in error_type:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Обязательное поле не заполнено",
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Ошибка целостности данных",
-                )
+            await self._rollback_and_raise_integrity(e)
         except Exception:
             await session.rollback()
             raise HTTPException(
@@ -193,11 +173,15 @@ class BaseService(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         stmt = stmt.order_by(self.model.created_at.desc())
 
-        if filters:
+        if (
+            filters
+            and getattr(filters, "offset", None)
+            and getattr(filters, "limit", None) is not None
+        ):
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
 
         result = await session.execute(stmt)
-        return result.unique().scalars().all()
+        return result.scalars().all()
 
     @staticmethod
     async def get_id_map(

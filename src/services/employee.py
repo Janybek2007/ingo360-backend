@@ -72,18 +72,17 @@ class EmployeeService(
                     InOrNullSpec(self.model.company_id, filters.company_ids),
                 ],
             )
-            # Count before pagination
-            count_stmt = select(func.count()).select_from(stmt.subquery())
-            total_count = await session.scalar(count_stmt)
 
+        # COUNT(*) OVER() counts filtered rows without a separate query
+        stmt = stmt.add_columns(func.count().over().label("_total"))
+
+        if filters:
             stmt = ListQueryHelper.apply_pagination(stmt, filters.limit, filters.offset)
-        else:
-            count_stmt = select(func.count()).select_from(stmt.subquery())
-            total_count = await session.scalar(count_stmt)
 
         result = await session.execute(stmt)
-
-        items = result.unique().scalars().all()
+        rows = result.all()
+        total_count = int(rows[0]._total) if rows else 0
+        items = [row[0] for row in rows]
 
         hasPrev = filters.offset > 0 if filters else False
         hasNext = len(items) == filters.limit if filters and filters.limit else False
@@ -211,17 +210,21 @@ class EmployeeService(
             )
 
         inserted_ids = []
-        if data_to_insert:
-            stmt = (
-                insert(self.model)
-                .values(data_to_insert)
-                .on_conflict_do_nothing()
-                .returning(self.model.id)
-            )
-            result = await session.execute(stmt)
-            inserted_ids = result.scalars().all()
+        try:
+            if data_to_insert:
+                stmt = (
+                    insert(self.model)
+                    .values(data_to_insert)
+                    .on_conflict_do_nothing()
+                    .returning(self.model.id)
+                )
+                result = await session.execute(stmt)
+                inserted_ids = result.scalars().all()
 
-        await session.commit()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
         return build_import_result(
             total=len(records),
@@ -333,17 +336,21 @@ class PositionService(
         ]
 
         inserted_ids = []
-        if data_to_insert:
-            stmt = (
-                insert(self.model)
-                .values(data_to_insert)
-                .on_conflict_do_nothing()
-                .returning(self.model.id)
-            )
-            result = await session.execute(stmt)
-            inserted_ids = result.scalars().all()
+        try:
+            if data_to_insert:
+                stmt = (
+                    insert(self.model)
+                    .values(data_to_insert)
+                    .on_conflict_do_nothing()
+                    .returning(self.model.id)
+                )
+                result = await session.execute(stmt)
+                inserted_ids = result.scalars().all()
 
-        await session.commit()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
 
         return build_import_result(
             total=len(records),

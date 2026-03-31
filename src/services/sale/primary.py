@@ -1,10 +1,9 @@
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Sequence
+from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
-from fastapi import HTTPException, status
-from sqlalchemy import Numeric, case, cast, func, or_, select, update
+from sqlalchemy import Numeric, case, cast, func, or_, select
 
 from src.db.models import (
     SKU,
@@ -26,7 +25,6 @@ from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
 from src.utils.list_query_helper import (
-    BoolListSpec,
     InOrNullSpec,
     ListQueryHelper,
     NumberTypedSpec,
@@ -145,7 +143,6 @@ class PrimarySalesAndStockService(
             "year": self.model.year,
             "packages": self.model.packages,
             "amount": self.model.amount,
-            "published": self.model.published,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
@@ -166,10 +163,6 @@ class PrimarySalesAndStockService(
                     NumberTypedSpec(self.model.year, filters.year),
                     NumberTypedSpec(self.model.packages, filters.packages),
                     NumberTypedSpec(self.model.amount, filters.amount),
-                    BoolListSpec(
-                        self.model.published,
-                        filters.published,
-                    ),
                 ],
             )
 
@@ -375,147 +368,17 @@ class PrimarySalesAndStockService(
         else:
             divisor_factor = 1.0
 
-        sales_divisor_amount = func.nullif(
-            func.sum(
+        # Pre-classify indicator type once per row to avoid repeating ilike 8+ times
+        inner = (
+            select(
+                period_key.label("period"),
                 case(
-                    (
-                        PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                        PrimarySalesAndStock.amount,
-                    ),
-                    else_=0,
-                )
+                    (PrimarySalesAndStock.indicator.ilike("%продаж%"), "sales"),
+                    else_="stock",
+                ).label("ind"),
+                PrimarySalesAndStock.amount,
+                PrimarySalesAndStock.packages,
             )
-            / divisor_factor,
-            0,
-        )
-
-        sales_divisor_packages = func.nullif(
-            func.sum(
-                case(
-                    (
-                        PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                        PrimarySalesAndStock.packages,
-                    ),
-                    else_=0,
-                )
-            )
-            / divisor_factor,
-            0,
-        )
-
-        select_cols = [
-            period_key.label("period"),
-            func.cast(
-                case(
-                    (
-                        func.sum(
-                            case(
-                                (
-                                    PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                                    PrimarySalesAndStock.amount,
-                                ),
-                                else_=0,
-                            )
-                        )
-                        > 0,
-                        func.sum(
-                            case(
-                                (
-                                    PrimarySalesAndStock.indicator.ilike("%остат%"),
-                                    PrimarySalesAndStock.amount,
-                                ),
-                                else_=0,
-                            )
-                        )
-                        / sales_divisor_amount,
-                    ),
-                    else_=None,
-                ),
-                Numeric(10, 2),
-            ).label("coverage_months_amount"),
-            func.cast(
-                case(
-                    (
-                        func.sum(
-                            case(
-                                (
-                                    PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                                    PrimarySalesAndStock.packages,
-                                ),
-                                else_=0,
-                            )
-                        )
-                        > 0,
-                        func.sum(
-                            case(
-                                (
-                                    PrimarySalesAndStock.indicator.ilike("%остат%"),
-                                    PrimarySalesAndStock.packages,
-                                ),
-                                else_=0,
-                            )
-                        )
-                        / sales_divisor_packages,
-                    ),
-                    else_=None,
-                ),
-                Numeric(10, 2),
-            ).label("coverage_months_packages"),
-        ]
-
-        if filters.group_by_period not in ("quarter", "year"):
-            select_cols.extend(
-                [
-                    func.sum(
-                        case(
-                            (
-                                PrimarySalesAndStock.indicator.ilike("%остат%"),
-                                PrimarySalesAndStock.packages,
-                            ),
-                            else_=0,
-                        )
-                    ).label("stock_packages"),
-                    func.round(
-                        func.sum(
-                            case(
-                                (
-                                    PrimarySalesAndStock.indicator.ilike("%остат%"),
-                                    PrimarySalesAndStock.amount,
-                                ),
-                                else_=0,
-                            )
-                        )
-                    ).label("stock_amount"),
-                ]
-            )
-
-        select_cols.extend(
-            [
-                func.sum(
-                    case(
-                        (
-                            PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                            PrimarySalesAndStock.packages,
-                        ),
-                        else_=0,
-                    )
-                ).label("sales_packages"),
-                func.round(
-                    func.sum(
-                        case(
-                            (
-                                PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                                PrimarySalesAndStock.amount,
-                            ),
-                            else_=0,
-                        )
-                    )
-                ).label("sales_amount"),
-            ]
-        )
-
-        stmt = (
-            select(*select_cols)
             .select_from(PrimarySalesAndStock)
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
             .where(
@@ -527,10 +390,10 @@ class PrimarySalesAndStockService(
         )
 
         if company_id is not None:
-            stmt = stmt.where(SKU.company_id == company_id)
+            inner = inner.where(SKU.company_id == company_id)
 
-        stmt = ListQueryHelper.apply_specs(
-            stmt,
+        inner = ListQueryHelper.apply_specs(
+            inner,
             [
                 InOrNullSpec(SKU.brand_id, filters.brand_ids),
                 InOrNullSpec(SKU.product_group_id, filters.product_group_ids),
@@ -541,54 +404,87 @@ class PrimarySalesAndStockService(
             ],
         )
 
-        stmt = ListQueryHelper.apply_period_values(
-            stmt,
+        inner = ListQueryHelper.apply_period_values(
+            inner,
             period_values,
             year_col=PrimarySalesAndStock.year,
             month_col=PrimarySalesAndStock.month,
             quarter_col=PrimarySalesAndStock.quarter,
         )
 
-        stmt = stmt.group_by(period_key).order_by(period_key.desc())
+        b = inner.cte("base")
+        is_sales = b.c.ind == "sales"
+        is_stock = b.c.ind == "stock"
+
+        sales_divisor_amount = func.nullif(
+            func.sum(case((is_sales, b.c.amount), else_=0)) / divisor_factor,
+            0,
+        )
+        sales_divisor_packages = func.nullif(
+            func.sum(case((is_sales, b.c.packages), else_=0)) / divisor_factor,
+            0,
+        )
+
+        select_cols = [
+            b.c.period.label("period"),
+            func.cast(
+                case(
+                    (
+                        func.sum(case((is_sales, b.c.amount), else_=0)) > 0,
+                        func.sum(case((is_stock, b.c.amount), else_=0))
+                        / sales_divisor_amount,
+                    ),
+                    else_=None,
+                ),
+                Numeric(10, 2),
+            ).label("coverage_months_amount"),
+            func.cast(
+                case(
+                    (
+                        func.sum(case((is_sales, b.c.packages), else_=0)) > 0,
+                        func.sum(case((is_stock, b.c.packages), else_=0))
+                        / sales_divisor_packages,
+                    ),
+                    else_=None,
+                ),
+                Numeric(10, 2),
+            ).label("coverage_months_packages"),
+        ]
+
+        if filters.group_by_period not in ("quarter", "year"):
+            select_cols.extend(
+                [
+                    func.sum(case((is_stock, b.c.packages), else_=0)).label(
+                        "stock_packages"
+                    ),
+                    func.round(func.sum(case((is_stock, b.c.amount), else_=0))).label(
+                        "stock_amount"
+                    ),
+                ]
+            )
+
+        select_cols.extend(
+            [
+                func.sum(case((is_sales, b.c.packages), else_=0)).label(
+                    "sales_packages"
+                ),
+                func.round(func.sum(case((is_sales, b.c.amount), else_=0))).label(
+                    "sales_amount"
+                ),
+            ]
+        )
+
+        stmt = select(*select_cols).group_by(b.c.period).order_by(b.c.period.desc())
 
         if filters.group_by_period not in ("year", "quarter"):
             stmt = stmt.having(
                 or_(
-                    func.sum(
-                        case(
-                            (
-                                PrimarySalesAndStock.indicator.ilike("%остат%"),
-                                PrimarySalesAndStock.packages,
-                            ),
-                            else_=0,
-                        )
-                    )
-                    > 0,
-                    func.sum(
-                        case(
-                            (
-                                PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                                PrimarySalesAndStock.packages,
-                            ),
-                            else_=0,
-                        )
-                    )
-                    > 0,
+                    func.sum(case((is_stock, b.c.packages), else_=0)) > 0,
+                    func.sum(case((is_sales, b.c.packages), else_=0)) > 0,
                 )
             )
         else:
-            stmt = stmt.having(
-                func.sum(
-                    case(
-                        (
-                            PrimarySalesAndStock.indicator.ilike("%продаж%"),
-                            PrimarySalesAndStock.packages,
-                        ),
-                        else_=0,
-                    )
-                )
-                > 0
-            )
+            stmt = stmt.having(func.sum(case((is_sales, b.c.packages), else_=0)) > 0)
 
         result = await session.execute(stmt)
         return result.mappings().all()
@@ -1063,68 +959,3 @@ class PrimarySalesAndStockService(
 
         result = await session.execute(final_stmt)
         return result.mappings().all()
-
-    @staticmethod
-    async def get_unpublish(
-        session: "AsyncSession", limit=100, offset=0
-    ) -> Sequence[ModelType]:
-        stmt = select(PrimarySalesAndStock).where(
-            PrimarySalesAndStock.published.is_(False)
-        )
-
-        stmt = stmt.limit(limit).offset(offset)
-        result = await session.execute(stmt)
-        return result.scalars().all()
-
-    @staticmethod
-    async def publish(session: "AsyncSession") -> int:
-        stmt = (
-            update(PrimarySalesAndStock)
-            .where(PrimarySalesAndStock.published.is_(False))
-            .values(published=True)
-            .returning(PrimarySalesAndStock.id)
-        )
-        result = await session.execute(stmt)
-        updated_ids = result.scalars().all()
-
-        if not updated_ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Нет неопубликованных записей",
-            )
-
-        await session.commit()
-        return len(updated_ids)
-
-    @staticmethod
-    async def publish_unpublished(
-        session: "AsyncSession", ids: list[int], batch_size: int = 1000
-    ) -> list[dict[str, int | bool]]:
-        if not ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Список ids пуст"
-            )
-
-        updated_items: list[dict[str, int | bool]] = []
-        for start in range(0, len(ids), batch_size):
-            batch_ids = ids[start : start + batch_size]
-            stmt = (
-                update(PrimarySalesAndStock)
-                .where(
-                    PrimarySalesAndStock.id.in_(batch_ids),
-                    PrimarySalesAndStock.published.is_(False),
-                )
-                .values(published=True)
-                .returning(PrimarySalesAndStock.id, PrimarySalesAndStock.published)
-            )
-            result = await session.execute(stmt)
-            updated_items.extend(result.mappings().all())
-
-        if not updated_items:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Нет неопубликованных записей для указанных ids",
-            )
-
-        await session.commit()
-        return updated_items

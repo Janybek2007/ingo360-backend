@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from src.schemas.base_filter import BaseDbFilter, SortDirection
 from src.schemas.client import DistributorResponse, PharmacySimpleResponse
@@ -16,7 +16,6 @@ class PrimarySalesAndStockCreate(BaseModel):
     indicator: str
     packages: float
     amount: float
-    published: bool = False
 
 
 class SecondarySalesCreate(BaseModel):
@@ -29,7 +28,6 @@ class SecondarySalesCreate(BaseModel):
     quarter: int
     packages: float
     amount: float
-    published: bool = False
 
 
 class TertiarySalesCreate(BaseModel):
@@ -41,7 +39,6 @@ class TertiarySalesCreate(BaseModel):
     indicator: str
     packages: float
     amount: float
-    published: bool = False
 
 
 class PrimarySalesAndStockUpdate(BaseModel):
@@ -53,7 +50,6 @@ class PrimarySalesAndStockUpdate(BaseModel):
     indicator: str | None = None
     packages: float | None = None
     amount: float | None = None
-    published: bool | None = None
 
 
 class SecondarySalesUpdate(BaseModel):
@@ -66,7 +62,6 @@ class SecondarySalesUpdate(BaseModel):
     quarter: int | None = None
     packages: float | None = None
     amount: float | None = None
-    published: bool | None = None
 
 
 class TertiarySalesUpdate(BaseModel):
@@ -78,16 +73,6 @@ class TertiarySalesUpdate(BaseModel):
     indicator: str | None = None
     packages: float | None = None
     amount: float | None = None
-    published: bool | None = None
-
-
-class PublishUnpublishedRequest(BaseModel):
-    ids: list[int] = Field(default_factory=list)
-
-
-class PublishUnpublishedItem(BaseModel):
-    id: int
-    published: bool
 
 
 class PrimarySalesAndStockFilter(BaseModel):
@@ -100,7 +85,6 @@ class PrimarySalesAndStockFilter(BaseModel):
     quarters: str | None = None
     years: str | None = None
     indicator: str | None = None
-    published: bool | None = None
 
 
 class SecondaryTertiarySalesFilter(BaseModel):
@@ -114,7 +98,6 @@ class SecondaryTertiarySalesFilter(BaseModel):
     quarters: str | None = None
     years: str | None = None
     indicator: str | None = None
-    published: bool | None = None
 
 
 class PrimarySalesAndStockListRequest(BaseDbFilter):
@@ -125,20 +108,10 @@ class PrimarySalesAndStockListRequest(BaseDbFilter):
     quarters: list[int] | None = None
     year: str | None = None
     indicators: list[str] | str | None = None
-    published: list[str] | None = None
     amount: str | None = None
     packages: str | None = None
     sort_by: (
-        Literal[
-            "distributor",
-            "brand",
-            "sku",
-            "month",
-            "year",
-            "packages",
-            "amount",
-            "published",
-        ]
+        Literal["distributor", "brand", "sku", "month", "year", "packages", "amount"]
         | None
     ) = None
 
@@ -152,7 +125,6 @@ class SecondaryTertiarySalesListRequest(BaseDbFilter):
     quarters: list[int] | None = None
     year: str | None = None
     indicators: list[str] | str | None = None
-    published: list[str] | None = None
     amount: str | None = None
     packages: str | None = None
     sort_by: (
@@ -166,7 +138,6 @@ class SecondaryTertiarySalesListRequest(BaseDbFilter):
             "indicator",
             "packages",
             "amount",
-            "published",
         ]
         | None
     ) = None
@@ -181,7 +152,6 @@ class PrimarySalesAndStockResponse(BaseModel):
     indicator: str
     packages: float
     amount: float
-    published: bool = False
     distributor: DistributorResponse
     sku: SKUSimpleResponse
 
@@ -197,7 +167,6 @@ class SecondarySalesResponse(BaseModel):
     indicator: str
     packages: float
     amount: float
-    published: bool = False
     pharmacy: PharmacySimpleResponse
     sku: SKUSimpleResponse
 
@@ -213,7 +182,6 @@ class TertiarySalesResponse(BaseModel):
     indicator: str
     packages: float
     amount: float
-    published: bool = False
     pharmacy: PharmacySimpleResponse
     sku: SKUSimpleResponse
 
@@ -266,6 +234,7 @@ class ShipmentStockFilter(SalesReportFilter):
 
 class SecTerSalesReportFilter(SalesReportFilter):
     geo_indicator_ids: list[int] | None = None
+    pharmacy_ids: list[int] | None = None
     group_by_dimensions: (
         list[
             Literal[
@@ -275,6 +244,7 @@ class SecTerSalesReportFilter(SalesReportFilter):
                 "product_group",
                 "distributor",
                 "geo_indicator",
+                "pharmacy",
             ]
         ]
         | None
@@ -287,6 +257,7 @@ class SecTerSalesReportFilter(SalesReportFilter):
             "product_group",
             "distributor",
             "geo_indicator",
+            "pharmacy",
         ]
         | None
     ) = None

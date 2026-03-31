@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Iterable, Tuple
 
-from sqlalchemy import and_, asc, desc, func, or_
+from sqlalchemy import asc, desc, func, or_, tuple_
 
 
 @dataclass(frozen=True)
@@ -284,20 +284,12 @@ class ListQueryHelper:
         if group_by_period == "quarter":
             if not period_values.quarters or quarter_col is None:
                 return stmt
-            clauses = [
-                and_(year_col == year, quarter_col == quarter)
-                for year, quarter in period_values.quarters
-            ]
-            return stmt.where(or_(*clauses))
+            return stmt.where(tuple_(year_col, quarter_col).in_(period_values.quarters))
 
         if not period_values.months or month_col is None:
             return stmt
 
-        clauses = [
-            and_(year_col == year, month_col == month)
-            for year, month in period_values.months
-        ]
-        return stmt.where(or_(*clauses))
+        return stmt.where(tuple_(year_col, month_col).in_(period_values.months))
 
     @staticmethod
     def apply_pagination(stmt, limit: int | None, offset: int | None):

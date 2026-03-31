@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.dependencies.excel_file import ExcelFile
 from src.db.models import SKU, Brand, ProductGroup, User
 from src.db.session import db_session
 from src.schemas import product
@@ -32,15 +33,10 @@ async def create_product_group(
 
 @router.post("/product-groups/import-excel")
 async def bulk_insert_product_groups(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await product_serv.product_group_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -199,15 +195,10 @@ async def export_brands_excel(
 
 @router.post("/brands/import-excel")
 async def bulk_insert_brands(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await product_serv.brand_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -273,15 +264,10 @@ async def create_promotion_type(
 
 @router.post("/promotion-types/import-excel")
 async def bulk_insert_promotion_types(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await product_serv.promotion_type_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -434,15 +420,10 @@ async def get_dosage_form(
 
 @router.post("/dosage-forms/import-excel")
 async def bulk_insert_dosage_forms(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await product_serv.dosage_form_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -528,15 +509,10 @@ async def export_dosages_excel(
 
 @router.post("/dosages/import-excel")
 async def bulk_insert_dosages(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await product_serv.dosage_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -628,15 +604,10 @@ async def export_segments_excel(
 
 @router.post("/segments/import-excel")
 async def bulk_insert_segments(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await product_serv.segment_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -759,15 +730,10 @@ async def export_skus_excel(
 
 @router.post("/skus/import-excel")
 async def bulk_insert_skus(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await product_serv.sku_service.import_excel(
         session, file, user_id=current_user.id
     )

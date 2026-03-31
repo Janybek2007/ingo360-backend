@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.dependencies.excel_file import ExcelFile
 from src.db.models import District, Region, Settlement, User
 from src.db.session import db_session
 from src.schemas import geography
@@ -25,15 +26,10 @@ async def create_country(
 
 @router.post("/countries/import-excel")
 async def bulk_insert_countries(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await geography_service.country_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -152,15 +148,10 @@ async def export_regions_excel(
 
 @router.post("/regions/import-excel")
 async def bulk_insert_regions(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await geography_service.region_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -251,15 +242,10 @@ async def export_settlements_excel(
 
 @router.post("/settlements/import-excel")
 async def bulk_insert_settlements(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await geography_service.settlement_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -360,15 +346,10 @@ async def export_districts_excel(
 
 @router.post("/districts/import-excel")
 async def bulk_insert_districts(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await geography_service.district_service.import_excel(
         session, file, user_id=current_user.id
     )

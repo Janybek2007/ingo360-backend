@@ -5,9 +5,15 @@ from src.core.settings import settings
 
 class DBSession:
     def __init__(self, db_url: str):
-        self.engine = create_async_engine(url=db_url)
+        self.engine = create_async_engine(
+            url=db_url,
+            pool_size=20,
+            max_overflow=10,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+        )
         self.session_factory = async_sessionmaker(
-            bind=self.engine, expire_on_commit=False
+            bind=self.engine, expire_on_commit=False, autocommit=False
         )
 
     async def get_session(self) -> AsyncSession:

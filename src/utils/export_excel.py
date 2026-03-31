@@ -67,19 +67,14 @@ def build_export_row_values(
     return values
 
 
-def export_excel_to_file(
-    *,
+def _build_export_dataframe(
     rows: list[dict[str, Any]],
     header_map: dict[str, str],
-    output_path: str,
     fields_map: dict[str, str] | None = None,
     boolean_map: dict[str, list[str]] | None = None,
     custom_map: dict[str, dict[str, str]] | None = None,
-) -> str:
+) -> pl.DataFrame:
     headers = list(header_map.keys())
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
     data = []
     for row in rows:
         values = build_export_row_values(
@@ -92,10 +87,24 @@ def export_excel_to_file(
         )
         data.append(values)
 
-    df = pl.DataFrame(
+    return pl.DataFrame(
         {header_map[key]: col_values for key, col_values in zip(headers, zip(*data))}
     )
 
+
+def export_excel_to_file(
+    *,
+    rows: list[dict[str, Any]],
+    header_map: dict[str, str],
+    output_path: str,
+    fields_map: dict[str, str] | None = None,
+    boolean_map: dict[str, list[str]] | None = None,
+    custom_map: dict[str, dict[str, str]] | None = None,
+) -> str:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    df = _build_export_dataframe(rows, header_map, fields_map, boolean_map, custom_map)
     df.write_excel(str(path))
     return str(path)
 
@@ -108,27 +117,8 @@ def export_excel(
     boolean_map: dict[str, list[str]] | None = None,
     custom_map: dict[str, dict[str, str]] | None = None,
 ) -> bytes:
-    headers = list(header_map.keys())
+    df = _build_export_dataframe(rows, header_map, fields_map, boolean_map, custom_map)
 
-    # Build data with transformed values
-    data = []
-    for row in rows:
-        values = build_export_row_values(
-            row=row,
-            headers=headers,
-            header_map=header_map,
-            fields_map=fields_map,
-            boolean_map=boolean_map,
-            custom_map=custom_map,
-        )
-        data.append(values)
-
-    # Create DataFrame with display names as column names
-    df = pl.DataFrame(
-        {header_map[key]: col_values for key, col_values in zip(headers, zip(*data))}
-    )
-
-    # Write to BytesIO buffer
     buffer = BytesIO()
     df.write_excel(buffer)
     buffer.seek(0)

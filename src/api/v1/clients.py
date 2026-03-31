@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from src.api.dependencies.current_user import current_operator_user
+from src.api.dependencies.excel_file import ExcelFile
 from src.db.models import Doctor, MedicalFacility, Pharmacy, User
 from src.db.session import db_session
 from src.schemas import client
@@ -71,15 +72,10 @@ async def create_client_category(
 
 @router.post("/client-categories/import-excel")
 async def bulk_insert_client_categories(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await client_service.client_category_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -138,12 +134,12 @@ async def get_doctors(
     filters: client.DoctorListRequest,
 ):
     load_options = [
-        joinedload(Doctor.responsible_employee),
-        joinedload(Doctor.medical_facility),
-        joinedload(Doctor.speciality),
-        joinedload(Doctor.client_category),
-        joinedload(Doctor.product_group),
-        joinedload(Doctor.company),
+        selectinload(Doctor.responsible_employee),
+        selectinload(Doctor.medical_facility),
+        selectinload(Doctor.speciality),
+        selectinload(Doctor.client_category),
+        selectinload(Doctor.product_group),
+        selectinload(Doctor.company),
     ]
     return await client_service.doctor_service.get_multi(
         session, load_options=load_options, filters=filters
@@ -208,15 +204,10 @@ async def create_doctor(
 
 @router.post("/doctors/import-excel")
 async def bulk_insert_doctors(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await client_service.doctor_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -282,14 +273,14 @@ async def get_pharmacies(
     filters: client.PharmacyListRequest,
 ):
     load_options = [
-        joinedload(Pharmacy.distributor),
-        joinedload(Pharmacy.responsible_employee),
-        joinedload(Pharmacy.settlement),
-        joinedload(Pharmacy.district),
-        joinedload(Pharmacy.client_category),
-        joinedload(Pharmacy.product_group),
-        joinedload(Pharmacy.company),
-        joinedload(Pharmacy.geo_indicator),
+        selectinload(Pharmacy.distributor),
+        selectinload(Pharmacy.responsible_employee),
+        selectinload(Pharmacy.settlement),
+        selectinload(Pharmacy.district),
+        selectinload(Pharmacy.client_category),
+        selectinload(Pharmacy.product_group),
+        selectinload(Pharmacy.company),
+        selectinload(Pharmacy.geo_indicator),
     ]
     return await client_service.pharmacy_service.get_multi(
         session, load_options=load_options, filters=filters
@@ -360,15 +351,10 @@ async def create_pharmacy(
 
 @router.post("/pharmacies/import-excel")
 async def bulk_insert_pharmacies(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await client_service.pharmacy_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -474,15 +460,10 @@ async def export_specialities_excel(
 
 @router.post("/specialities/import-excel")
 async def bulk_insert_specialities(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await client_service.speciality_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -607,15 +588,10 @@ async def create_medical_facility(
 
 @router.post("/medical-facilities/import-excel")
 async def bulk_insert_medical_facilities(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await client_service.medical_facility_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -728,15 +704,10 @@ async def create_distributor(
 
 @router.post("/distributors/import-excel")
 async def bulk_insert_distributors(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await client_service.distributor_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -836,15 +807,10 @@ async def create_geo_indicator(
 
 @router.post("/geo-indicators/import-excel")
 async def bulk_insert_geo_indicators(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_operator_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await client_service.geo_indicator_service.import_excel(
         session, file, user_id=current_user.id
     )

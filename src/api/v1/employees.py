@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.current_user import current_active_user, current_operator_user
+from src.api.dependencies.excel_file import ExcelFile
 from src.db.models import Employee, User
 from src.db.session import db_session
 from src.schemas import employee as employee_schema
@@ -104,15 +105,10 @@ async def get_employee(
 
 @router.post("/employees/import-excel")
 async def bulk_insert_employees(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await employee_service.employee_service.import_excel(
         session, file, user_id=current_user.id
     )
@@ -221,15 +217,10 @@ async def delete_position(
 
 @router.post("/positions/import-excel")
 async def bulk_insert_positions(
-    file: UploadFile,
+    file: ExcelFile,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only Excel files are allowed",
-        )
     result = await employee_service.position_service.import_excel(
         session, file, user_id=current_user.id
     )

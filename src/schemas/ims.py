@@ -80,6 +80,7 @@ class IMSTopFilter(BaseModel):
     segment_name: str | None = None
     segments: list[str] | None = None
     brand_name: str | None = None
+    top_n: int | None = None
 
 
 class IMSMetricsFilter(BaseModel):
