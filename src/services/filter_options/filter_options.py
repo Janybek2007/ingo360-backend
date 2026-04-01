@@ -4,8 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.models import (
     SKU,
     Brand,
+    ClientCategory,
     Company,
     Distributor,
+    District,
     Doctor,
     Employee,
     GeoIndicator,
@@ -17,6 +19,7 @@ from src.db.models import (
     PromotionType,
     SecondarySales,
     Segment,
+    Settlement,
     Speciality,
     TertiarySalesAndStock,
     User,
@@ -88,7 +91,7 @@ def apply_scope_filter(
         return apply_sales_scope(stmt, target_ref, scope_ref, prefetched_sku_ids)
 
     if scope_ref in ("clients_pharmacies", "clients_doctors"):
-        return apply_visits_scope(stmt, target_ref)
+        return apply_clients_scope(stmt, target_ref, scope_ref)
 
     if scope_ref == "visits":
         return apply_visits_scope(stmt, target_ref)
@@ -271,6 +274,106 @@ def apply_visits_scope(stmt, target_ref: ReferencesType):
             Visit.doctor_id.is_not(None)
         )
         return stmt.where(Doctor.id.in_(doctor_ids))
+
+    return stmt
+
+
+def apply_clients_scope(
+    stmt,
+    target_ref: ReferencesType,
+    scope_ref: ScopeType,
+):
+    if scope_ref == "clients_doctors":
+        if target_ref == "clients_medical_facilities":
+            facility_ids = select(distinct(Doctor.medical_facility_id)).where(
+                Doctor.medical_facility_id.is_not(None)
+            )
+            return stmt.where(MedicalFacility.id.in_(facility_ids))
+
+        if target_ref == "clients_specialities":
+            speciality_ids = select(distinct(Doctor.speciality_id)).where(
+                Doctor.speciality_id.is_not(None)
+            )
+            return stmt.where(Speciality.id.in_(speciality_ids))
+
+        if target_ref == "clients_client_categories":
+            category_ids = select(distinct(Doctor.client_category_id)).where(
+                Doctor.client_category_id.is_not(None)
+            )
+            return stmt.where(ClientCategory.id.in_(category_ids))
+
+        if target_ref == "products_product_groups":
+            group_ids = select(distinct(Doctor.product_group_id)).where(
+                Doctor.product_group_id.is_not(None)
+            )
+            return stmt.where(ProductGroup.id.in_(group_ids))
+
+        if target_ref == "companies_companies":
+            company_ids = select(distinct(Doctor.company_id)).where(
+                Doctor.company_id.is_not(None)
+            )
+            return stmt.where(Company.id.in_(company_ids))
+
+        if target_ref == "employees_employees":
+            employee_ids = select(distinct(Doctor.responsible_employee_id)).where(
+                Doctor.responsible_employee_id.is_not(None)
+            )
+            return stmt.where(Employee.id.in_(employee_ids))
+
+        if target_ref == "clients_doctors":
+            return stmt
+
+    if scope_ref == "clients_pharmacies":
+        if target_ref == "clients_pharmacies":
+            return stmt
+
+        if target_ref == "companies_companies":
+            company_ids = select(distinct(Pharmacy.company_id)).where(
+                Pharmacy.company_id.is_not(None)
+            )
+            return stmt.where(Company.id.in_(company_ids))
+
+        if target_ref == "clients_distributors":
+            distributor_ids = select(distinct(Pharmacy.distributor_id)).where(
+                Pharmacy.distributor_id.is_not(None)
+            )
+            return stmt.where(Distributor.id.in_(distributor_ids))
+
+        if target_ref == "employees_employees":
+            employee_ids = select(distinct(Pharmacy.responsible_employee_id)).where(
+                Pharmacy.responsible_employee_id.is_not(None)
+            )
+            return stmt.where(Employee.id.in_(employee_ids))
+
+        if target_ref == "geography_settlements":
+            settlement_ids = select(distinct(Pharmacy.settlement_id)).where(
+                Pharmacy.settlement_id.is_not(None)
+            )
+            return stmt.where(Settlement.id.in_(settlement_ids))
+
+        if target_ref == "geography_districts":
+            district_ids = select(distinct(Pharmacy.district_id)).where(
+                Pharmacy.district_id.is_not(None)
+            )
+            return stmt.where(District.id.in_(district_ids))
+
+        if target_ref == "clients_client_categories":
+            category_ids = select(distinct(Pharmacy.client_category_id)).where(
+                Pharmacy.client_category_id.is_not(None)
+            )
+            return stmt.where(ClientCategory.id.in_(category_ids))
+
+        if target_ref == "clients_geo_indicators":
+            geo_indicator_ids = select(distinct(Pharmacy.geo_indicator_id)).where(
+                Pharmacy.geo_indicator_id.is_not(None)
+            )
+            return stmt.where(GeoIndicator.id.in_(geo_indicator_ids))
+
+        if target_ref == "products_product_groups":
+            group_ids = select(distinct(Pharmacy.product_group_id)).where(
+                Pharmacy.product_group_id.is_not(None)
+            )
+            return stmt.where(ProductGroup.id.in_(group_ids))
 
     return stmt
 
