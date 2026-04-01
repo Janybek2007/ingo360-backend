@@ -1,8 +1,6 @@
 services:
   back:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.dev
+    image: ingo360-backend:dev
     container_name: ingo360_backend
     expose:
       - "8000"

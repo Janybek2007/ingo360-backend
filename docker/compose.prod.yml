@@ -1,8 +1,6 @@
 services:
   back:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.prod
+    image: ingo360-backend:prod
     container_name: ingo360_back
     volumes:
       - temp:/app/temp

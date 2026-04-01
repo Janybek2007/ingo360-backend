@@ -6,10 +6,10 @@ COMPOSE_FILE_PROD = docker/compose.prod.yml
 .PHONY: prod_build_backend dev_build_backend prod_restart prod_start prod_stop dev_restart dev_start dev_stop up_dev down_dev up_prod down_prod
 
 prod_build_backend:
-	docker build -f docker/Dockerfile.prod -t ingo360-backend:prod .
+	DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile.prod -t ingo360-backend:prod .
 
 dev_build_backend:
-	docker build -f docker/Dockerfile.dev -t ingo360-backend:dev .
+	DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile.dev -t ingo360-backend:dev .
 
 prod_restart:
 	docker compose -f $(COMPOSE_FILE_PROD) --env-file $(ENV_FILE) restart
@@ -29,14 +29,13 @@ dev_start:
 dev_stop:
 	docker compose -f $(COMPOSE_FILE_DEV) --env-file $(ENV_FILE) stop
 
-
-up_dev:
+up_dev: dev_build_backend
 	docker compose -f $(COMPOSE_FILE_DEV) --env-file $(ENV_FILE) up -d
 
 down_dev:
 	docker compose -f $(COMPOSE_FILE_DEV) --env-file $(ENV_FILE) down
 
-up_prod:
+up_prod: prod_build_backend
 	docker compose -f $(COMPOSE_FILE_PROD) --env-file $(ENV_FILE) up -d
 
 down_prod:
