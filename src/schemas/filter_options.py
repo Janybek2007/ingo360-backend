@@ -26,6 +26,7 @@ ReferencesType = Literal[
     "clients_distributors",
     "clients_geo_indicators",
     "clients_medical_facilities",
+    "clients_medical_facility_types",
     "clients_specialities",
     "clients_client_categories",
     "clients_doctors",
@@ -67,6 +68,7 @@ class GroupedFilterOptionsResponse(BaseModel):
     clients_distributors: list[FilterOption] | None = None
     clients_geo_indicators: list[FilterOption] | None = None
     clients_medical_facilities: list[FilterOption] | None = None
+    clients_medical_facility_types: list[FilterOption] | None = None
     clients_specialities: list[FilterOption] | None = None
     clients_client_categories: list[FilterOption] | None = None
     clients_doctors: list[FilterOption] | None = None

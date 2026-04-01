@@ -300,7 +300,7 @@ class GeoIndicatorListRequest(BaseReferenceFilter):
 
 class MedicalFacilityListRequest(BaseReferenceFilter):
     name: str | None = None
-    facility_type: str | None = None
+    facility_type_ids: list[str] | None = None
     settlement_ids: list[int] | None = None
     district_ids: list[int] | None = None
     geo_indicator_ids: list[int] | None = None

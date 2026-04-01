@@ -391,6 +391,17 @@ def build_reference_stmt(reference: ReferencesType, company_id: int):
         )
         return stmt
 
+    if reference == "clients_medical_facility_types":
+        stmt = (
+            select(
+                distinct(MedicalFacility.facility_type).label("id"),
+                MedicalFacility.facility_type.label("name"),
+            )
+            .where(MedicalFacility.facility_type.is_not(None))
+            .order_by(MedicalFacility.facility_type)
+        )
+        return stmt
+
     if reference == "products_brands":
         stmt = (
             select(

@@ -63,7 +63,7 @@ class MedicalFacilityService(
                 stmt,
                 [
                     StringTypedSpec(self.model.name, filters.name),
-                    StringTypedSpec(self.model.facility_type, filters.facility_type),
+                    InOrNullSpec(self.model.facility_type, filters.facility_type_ids),
                     InOrNullSpec(self.model.settlement_id, filters.settlement_ids),
                     InOrNullSpec(self.model.district_id, filters.district_ids),
                     InOrNullSpec(
