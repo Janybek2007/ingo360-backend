@@ -46,7 +46,8 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
         batch_size: int = 2000,
     ):
         from src.db.models.excel_tasks import ExcelTaskType
-        from src.tasks.sale_imports import create_excel_task_record, import_sales_task
+        from src.tasks.sale_imports import import_sales_task
+        from src.tasks.utils import create_excel_task_record
 
         upload_dir = Path("temp")
         upload_dir.mkdir(exist_ok=True)

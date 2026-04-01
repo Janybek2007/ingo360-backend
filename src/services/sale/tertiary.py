@@ -30,6 +30,7 @@ from src.services.sale.utils import RelationSpec, import_sales_from_excel
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
+from src.utils.explain_analyze import ExplainArguments
 from src.utils.list_query_helper import (
     InOrNullSpec,
     ListQueryHelper,
@@ -57,7 +58,8 @@ class TertiarySalesService(
         batch_size: int = 10_000,
     ):
         from src.db.models.excel_tasks import ExcelTaskType
-        from src.tasks.sale_imports import create_excel_task_record, import_sales_task
+        from src.tasks.sale_imports import import_sales_task
+        from src.tasks.utils import create_excel_task_record
 
         upload_dir = Path("temp")
         upload_dir.mkdir(exist_ok=True)
@@ -254,6 +256,7 @@ class TertiarySalesService(
         session: "AsyncSession",
         filters: sale_schema.SecTerSalesReportFilter | None = None,
         company_id: int | None = None,
+        explain: ExplainArguments | None = None,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
         period_values = build_period_values(
@@ -370,6 +373,11 @@ class TertiarySalesService(
             final_stmt, filters.limit, filters.offset
         )
 
+        if not explain:
+            from src.utils.explain_analyze import explain_analyze
+
+            return await explain_analyze(session, final_stmt, explain)
+
         result = await session.execute(final_stmt)
         return result.mappings().all()
 
@@ -462,7 +470,6 @@ class TertiarySalesService(
         session: "AsyncSession",
         filters: sale_schema.NumericDistributionFilter | None = None,
         company_id: int | None = None,
-        explain: bool = False,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
         period_values = build_period_values(
@@ -634,12 +641,6 @@ class TertiarySalesService(
         final_stmt = ListQueryHelper.apply_pagination(
             final_stmt, filters.limit, filters.offset
         )
-
-        if explain:
-            from src.utils.explain_analyze import explain_analyze
-
-            return await explain_analyze(session, final_stmt)
-
         result = await session.execute(final_stmt)
         return result.mappings().all()
 
@@ -648,7 +649,6 @@ class TertiarySalesService(
         session: "AsyncSession",
         filters: sale_schema.SecTerSalesReportFilter | None = None,
         company_id: int | None = None,
-        explain: bool = False,
     ):
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
         period_values = build_period_values(
@@ -764,11 +764,6 @@ class TertiarySalesService(
         final_stmt = ListQueryHelper.apply_pagination(
             final_stmt, filters.limit, filters.offset
         )
-
-        if explain:
-            from src.utils.explain_analyze import explain_analyze
-
-            return await explain_analyze(session, final_stmt)
 
         result = await session.execute(final_stmt)
         return result.mappings().all()

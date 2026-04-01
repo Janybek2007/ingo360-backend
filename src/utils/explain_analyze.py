@@ -1,5 +1,7 @@
-from typing import TYPE_CHECKING
+import json
+from typing import TYPE_CHECKING, Annotated
 
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.sql import Select
 
@@ -7,14 +9,18 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
+class ExplainArguments(BaseModel):
+    buffers: bool = True
+    verbose: bool = True
+    settings: bool = False
+    format_json: bool = False
+    save_path: str | None = None
+
+
 async def explain_analyze(
-    session: AsyncSession,
+    session: "AsyncSession",
     stmt: Select,
-    *,
-    buffers: bool = True,
-    verbose: bool = True,
-    settings: bool = False,
-    format_json: bool = False,
+    args: Annotated[ExplainArguments, ExplainArguments()],
 ) -> dict:
     try:
         compiled = stmt.compile(compile_kwargs={"literal_binds": True})
@@ -22,13 +28,13 @@ async def explain_analyze(
 
         explain_options = ["ANALYZE"]
 
-        if buffers:
+        if args.buffers:
             explain_options.append("BUFFERS")
-        if verbose:
+        if args.verbose:
             explain_options.append("VERBOSE")
-        if settings:
+        if args.settings:
             explain_options.append("SETTINGS")
-        if format_json:
+        if args.format_json:
             explain_options.append("FORMAT JSON")
 
         explain_clause = ", ".join(explain_options)
@@ -36,8 +42,11 @@ async def explain_analyze(
 
         result = await session.execute(text(explain_sql))
 
-        if format_json:
+        if args.format_json:
             rows = result.scalar()
+            if args.save_path:
+                with open(args.save_path, "w", encoding="utf-8") as f:
+                    json.dump(rows, f, ensure_ascii=False, indent=2)
             return {
                 "explain": True,
                 "format": "json",
@@ -47,6 +56,10 @@ async def explain_analyze(
 
         explain_rows = result.all()
         explain_text = "\n".join(str(row[0]) for row in explain_rows)
+
+        if args.save_path:
+            with open(args.save_path, "w", encoding="utf-8") as f:
+                f.write(explain_text)
 
         return {
             "explain": True,
