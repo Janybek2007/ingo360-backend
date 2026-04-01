@@ -165,7 +165,7 @@ class DoctorResponse(BaseModel):
     responsible_employee: EmployeeSimpleResponse | None
     medical_facility: MedicalFacilitySimpleResponse | None
     speciality: SpecialityResponse
-    client_category: ClientCategoryResponse
+    client_category: ClientCategoryResponse | None
     company: CompanyMinimalResponse
     product_group: ProductGroupSimpleResponse | None
 
