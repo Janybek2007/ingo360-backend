@@ -373,7 +373,7 @@ class TertiarySalesService(
             final_stmt, filters.limit, filters.offset
         )
 
-        if not explain:
+        if explain is not None:
             from src.utils.explain_analyze import explain_analyze
 
             return await explain_analyze(session, final_stmt, explain)
