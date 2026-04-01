@@ -34,7 +34,9 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . .
 
-RUN useradd -m -u 1000 appuser && chown -R appuser /app
+RUN useradd -m -u 1000 appuser \
+    && mkdir -p /app/temp \
+    && chown -R appuser /app
 
 USER appuser
 

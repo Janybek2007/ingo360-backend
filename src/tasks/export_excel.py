@@ -40,8 +40,14 @@ async def create_export_task_record(
 
 
 def _build_export_file_path(task_id: str, file_name: str) -> str:
-    temp_dir = Path("temp")
-    temp_dir.mkdir(exist_ok=True)
+    temp_dir = Path(os.getenv("EXPORT_TEMP_DIR", "temp"))
+    try:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        if not os.access(temp_dir, os.W_OK):
+            raise PermissionError(f"Temp dir not writable: {temp_dir}")
+    except OSError:
+        temp_dir = Path("/tmp/ingo360-export")
+        temp_dir.mkdir(parents=True, exist_ok=True)
     safe_file_name = _sanitize_file_name(file_name)
     file_path = temp_dir / f"export_{task_id}_{safe_file_name}.xlsx"
     return str(file_path)

@@ -4,6 +4,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.prod
     container_name: ingo360_back
+    volumes:
+      - temp:/app/temp
     expose:
       - "8000"
     depends_on:
