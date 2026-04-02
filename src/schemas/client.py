@@ -35,6 +35,7 @@ class DoctorCreate(BaseModel):
     client_category_id: int | None = None
     product_group_id: int
     company_id: int
+    mode: Literal["company", "global"] = "company"
 
 
 class PharmacyCreate(BaseModel):
@@ -78,6 +79,7 @@ class DoctorUpdate(BaseModel):
     client_category_id: int | None = None
     product_group_id: int | None = None
     company_id: int | None = None
+    mode: Literal["company", "global"] = "company"
 
 
 class PharmacyUpdate(BaseModel):
@@ -158,16 +160,25 @@ class MedicalFacilityResponse(BaseModel):
     geo_indicator: GeoIndicatorResponse | None
 
 
-class DoctorResponse(BaseModel):
+class GlobalDoctorResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     full_name: str
-    responsible_employee: EmployeeSimpleResponse | None
     medical_facility: MedicalFacilitySimpleResponse | None
     speciality: SpecialityResponse
-    client_category: ClientCategoryResponse | None
-    company: CompanyMinimalResponse
-    product_group: ProductGroupSimpleResponse | None
+
+
+class DoctorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    mode: Literal["company", "global"] = "company"
+    full_name: str = ""
+    responsible_employee: EmployeeSimpleResponse | None = None
+    medical_facility: MedicalFacilitySimpleResponse | None = None
+    speciality: SpecialityResponse | None = None
+    client_category: ClientCategoryResponse | None = None
+    product_group: ProductGroupSimpleResponse | None = None
+    company: CompanyMinimalResponse | None = None
 
 
 class PharmacyResponse(BaseModel):
@@ -260,9 +271,10 @@ class DoctorListRequest(BaseReferenceFilter):
     medical_facility_ids: list[int] | None = None
     responsible_employee_ids: list[int] | None = None
     speciality_ids: list[int] | None = None
+    company_ids: list[int] | None = None
     client_category_ids: list[int] | None = None
     product_group_ids: list[int] | None = None
-    company_ids: list[int] | None = None
+    mode: Literal["company", "global"] | None = None
     sort_by: (
         Literal[
             "full_name",
@@ -270,8 +282,8 @@ class DoctorListRequest(BaseReferenceFilter):
             "responsible_employee",
             "speciality",
             "client_category",
+            "mode",
             "product_group",
-            "company",
         ]
         | None
     ) = None

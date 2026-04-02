@@ -17,6 +17,7 @@ if TYPE_CHECKING:
         Pharmacy,
         ProductGroup,
         User,
+        Visit,
     )
 
 
@@ -42,6 +43,8 @@ class Company(Base):
     can_market_analysis: Mapped[bool] = mapped_column(server_default="true")
 
     pharmacies: Mapped[list["Pharmacy"]] = relationship(back_populates="company")
+    doctors: Mapped[list["Doctor"]] = relationship(back_populates="company")
+    visits: Mapped[list["Visit"]] = relationship(back_populates="company")
     districts: Mapped[list["District"]] = relationship(back_populates="company")
     skus: Mapped[list["SKU"]] = relationship(back_populates="company")
     product_groups: Mapped[list["ProductGroup"]] = relationship(
@@ -53,7 +56,6 @@ class Company(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="companies"
     )
-    doctors: Mapped[list["Doctor"]] = relationship(back_populates="company")
     __table_args__ = (
         Index("idx_company_name", "name"),
         Index("idx_companny_ims_name", "ims_name"),

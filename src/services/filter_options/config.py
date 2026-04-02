@@ -12,6 +12,7 @@ from src.db.models import (
     DosageForm,
     Employee,
     GeoIndicator,
+    GlobalDoctor,
     MedicalFacility,
     Pharmacy,
     Position,
@@ -83,7 +84,7 @@ REFERENCE_CONFIG = {
     "clients_medical_facility_types": (MedicalFacility, MedicalFacility.facility_type),
     "clients_specialities": (Speciality, Speciality.name),
     "clients_client_categories": (ClientCategory, ClientCategory.name),
-    "clients_doctors": (Doctor, Doctor.full_name),
+    "clients_doctors": (GlobalDoctor, GlobalDoctor.full_name),
     "clients_pharmacies": (Pharmacy, Pharmacy.name),
     "companies_companies": (Company, Company.name),
 }

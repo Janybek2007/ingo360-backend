@@ -1,4 +1,4 @@
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import (
@@ -11,6 +11,7 @@ from src.db.models import (
     Doctor,
     Employee,
     GeoIndicator,
+    GlobalDoctor,
     MedicalFacility,
     Pharmacy,
     Position,
@@ -70,6 +71,7 @@ def apply_scope_filter(
     target_ref: ReferencesType,
     scope_ref: ScopeType,
     prefetched_sku_ids: list[int] | None = None,
+    filters: dict[str, list[int] | str] | None = None,
 ):
     if scope_ref == "all" or target_ref == scope_ref:
         return stmt
@@ -94,7 +96,7 @@ def apply_scope_filter(
         return apply_clients_scope(stmt, target_ref, scope_ref)
 
     if scope_ref == "visits":
-        return apply_visits_scope(stmt, target_ref)
+        return apply_visits_scope(stmt, target_ref, filters)
 
     target_model, _ = REFERENCE_CONFIG[target_ref]
     scope_model, _ = REFERENCE_CONFIG[scope_ref]
@@ -220,17 +222,43 @@ def apply_sales_scope(
     return stmt
 
 
-def apply_visits_scope(stmt, target_ref: ReferencesType):
+def _parse_period_values(period_values: list[str] | None) -> list[tuple[int, int]]:
+    if not period_values:
+        return []
+    months: list[tuple[int, int]] = []
+    for value in period_values:
+        raw = (value or "").strip()
+        if raw.startswith("month-"):
+            raw = raw[len("month-") :]
+        parts = raw.split("-")
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            months.append((int(parts[0]), int(parts[1])))
+    return months
+
+
+def apply_visits_scope(
+    stmt, target_ref: ReferencesType, filters: dict[str, list[int] | str] | None = None
+):
+    period_values_raw = filters.get("period_values") if filters else None
+    if isinstance(period_values_raw, str):
+        period_values_raw = [period_values_raw]
+    months = _parse_period_values(period_values_raw)
+    period_filter = tuple_(Visit.year, Visit.month).in_(months) if months else None
+
     if target_ref == "clients_pharmacies":
         pharmacy_ids = select(distinct(Visit.pharmacy_id)).where(
             Visit.pharmacy_id.is_not(None)
         )
+        if period_filter is not None:
+            pharmacy_ids = pharmacy_ids.where(period_filter)
         return stmt.where(Pharmacy.id.in_(pharmacy_ids))
 
     if target_ref == "clients_geo_indicators":
         pharmacy_ids = select(distinct(Visit.pharmacy_id)).where(
             Visit.pharmacy_id.is_not(None)
         )
+        if period_filter is not None:
+            pharmacy_ids = pharmacy_ids.where(period_filter)
         geo_indicator_ids = select(distinct(Pharmacy.geo_indicator_id)).where(
             Pharmacy.id.in_(pharmacy_ids),
             Pharmacy.geo_indicator_id.is_not(None),
@@ -239,12 +267,17 @@ def apply_visits_scope(stmt, target_ref: ReferencesType):
 
     if target_ref == "employees_employees":
         employee_ids = select(distinct(Visit.employee_id))
+        if period_filter is not None:
+            employee_ids = employee_ids.where(period_filter)
         return stmt.where(Employee.id.in_(employee_ids))
 
     if target_ref == "employees_positions":
+        employee_ids = select(distinct(Visit.employee_id))
+        if period_filter is not None:
+            employee_ids = employee_ids.where(period_filter)
         position_ids = (
             select(distinct(Employee.position_id))
-            .where(Employee.id.in_(select(distinct(Visit.employee_id))))
+            .where(Employee.id.in_(employee_ids))
             .scalar_subquery()
         )
         return stmt.where(Position.id.in_(position_ids))
@@ -253,26 +286,38 @@ def apply_visits_scope(stmt, target_ref: ReferencesType):
         doctor_ids = select(distinct(Visit.doctor_id)).where(
             Visit.doctor_id.is_not(None)
         )
-        speciality_ids = select(distinct(Doctor.speciality_id)).where(
-            Doctor.id.in_(doctor_ids),
-            Doctor.speciality_id.is_not(None),
+        if period_filter is not None:
+            doctor_ids = doctor_ids.where(period_filter)
+        speciality_ids = (
+            select(distinct(GlobalDoctor.speciality_id))
+            .join(Doctor, Doctor.global_doctor_id == GlobalDoctor.id)
+            .where(
+                Doctor.id.in_(doctor_ids),
+                GlobalDoctor.speciality_id.is_not(None),
+            )
         )
         return stmt.where(Speciality.id.in_(speciality_ids))
 
     if target_ref == "products_product_groups":
         group_ids = select(distinct(Visit.product_group_id))
+        if period_filter is not None:
+            group_ids = group_ids.where(period_filter)
         return stmt.where(ProductGroup.id.in_(group_ids))
 
     if target_ref == "clients_medical_facilities":
         facility_ids = select(distinct(Visit.medical_facility_id)).where(
             Visit.medical_facility_id.is_not(None)
         )
+        if period_filter is not None:
+            facility_ids = facility_ids.where(period_filter)
         return stmt.where(MedicalFacility.id.in_(facility_ids))
 
     if target_ref == "clients_doctors":
         doctor_ids = select(distinct(Visit.doctor_id)).where(
             Visit.doctor_id.is_not(None)
         )
+        if period_filter is not None:
+            doctor_ids = doctor_ids.where(period_filter)
         return stmt.where(Doctor.id.in_(doctor_ids))
 
     return stmt
@@ -285,14 +330,14 @@ def apply_clients_scope(
 ):
     if scope_ref == "clients_doctors":
         if target_ref == "clients_medical_facilities":
-            facility_ids = select(distinct(Doctor.medical_facility_id)).where(
-                Doctor.medical_facility_id.is_not(None)
+            facility_ids = select(distinct(GlobalDoctor.medical_facility_id)).where(
+                GlobalDoctor.medical_facility_id.is_not(None)
             )
             return stmt.where(MedicalFacility.id.in_(facility_ids))
 
         if target_ref == "clients_specialities":
-            speciality_ids = select(distinct(Doctor.speciality_id)).where(
-                Doctor.speciality_id.is_not(None)
+            speciality_ids = select(distinct(GlobalDoctor.speciality_id)).where(
+                GlobalDoctor.speciality_id.is_not(None)
             )
             return stmt.where(Speciality.id.in_(speciality_ids))
 
@@ -418,6 +463,15 @@ def build_reference_stmt(reference: ReferencesType, company_id: int):
             stmt = stmt.where(Brand.company_id == company_id)
         return stmt
 
+    if reference == "clients_doctors":
+        stmt = select(
+            distinct(Doctor.id).label("id"),
+            GlobalDoctor.full_name.label("name"),
+        ).join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
+        if company_id:
+            stmt = stmt.where(Doctor.company_id == company_id)
+        return stmt
+
     model, label_column = REFERENCE_CONFIG[reference]
     stmt = select(distinct(model.id).label("id"), label_column.label("name"))
 
@@ -432,53 +486,32 @@ def apply_dynamic_filters(
     reference: ReferencesType,
     filters: dict[str, list[int]],
 ):
-    """
-    Динамически применяет фильтры к stmt.
-
-    Логика для каждого filter_key:
-      1. Прямое поле на target_model → WHERE col IN values
-      2. FK target → filter_model → WHERE fk_col IN values
-      3. FK filter_model → target → WHERE target.id IN (
-             SELECT DISTINCT fk_col FROM filter_model WHERE id IN values
-         )
-      Если связь не найдена - фильтр молча пропускается.
-    """
     target_model, _ = REFERENCE_CONFIG[reference]
 
     for filter_key, filter_values in filters.items():
         if not filter_values:
             continue
 
-        # ── 1. Прямая колонка на target_model (напр. "brand_id") ──────────
         direct_col = target_model.__table__.c.get(filter_key)
         if direct_col is not None:
             stmt = stmt.where(direct_col.in_(filter_values))
             continue
 
-        # ── Резолвим filter_key в (filter_model, filter_id_col) ───────────
         filter_info = FILTER_KEY_TO_MODEL.get(filter_key)
         if filter_info is None:
-            # Неизвестный ключ - пропускаем
             continue
 
         filter_model, filter_id_col = filter_info
 
-        # ── 2. Та же модель ───────────────────────────────────────────────
         if filter_model is target_model:
             stmt = stmt.where(target_model.id.in_(filter_values))
             continue
 
-        # ── 3. FK: target_model → filter_model ────────────────────────────
-        #    Напр. SKU.brand_id → Brand  =>  WHERE SKU.brand_id IN values
         fk_on_target = find_fk_column(target_model, filter_model)
         if fk_on_target is not None:
             stmt = stmt.where(fk_on_target.in_(filter_values))
             continue
 
-        # ── 4. FK: filter_model → target_model ────────────────────────────
-        #    Напр. SKU.brand_id → Brand  (target=Brand, filter=SKU)
-        #    => WHERE Brand.id IN (SELECT DISTINCT SKU.brand_id
-        #                          FROM SKU WHERE SKU.id IN values)
         fk_on_filter = find_fk_column(filter_model, target_model)
         if fk_on_filter is not None:
             subquery = select(distinct(fk_on_filter)).where(
@@ -496,7 +529,7 @@ async def get_grouped_filter_options(
     include_values: list[ReferencesType],
     scope: ScopeType | None,
     company_id: int | None,
-    filters: dict[str, list[int]] | None = None,
+    filters: dict[str, list[int] | str] | None = None,
 ) -> dict[str, list[FilterOption]]:
     payload: dict[str, list[FilterOption]] = {}
 
@@ -526,10 +559,18 @@ async def get_grouped_filter_options(
         stmt = build_reference_stmt(key, company_id)
 
         if key not in IMS_REFERENCE_CONFIG:
-            stmt = apply_scope_filter(stmt, key, scope_ref, prefetched_sku_ids)
+            stmt = apply_scope_filter(stmt, key, scope_ref, prefetched_sku_ids, filters)
 
         if filters and key not in IMS_REFERENCE_CONFIG:
-            stmt = apply_dynamic_filters(stmt, key, filters)
+            stmt = apply_dynamic_filters(
+                stmt,
+                key,
+                {
+                    k: v
+                    for k, v in filters.items()
+                    if isinstance(v, list) and all(isinstance(x, int) for x in v)
+                },
+            )
 
         rows_result = await session.execute(stmt)
         rows = rows_result.mappings().all()

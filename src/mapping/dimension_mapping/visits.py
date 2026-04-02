@@ -1,8 +1,6 @@
-from sqlalchemy import or_
-
 from src.db.models.clients import (
     Doctor,
-    GeoIndicator,
+    GlobalDoctor,
     MedicalFacility,
     Pharmacy,
     Speciality,
@@ -24,8 +22,8 @@ VISITS_DOCTOR_COUNT_DIMENSTIONS_MAPPING = {
     },
     "doctor": {
         "id": Doctor.id.label("doctor_id"),
-        "name": Doctor.full_name.label("doctor_name"),
-        "group_fields": [Doctor.id, Doctor.full_name],
+        "name": GlobalDoctor.full_name.label("doctor_name"),
+        "group_fields": [Doctor.id, GlobalDoctor.full_name],
     },
 }
 
@@ -92,35 +90,34 @@ VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING = {
         "join_condition": lambda: Visit.product_group_id == ProductGroup.id,
         "join_type": "join",
     },
-    "geo_indicator": {
-        "id_field": GeoIndicator.id,
-        "name_field": GeoIndicator.name,
-        "id_label": "indicator_id",
-        "name_label": "indicator_name",
-        "join_table": GeoIndicator,
-        "join_condition": lambda: or_(
-            Pharmacy.geo_indicator_id == GeoIndicator.id,
-            MedicalFacility.geo_indicator_id == GeoIndicator.id,
-        ),
-        "join_type": "outerjoin",
-    },
     "speciality": {
         "id_field": Speciality.id,
         "name_field": Speciality.name,
         "id_label": "speciality_id",
         "name_label": "speciality_name",
         "join_table": Speciality,
-        "join_condition": lambda: Doctor.speciality_id == Speciality.id,
+        "join_condition": lambda: GlobalDoctor.speciality_id == Speciality.id,
+        "join_type": "outerjoin",
+        "requires": ["doctor", "global_doctor"],
+    },
+    "global_doctor": {
+        "id_field": None,
+        "name_field": None,
+        "id_label": None,
+        "name_label": None,
+        "join_table": GlobalDoctor,
+        "join_condition": lambda: Doctor.global_doctor_id == GlobalDoctor.id,
         "join_type": "outerjoin",
         "requires": ["doctor"],
     },
     "doctor": {
-        "id_field": None,
-        "name_field": Doctor.full_name,
-        "id_label": None,
-        "name_label": "doctor_name",
+        "id_field": Visit.doctor_id,
+        "name_field": GlobalDoctor.full_name,
+        "id_label": "doctor_id",
+        "name_label": "doctor_full_name",
         "join_table": Doctor,
         "join_condition": lambda: Visit.doctor_id == Doctor.id,
         "join_type": "outerjoin",
+        "requires": ["global_doctor"],
     },
 }

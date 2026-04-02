@@ -4,12 +4,12 @@ from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import and_, func, insert, literal, or_, select
+from sqlalchemy import and_, func, insert, literal, or_, select, tuple_
 
 from src.db.models import (
     Doctor,
     Employee,
-    GeoIndicator,
+    GlobalDoctor,
     ImportLogs,
     MedicalFacility,
     Pharmacy,
@@ -417,69 +417,120 @@ class VisitService(
             filters.group_by_period, filters.period_values
         )
 
-        doctors_with_visits_subquery = (
-            select(
-                Doctor.speciality_id,
-                func.count(func.distinct(Doctor.id)).label("doctors_with_visits"),
-            )
+        base_visits = (
+            select(Visit.doctor_id)
             .select_from(Visit)
-            .join(Employee, Visit.employee_id == Employee.id)
-            .join(Doctor, Visit.doctor_id == Doctor.id)
-            .where(
-                Visit.doctor_id.is_not(None),
-            )
+            .where(Visit.doctor_id.is_not(None))
         )
 
-        doctors_with_visits_subquery = ListQueryHelper.apply_specs(
-            doctors_with_visits_subquery,
+        base_visits = ListQueryHelper.apply_specs(
+            base_visits,
             [
-                InOrNullSpec(Employee.company_id, [company_id] if company_id else None),
-                InOrNullSpec(Doctor.speciality_id, filters.speciality_ids),
+                InOrNullSpec(Visit.company_id, [company_id] if company_id else None),
                 InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),
                 InOrNullSpec(Visit.product_group_id, filters.product_group_ids),
             ],
         )
 
-        doctors_with_visits_subquery = ListQueryHelper.apply_period_values(
-            doctors_with_visits_subquery,
+        base_visits = ListQueryHelper.apply_period_values(
+            base_visits,
             period_values,
             year_col=Visit.year,
             month_col=Visit.month,
             quarter_col=quarter_expr,
         )
 
+        base_visits_subq = base_visits.subquery()
+
+        distinct_doctor_key = tuple_(
+            GlobalDoctor.full_name,
+            GlobalDoctor.medical_facility_id,
+            GlobalDoctor.speciality_id,
+        )
+
+        doctors_with_visits_subquery = (
+            select(
+                GlobalDoctor.speciality_id,
+                func.count(func.distinct(distinct_doctor_key)).label(
+                    "doctors_with_visits"
+                ),
+            )
+            .select_from(Doctor)
+            .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
+            .join(base_visits_subq, Doctor.id == base_visits_subq.c.doctor_id)
+        )
+
+        doctors_with_visits_subquery = ListQueryHelper.apply_specs(
+            doctors_with_visits_subquery,
+            [
+                InOrNullSpec(GlobalDoctor.speciality_id, filters.speciality_ids),
+            ],
+        )
+
         doctors_with_visits_subquery = doctors_with_visits_subquery.group_by(
-            Doctor.speciality_id
+            GlobalDoctor.speciality_id
+        ).subquery()
+
+        total_doctors_subquery = (
+            select(
+                GlobalDoctor.speciality_id.label("speciality_id"),
+                func.count(func.distinct(distinct_doctor_key)).label("total_count"),
+            )
+            .select_from(Doctor)
+            .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
+        )
+
+        total_doctors_subquery = ListQueryHelper.apply_specs(
+            total_doctors_subquery,
+            [
+                InOrNullSpec(GlobalDoctor.speciality_id, filters.speciality_ids),
+                InOrNullSpec(
+                    GlobalDoctor.medical_facility_id, filters.medical_facility_ids
+                ),
+                InOrNullSpec(Doctor.product_group_id, filters.product_group_ids),
+            ],
+        )
+
+        total_doctors_subquery = total_doctors_subquery.group_by(
+            GlobalDoctor.speciality_id
         ).subquery()
 
         stmt = (
             select(
                 Speciality.id.label("speciality_id"),
                 Speciality.name.label("speciality_name"),
-                func.count(Doctor.id).label("total_count"),
+                func.coalesce(total_doctors_subquery.c.total_count, 0).label(
+                    "total_count"
+                ),
                 func.coalesce(
                     doctors_with_visits_subquery.c.doctors_with_visits, 0
                 ).label("count_with_visits"),
-                (
-                    func.coalesce(doctors_with_visits_subquery.c.doctors_with_visits, 0)
-                    * 100.0
-                    / func.count(Doctor.id)
+                func.coalesce(
+                    (
+                        func.coalesce(
+                            doctors_with_visits_subquery.c.doctors_with_visits, 0
+                        )
+                        * 100.0
+                        / func.nullif(total_doctors_subquery.c.total_count, 0)
+                    ),
+                    0.0,
                 ).label("coverage_percentage"),
             )
-            .select_from(Doctor)
-            .join(Speciality, Doctor.speciality_id == Speciality.id)
+            .select_from(Speciality)
+            .outerjoin(
+                total_doctors_subquery,
+                Speciality.id == total_doctors_subquery.c.speciality_id,
+            )
             .outerjoin(
                 doctors_with_visits_subquery,
                 Speciality.id == doctors_with_visits_subquery.c.speciality_id,
             )
-            .where(Doctor.company_id == company_id if company_id is not None else True)
         )
 
         stmt = ListQueryHelper.apply_specs(
             stmt,
             [
                 InOrNullSpec(Speciality.id, filters.speciality_ids),
-                InOrNullSpec(Doctor.medical_facility_id, filters.medical_facility_ids),
             ],
         )
 
@@ -490,6 +541,7 @@ class VisitService(
         stmt = stmt.group_by(
             Speciality.id,
             Speciality.name,
+            total_doctors_subquery.c.total_count,
             doctors_with_visits_subquery.c.doctors_with_visits,
         )
 
@@ -520,8 +572,11 @@ class VisitService(
                 func.count(func.distinct(Doctor.id)).label("total_doctors"),
             )
             .select_from(Doctor)
-            .join(Speciality, Doctor.speciality_id == Speciality.id)
-            .join(MedicalFacility, Doctor.medical_facility_id == MedicalFacility.id)
+            .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
+            .join(Speciality, GlobalDoctor.speciality_id == Speciality.id)
+            .join(
+                MedicalFacility, GlobalDoctor.medical_facility_id == MedicalFacility.id
+            )
         )
 
         all_doctors_subquery = ListQueryHelper.apply_specs(
@@ -564,8 +619,11 @@ class VisitService(
             .select_from(Visit)
             .join(Employee, Visit.employee_id == Employee.id)
             .join(Doctor, Visit.doctor_id == Doctor.id)
-            .join(Speciality, Doctor.speciality_id == Speciality.id)
-            .join(MedicalFacility, Doctor.medical_facility_id == MedicalFacility.id)
+            .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
+            .join(Speciality, GlobalDoctor.speciality_id == Speciality.id)
+            .join(
+                MedicalFacility, GlobalDoctor.medical_facility_id == MedicalFacility.id
+            )
             .where(
                 Visit.doctor_id.is_not(None),
             )
@@ -597,7 +655,7 @@ class VisitService(
             if "speciality" in filters.group_by_dimensions:
                 search_conditions.append(Speciality.name.ilike(search_term))
             if "doctor" in filters.group_by_dimensions:
-                search_conditions.append(Doctor.full_name.ilike(search_term))
+                search_conditions.append(GlobalDoctor.full_name.ilike(search_term))
 
             if search_conditions:
                 doctors_with_visits_subquery = doctors_with_visits_subquery.where(
@@ -751,6 +809,8 @@ class VisitService(
                 if "requires" in dim_config:
                     for req in dim_config["requires"]:
                         tables_to_join.add(req)
+        if filters.speciality_ids:
+            tables_to_join.add("speciality")
 
         join_order = [
             "employee",
@@ -759,8 +819,8 @@ class VisitService(
             "pharmacy",
             "medical_facility",
             "doctor",
+            "global_doctor",
             "speciality",
-            "geo_indicator",
         ]
 
         for table_name in join_order:
@@ -783,7 +843,7 @@ class VisitService(
                 InOrNullSpec(Position.id, filters.position_ids),
                 InOrNullSpec(Visit.medical_facility_id, filters.medical_facility_ids),
                 InOrNullSpec(Visit.product_group_id, filters.product_group_ids),
-                InOrNullSpec(GeoIndicator.id, filters.geo_indicator_ids),
+                InOrNullSpec(Visit.doctor_id, filters.doctor_ids),
                 InOrNullSpec(Speciality.id, filters.speciality_ids),
             ],
         )
@@ -810,8 +870,6 @@ class VisitService(
                 search_conditions.append(Employee.full_name.ilike(search_term))
             if "position" in group_by_dimensions:
                 search_conditions.append(Position.name.ilike(search_term))
-            if "geo_indicator" in group_by_dimensions:
-                search_conditions.append(GeoIndicator.name.ilike(search_term))
             if "speciality" in group_by_dimensions:
                 search_conditions.append(Speciality.name.ilike(search_term))
 
@@ -826,7 +884,6 @@ class VisitService(
             "employee": Employee.full_name,
             "group": ProductGroup.name,
             "employee_visits": func.count(Visit.id),
-            "geo_indicator": GeoIndicator.name,
             "position": Position.name,
         }
 
@@ -834,7 +891,6 @@ class VisitService(
             "medical_facility",
             "pharmacy",
             "employee",
-            "geo_indicator",
             "group",
             "position",
         }
@@ -886,10 +942,7 @@ class VisitService(
             filters.group_by_period, filters.period_values
         )
         if period_values is None:
-            raise HTTPException(
-                status_code=400,
-                detail="period_values обязательны",
-            )
+            return []
 
         quarter_expr = func.ceil(Visit.month / 3.0)
 

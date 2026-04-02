@@ -149,11 +149,13 @@ class VisitSumForPeriodFilter(BaseModel):
     medical_facility_ids: list[int] | None = None
     employee_ids: list[int] | None = None
     position_ids: list[int] | None = None
+    doctor_ids: list[int] | None = None
     search: str | None = None
     period_values: list[str] | None = None
     group_by_period: Literal["month", "quarter", "year"] = "month"
-    geo_indicator_ids: list[int] | None = Field(default=None, alias="indicator_ids")
     speciality_ids: list[int] | None = None
+    months: list[int] | None = None
+    year: str | None = None
     group_by_dimensions: list[
         Literal[
             "pharmacy",
@@ -162,7 +164,6 @@ class VisitSumForPeriodFilter(BaseModel):
             "month",
             "employee",
             "product_group",
-            "geo_indicator",
             "speciality",
             "doctor",
             "position",
@@ -175,7 +176,6 @@ class VisitSumForPeriodFilter(BaseModel):
             "month",
             "employee",
             "product_group",
-            "geo_indicator",
             "speciality",
             "doctor",
             "position",
@@ -186,9 +186,10 @@ class VisitSumForPeriodFilter(BaseModel):
             "medical_facility",
             "pharmacy",
             "employee",
+            "doctor",
+            "speciality",
             "group",
             "employee_visits",
-            "geo_indicator",
         ]
         | None
     ) = None
@@ -207,10 +208,9 @@ class VisitCountPeriodResponse(BaseModel):
     product_group_id: int
     product_group: str
     employee_visits: int
-    indicator_id: int | None
-    indicator_name: str | None
     speciality_id: int | None
     speciality_name: str | None
-    doctor_name: str | None
+    doctor_id: int | None
+    doctor_full_name: str | None
     position_id: int | None = None
     position: str | None = None

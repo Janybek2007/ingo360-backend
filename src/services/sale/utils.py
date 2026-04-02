@@ -72,6 +72,7 @@ async def import_sales_from_excel(
     constraint_name: str,
     relations: list[RelationSpec],
     get_id_map: Callable[..., Any],
+    normalize_indicator: Callable[[str], str] | None = None,
 ) -> dict[str, Any]:
     with open(file_path, "rb") as f:
         first_row = next(iter_excel_records(f), None)
@@ -205,6 +206,11 @@ async def import_sales_from_excel(
             sku_name = record.get("sku")
             month_value = record.get("месяц")
             record["квартал"] = (int(month_value) - 1) // 3 + 1 if month_value else None
+
+            if normalize_indicator and "indicator" in record:
+                raw = record.get("indicator")
+                if raw is not None:
+                    record["indicator"] = normalize_indicator(str(raw))
 
             records.append((row_index, record))
             for rel in relations:

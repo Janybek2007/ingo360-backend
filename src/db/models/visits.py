@@ -21,6 +21,8 @@ class Visit(Base):
 
     product_group_id: Mapped[int] = mapped_column(ForeignKey("product_groups.id"))
     product_group: Mapped["ProductGroup"] = relationship(back_populates="visits")
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
+    company: Mapped["Company"] = relationship(back_populates="visits")
     employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
     employee: Mapped["Employee"] = relationship(back_populates="visits")
     client_type: Mapped[str]

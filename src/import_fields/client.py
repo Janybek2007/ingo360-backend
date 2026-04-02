@@ -1,4 +1,5 @@
 from src.import_fields.base import (
+    access_mode,
     category,
     company,
     distributor,
@@ -20,12 +21,13 @@ speciality_fields = [name]
 
 doctor_fields = [
     fio.as_required(),
-    company.as_required(),
     lpu.as_required(),
     speciality.as_required(),
-    group.as_required(),
+    company,
+    group,
     category,
     employee,
+    access_mode,
 ]
 
 pharmacy_fields = [

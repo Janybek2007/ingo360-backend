@@ -6,7 +6,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from src.api.dependencies.current_user import current_operator_user
 from src.api.dependencies.excel_file import ExcelFile
-from src.db.models import Doctor, MedicalFacility, Pharmacy, User
+from src.db.models import Doctor, GlobalDoctor, MedicalFacility, Pharmacy, User
 from src.db.session import db_session
 from src.schemas import client
 from src.schemas.base_filter import PaginatedResponse
@@ -133,14 +133,22 @@ async def get_doctors(
     session: Annotated["AsyncSession", Depends(db_session.get_session)],
     filters: client.DoctorListRequest,
 ):
-    load_options = [
-        selectinload(Doctor.responsible_employee),
-        selectinload(Doctor.medical_facility),
-        selectinload(Doctor.speciality),
-        selectinload(Doctor.client_category),
-        selectinload(Doctor.product_group),
-        selectinload(Doctor.company),
-    ]
+    if filters.mode == "global":
+        load_options = [
+            selectinload(GlobalDoctor.medical_facility),
+            selectinload(GlobalDoctor.speciality),
+        ]
+    else:
+        load_options = [
+            selectinload(Doctor.global_doctor).selectinload(
+                GlobalDoctor.medical_facility
+            ),
+            selectinload(Doctor.global_doctor).selectinload(GlobalDoctor.speciality),
+            selectinload(Doctor.responsible_employee),
+            selectinload(Doctor.client_category),
+            selectinload(Doctor.product_group),
+            selectinload(Doctor.company),
+        ]
     return await client_service.doctor_service.get_multi(
         session, load_options=load_options, filters=filters
     )
@@ -160,16 +168,18 @@ async def export_doctors_excel(
         model_path="src.db.models.clients.Doctor",
         serializer_path="src.schemas.client.DoctorResponse",
         load_options_paths=[
+            "global_doctor",
+            "global_doctor.medical_facility",
+            "global_doctor.speciality",
             "responsible_employee",
-            "medical_facility",
-            "speciality",
             "client_category",
             "product_group",
+            "company",
         ],
         header_map=payload.header_map,
         fields_map=payload.fields_map,
         boolean_map=payload.boolean_map,
-        custom_map=payload.custom_map,
+        custom_map={"mode": {"company": "компания", "global": "общий"}},
     )
 
     await create_export_task_record(
@@ -190,13 +200,20 @@ async def create_doctor(
     doctor: client.DoctorCreate,
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):
-    load_options = [
-        joinedload(Doctor.responsible_employee),
-        joinedload(Doctor.medical_facility),
-        joinedload(Doctor.speciality),
-        joinedload(Doctor.client_category),
-        joinedload(Doctor.product_group),
-    ]
+    if doctor.mode == "global":
+        load_options = [
+            joinedload(GlobalDoctor.medical_facility),
+            joinedload(GlobalDoctor.speciality),
+        ]
+    else:
+        load_options = [
+            joinedload(Doctor.responsible_employee),
+            joinedload(Doctor.client_category),
+            joinedload(Doctor.product_group),
+            joinedload(Doctor.company),
+            joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.medical_facility),
+            joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.speciality),
+        ]
     return await client_service.doctor_service.create(
         session, doctor, load_options=load_options
     )
@@ -220,14 +237,16 @@ async def bulk_insert_doctors(
     dependencies=[Depends(current_operator_user)],
 )
 async def get_doctor(
-    doctor_id: int, session: Annotated[AsyncSession, Depends(db_session.get_session)]
+    doctor_id: int,
+    session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):
     load_options = [
         joinedload(Doctor.responsible_employee),
-        joinedload(Doctor.medical_facility),
-        joinedload(Doctor.speciality),
         joinedload(Doctor.client_category),
         joinedload(Doctor.product_group),
+        joinedload(Doctor.company),
+        joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.medical_facility),
+        joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.speciality),
     ]
     return await client_service.doctor_service.get_or_404(
         session, doctor_id, load_options=load_options
@@ -246,10 +265,11 @@ async def update_doctor(
 ):
     load_options = [
         joinedload(Doctor.responsible_employee),
-        joinedload(Doctor.medical_facility),
-        joinedload(Doctor.speciality),
         joinedload(Doctor.client_category),
         joinedload(Doctor.product_group),
+        joinedload(Doctor.company),
+        joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.medical_facility),
+        joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.speciality),
     ]
     return await client_service.doctor_service.update(
         session, doctor_id, doctor, load_options=load_options
@@ -258,7 +278,8 @@ async def update_doctor(
 
 @router.delete("/doctors/{doctor_id}", dependencies=[Depends(current_operator_user)])
 async def delete_doctor(
-    doctor_id: int, session: Annotated[AsyncSession, Depends(db_session.get_session)]
+    doctor_id: int,
+    session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):
     return await client_service.doctor_service.delete(session, doctor_id)
 

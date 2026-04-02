@@ -65,6 +65,12 @@ class PrimarySalesAndStock(Base):
             "indicator",
             "published",
         ),
+        Index(
+            "idx_primary_sales_sku_year_indicator",
+            "sku_id",
+            "year",
+            "indicator",
+        ),
     )
 
 
@@ -172,5 +178,11 @@ class TertiarySalesAndStock(Base):
             "month",
             "indicator",
             "published",
+        ),
+        Index(
+            "idx_tertiary_sales_sku_year_indicator",
+            "sku_id",
+            "year",
+            "indicator",
         ),
     )

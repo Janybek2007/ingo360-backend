@@ -1,6 +1,8 @@
 from typing import Annotated
 
+import orjson
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -120,12 +122,14 @@ async def get_primary_stock(
     filters: sale.ShipmentStockFilter,
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await primary_sales_service.get_shipment_stock_report(
+    result = await primary_sales_service.get_shipment_stock_report(
         session,
         filters=filters,
         indicator="остат",
         company_id=current_user.company_id,
     )
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.post("/primary/reports/sales", dependencies=[Depends(can_view_primary_sales)])
@@ -134,12 +138,14 @@ async def get_primary_sales(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await primary_sales_service.get_shipment_stock_report(
+    result = await primary_sales_service.get_shipment_stock_report(
         session,
         filters=filters,
         indicator="продаж",
         company_id=current_user.company_id,
     )
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.post("/primary/reports/chart", dependencies=[Depends(can_view_primary_sales)])
@@ -161,11 +167,13 @@ async def get_inventory(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await primary_sales_service.get_stock_coverage(
+    result = await primary_sales_service.get_stock_coverage(
         session,
         filters,
         company_id=current_user.company_id,
     )
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.post(
@@ -177,11 +185,13 @@ async def get_distributor_share(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await primary_sales_service.get_distributor_share_report(
+    result = await primary_sales_service.get_distributor_share_report(
         session,
         filters,
         company_id=current_user.company_id,
     )
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.post(
@@ -198,7 +208,9 @@ async def get_distributor_shares_chart(
         filters,
         company_id=current_user.company_id,
     )
-    return pivot_distributor_share(rows)
+    result = pivot_distributor_share(rows)
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.get(
@@ -353,9 +365,11 @@ async def get_secondary_sales_report(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await secondary_sales_service.get_sales_report(
+    result = await secondary_sales_service.get_sales_report(
         session, filters=filters, company_id=current_user.company_id
     )
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.get(
@@ -367,11 +381,13 @@ async def get_sales_report_by_distributors(
     current_user: Annotated[User, Depends(current_active_user)],
     filters: Annotated[sale.SalesByDistributorFilter, Query()],
 ):
-    return await secondary_sales_service.get_sales_by_distributor_report(
+    result = await secondary_sales_service.get_sales_by_distributor_report(
         session=session,
         company_id=current_user.company_id,
         filters=filters,
     )
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.post(
@@ -388,7 +404,9 @@ async def get_sales_report_by_distributors_chart(
         company_id=current_user.company_id,
         filters=filters,
     )
-    return pivot_sales_by_distributors(rows)
+    result = pivot_sales_by_distributors(rows)
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.get(
@@ -529,9 +547,11 @@ async def get_tertiary_sales_report(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await tertiary_sales_service.get_sales_report(
+    result = await tertiary_sales_service.get_sales_report(
         session, filters=filters, company_id=current_user.company_id
     )
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.post("/tertiary/reports/chart", dependencies=[Depends(can_view_tertiary_sales)])
@@ -617,9 +637,11 @@ async def get_tertiary_stock_report(
     filters: sale.SecTerSalesReportFilter,
     current_user: Annotated[User, Depends(current_active_user)],
 ):
-    return await tertiary_sales_service.get_stock_report(
+    result = await tertiary_sales_service.get_stock_report(
         session, filters=filters, company_id=current_user.company_id
     )
+    body = orjson.dumps(result)
+    return Response(content=body, media_type="application/json")
 
 
 @router.get("/last-year", dependencies=[Depends(current_active_user)])

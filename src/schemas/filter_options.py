@@ -83,4 +83,4 @@ class GroupedFilterOptionsResponse(BaseModel):
 class GroupedFilterOptionsRequest(BaseModel):
     references: list[ReferencesType]
     scope: ScopeType | None = None
-    filters: dict[str, list[int]] | None = None
+    filters: dict[str, list[int | str]] | None = None

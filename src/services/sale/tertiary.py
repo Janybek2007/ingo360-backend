@@ -1,9 +1,10 @@
 import os
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
-from sqlalchemy import Float, Numeric, and_, case, func, or_, select
+from sqlalchemy import Float, Numeric, and_, case, func, select
 
 from src.db.models import (
     SKU,
@@ -31,6 +32,11 @@ from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
 from src.utils.explain_analyze import ExplainArguments
+from src.utils.indicator_resolver import (
+    TERTIARY_SALES_VALUES,
+    TERTIARY_STOCK_VALUES,
+    normalize_tertiary_indicator,
+)
 from src.utils.list_query_helper import (
     InOrNullSpec,
     ListQueryHelper,
@@ -135,6 +141,7 @@ class TertiarySalesService(
                     ),
                 ],
                 get_id_map=self.get_id_map,
+                normalize_indicator=normalize_tertiary_indicator,
             )
         finally:
             pass
@@ -198,10 +205,8 @@ class TertiarySalesService(
                     if isinstance(filters.indicators, list)
                     else [filters.indicators]
                 )
-
-                stmt = stmt.where(
-                    or_(*(self.model.indicator.ilike(f"%{v}%") for v in raw))
-                )
+                normalized = [normalize_tertiary_indicator(v) for v in raw]
+                stmt = stmt.where(self.model.indicator.in_(normalized))
 
             if filters.sort_by == "brands" and not joined_sku:
                 stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
@@ -258,6 +263,7 @@ class TertiarySalesService(
         company_id: int | None = None,
         explain: ExplainArguments | None = None,
     ):
+        _t0 = time.perf_counter()
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
         period_values = build_period_values(
             filters.group_by_period, filters.period_values
@@ -267,7 +273,7 @@ class TertiarySalesService(
             BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR, filters.group_by_dimensions
         )
 
-        indicator_filter = TertiarySalesAndStock.indicator.ilike("%продаж%")
+        indicator_filter = TertiarySalesAndStock.indicator.in_(TERTIARY_SALES_VALUES)
 
         base_stmt = (
             select(
@@ -341,16 +347,10 @@ class TertiarySalesService(
 
         final_stmt = select(
             *final_select_fields,
-            func.json_object_agg(
-                period_agg.c.period,
-                func.json_build_object(
-                    "packages", period_agg.c.packages, "amount", period_agg.c.amount
-                ),
-            ).label("periods_data"),
+            period_agg.c.period,
+            period_agg.c.packages,
+            period_agg.c.amount,
         ).select_from(period_agg)
-
-        if final_group_by_fields:
-            final_stmt = final_stmt.group_by(*final_group_by_fields)
 
         sort_map = {
             "sku": getattr(period_agg.c, "sku_name", None),
@@ -361,7 +361,6 @@ class TertiarySalesService(
             "geo_indicator": getattr(period_agg.c, "geo_indicator_name", None),
             "pharmacy": getattr(period_agg.c, "pharmacy_name", None),
         }
-
         final_stmt = ListQueryHelper.apply_sorting_with_default(
             final_stmt,
             getattr(filters, "sort_by", None),
@@ -373,13 +372,47 @@ class TertiarySalesService(
             final_stmt, filters.limit, filters.offset
         )
 
+        _t1 = time.perf_counter()
+        print(f"[TIMER] build query: {(_t1 - _t0) * 1000:.0f}ms")
+
         if explain is not None:
             from src.utils.explain_analyze import explain_analyze
 
             return await explain_analyze(session, final_stmt, explain)
 
-        result = await session.execute(final_stmt)
-        return result.mappings().all()
+        rows = (await session.execute(final_stmt)).mappings().all()
+
+        _t2 = time.perf_counter()
+        print(
+            f"[TIMER] DB execute + fetch: {(_t2 - _t1) * 1000:.0f}ms, rows={len(rows)}"
+        )
+
+        if not filters.group_by_dimensions:
+            return rows
+
+        dims = filters.group_by_dimensions
+        grouped: dict[tuple, dict] = {}
+        order: list[tuple] = []
+
+        for row in rows:
+            key = tuple(row[f"{d}_id"] for d in dims)
+            if key not in grouped:
+                entry = {}
+                for d in dims:
+                    entry[f"{d}_id"] = row[f"{d}_id"]
+                    entry[f"{d}_name"] = row[f"{d}_name"]
+                entry["periods_data"] = {}
+                grouped[key] = entry
+                order.append(key)
+            grouped[key]["periods_data"][row["period"]] = {
+                "packages": float(row["packages"]),
+                "amount": float(row["amount"]),
+            }
+
+        _t3 = time.perf_counter()
+        print(f"[TIMER] Python grouping: {(_t3 - _t2) * 1000:.0f}ms")
+
+        return [grouped[k] for k in order]
 
     @staticmethod
     async def get_period_totals(
@@ -397,7 +430,7 @@ class TertiarySalesService(
         sales_packages = func.sum(
             case(
                 (
-                    TertiarySalesAndStock.indicator.ilike("%продаж%"),
+                    TertiarySalesAndStock.indicator.in_(TERTIARY_SALES_VALUES),
                     TertiarySalesAndStock.packages,
                 ),
                 else_=0,
@@ -406,7 +439,7 @@ class TertiarySalesService(
         sales_amount = func.sum(
             case(
                 (
-                    TertiarySalesAndStock.indicator.ilike("%продаж%"),
+                    TertiarySalesAndStock.indicator.in_(TERTIARY_SALES_VALUES),
                     TertiarySalesAndStock.amount,
                 ),
                 else_=0,
@@ -547,7 +580,7 @@ class TertiarySalesService(
                 ),
             )
             .where(
-                TertiarySalesAndStock.indicator.ilike("%остат%"),
+                TertiarySalesAndStock.indicator.in_(TERTIARY_STOCK_VALUES),
                 TertiarySalesAndStock.packages > 0,
             )
         )
@@ -615,7 +648,9 @@ class TertiarySalesService(
             *final_select_fields,
             func.json_object_agg(
                 period_agg.c.period,
-                func.json_build_object("nd_percent", period_agg.c.nd_percent),
+                func.json_build_object(
+                    "nd_percent", func.cast(period_agg.c.nd_percent, Float)
+                ),
             ).label("periods_data"),
         )
 
@@ -649,7 +684,9 @@ class TertiarySalesService(
         session: "AsyncSession",
         filters: sale_schema.SecTerSalesReportFilter | None = None,
         company_id: int | None = None,
+        explain: ExplainArguments | None = None,
     ):
+        _t0 = time.perf_counter()
         period_key = build_period_key(filters.group_by_period, TertiarySalesAndStock)
         period_values = build_period_values(
             filters.group_by_period, filters.period_values
@@ -659,7 +696,7 @@ class TertiarySalesService(
             BASE_SALE_DIMENSTION_MAPPING_WITH_GEO_INDICATOR, filters.group_by_dimensions
         )
 
-        indicator_filter = TertiarySalesAndStock.indicator.ilike("%остат%")
+        indicator_filter = TertiarySalesAndStock.indicator.in_(TERTIARY_STOCK_VALUES)
 
         base_stmt = (
             select(
@@ -731,18 +768,16 @@ class TertiarySalesService(
                     ]
                 )
 
-        final_stmt = select(
-            *final_select_fields,
-            func.json_object_agg(
+        final_stmt = (
+            select(
+                *final_select_fields,
                 period_agg.c.period,
-                func.json_build_object(
-                    "packages", period_agg.c.packages, "amount", period_agg.c.amount
-                ),
-            ).label("periods_data"),
-        ).select_from(period_agg)
-
-        if final_group_by_fields:
-            final_stmt = final_stmt.group_by(*final_group_by_fields)
+                period_agg.c.packages,
+                period_agg.c.amount,
+            )
+            .select_from(period_agg)
+            .order_by(*final_group_by_fields, period_agg.c.period)
+        )
 
         sort_map = {
             "sku": getattr(period_agg.c, "sku_name", None),
@@ -753,7 +788,6 @@ class TertiarySalesService(
             "geo_indicator": getattr(period_agg.c, "geo_indicator_name", None),
             "pharmacy": getattr(period_agg.c, "pharmacy_name", None),
         }
-
         final_stmt = ListQueryHelper.apply_sorting_with_default(
             final_stmt,
             getattr(filters, "sort_by", None),
@@ -765,5 +799,44 @@ class TertiarySalesService(
             final_stmt, filters.limit, filters.offset
         )
 
-        result = await session.execute(final_stmt)
-        return result.mappings().all()
+        _t1 = time.perf_counter()
+        print(f"[TIMER] build query: {(_t1 - _t0) * 1000:.0f}ms")
+
+        if explain is not None:
+            from src.utils.explain_analyze import explain_analyze
+
+            return await explain_analyze(session, final_stmt, explain)
+
+        rows = (await session.execute(final_stmt)).mappings().all()
+
+        _t2 = time.perf_counter()
+        print(
+            f"[TIMER] DB execute + fetch: {(_t2 - _t1) * 1000:.0f}ms, rows={len(rows)}"
+        )
+
+        if not filters.group_by_dimensions:
+            return rows
+
+        dims = filters.group_by_dimensions
+        grouped: dict[tuple, dict] = {}
+        order: list[tuple] = []
+
+        for row in rows:
+            key = tuple(row[f"{d}_id"] for d in dims)
+            if key not in grouped:
+                entry = {}
+                for d in dims:
+                    entry[f"{d}_id"] = row[f"{d}_id"]
+                    entry[f"{d}_name"] = row[f"{d}_name"]
+                entry["periods_data"] = {}
+                grouped[key] = entry
+                order.append(key)
+            grouped[key]["periods_data"][row["period"]] = {
+                "packages": float(row["packages"]),
+                "amount": float(row["amount"]),
+            }
+
+        _t3 = time.perf_counter()
+        print(f"[TIMER] Python grouping: {(_t3 - _t2) * 1000:.0f}ms")
+
+        return [grouped[k] for k in order]

@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Float, func, or_, select
 
 from src.db.models import (
     SKU,
@@ -28,6 +28,10 @@ from src.services.sale.utils import RelationSpec, import_sales_from_excel
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
+from src.utils.indicator_resolver import (
+    SECONDARY_SALES_VALUES,
+    normalize_secondary_indicator,
+)
 from src.utils.list_query_helper import (
     InOrNullSpec,
     ListQueryHelper,
@@ -194,10 +198,8 @@ class SecondarySalesService(
                     if isinstance(filters.indicators, list)
                     else [filters.indicators]
                 )
-
-                stmt = stmt.where(
-                    or_(*(self.model.indicator.ilike(f"%{v}%") for v in raw))
-                )
+                normalized = [normalize_secondary_indicator(v) for v in raw]
+                stmt = stmt.where(self.model.indicator.in_(normalized))
 
             if filters.sort_by == "brands" and not joined_sku:
                 stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
@@ -278,7 +280,7 @@ class SecondarySalesService(
             .outerjoin(Distributor, SecondarySales.distributor_id == Distributor.id)
             .outerjoin(GeoIndicator, Pharmacy.geo_indicator_id == GeoIndicator.id)
             .where(
-                SecondarySales.indicator.ilike("%продаж%"),
+                SecondarySales.indicator.in_(SECONDARY_SALES_VALUES),
             )
         )
 
@@ -332,16 +334,16 @@ class SecondarySalesService(
 
         final_stmt = select(
             *final_select_fields,
-            func.json_object_agg(
-                period_agg.c.period,
-                func.json_build_object(
-                    "packages", period_agg.c.packages, "amount", period_agg.c.amount
-                ),
-            ).label("periods_data"),
-        )
+            period_agg.c.period,
+            func.cast(period_agg.c.packages, Float).label("packages"),
+            func.cast(period_agg.c.amount, Float).label("amount"),
+        ).select_from(period_agg)
 
-        if final_group_by_fields:
-            final_stmt = final_stmt.group_by(*final_group_by_fields)
+        group_by_cols = list(final_group_by_fields) if final_group_by_fields else []
+        group_by_cols.extend(
+            [period_agg.c.period, period_agg.c.packages, period_agg.c.amount]
+        )
+        final_stmt = final_stmt.group_by(*group_by_cols)
 
         sort_map = {
             "sku": getattr(period_agg.c, "sku_name", None),
@@ -364,8 +366,31 @@ class SecondarySalesService(
             final_stmt, filters.limit, filters.offset
         )
 
-        result = await session.execute(final_stmt)
-        return result.mappings().all()
+        rows = (await session.execute(final_stmt)).mappings().all()
+
+        if not filters.group_by_dimensions:
+            return rows
+
+        dims = filters.group_by_dimensions
+        grouped: dict[tuple, dict] = {}
+        order: list[tuple] = []
+
+        for row in rows:
+            key = tuple(row[f"{d}_id"] for d in dims)
+            if key not in grouped:
+                entry = {}
+                for d in dims:
+                    entry[f"{d}_id"] = row[f"{d}_id"]
+                    entry[f"{d}_name"] = row[f"{d}_name"]
+                entry["periods_data"] = {}
+                grouped[key] = entry
+                order.append(key)
+            grouped[key]["periods_data"][row["period"]] = {
+                "packages": float(row["packages"]),
+                "amount": float(row["amount"]),
+            }
+
+        return [grouped[k] for k in order]
 
     @staticmethod
     async def get_period_totals(
@@ -388,7 +413,7 @@ class SecondarySalesService(
             .select_from(SecondarySales)
             .join(SKU, SecondarySales.sku_id == SKU.id)
             .join(Pharmacy, SecondarySales.pharmacy_id == Pharmacy.id)
-            .where(SecondarySales.indicator.ilike("%продаж%"))
+            .where(SecondarySales.indicator.in_(SECONDARY_SALES_VALUES))
         )
 
         if company_id is not None:
@@ -532,9 +557,9 @@ class SecondarySalesService(
                 base_stmt.c.period,
                 func.json_build_object(
                     "total_packages",
-                    base_stmt.c.total_packages,
+                    func.cast(base_stmt.c.total_packages, Float),
                     "total_amount",
-                    base_stmt.c.total_amount,
+                    func.cast(base_stmt.c.total_amount, Float),
                 ),
             ).label("periods_data"),
         )
@@ -618,9 +643,9 @@ class SecondarySalesService(
                 base_stmt.c.period,
                 func.json_build_object(
                     "total_packages",
-                    base_stmt.c.total_packages,
+                    func.cast(base_stmt.c.total_packages, Float),
                     "total_amount",
-                    base_stmt.c.total_amount,
+                    func.cast(base_stmt.c.total_amount, Float),
                 ),
             ).label("periods_data"),
         ).group_by(base_stmt.c.distributor_id, base_stmt.c.distributor_name)

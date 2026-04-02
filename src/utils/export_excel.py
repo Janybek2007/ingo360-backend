@@ -23,12 +23,30 @@ def _format_template(template: str, data: dict[str, Any]) -> str:
     return formatted.strip()
 
 
-def _apply_custom_map(rule: dict[str, str], row: dict[str, Any]) -> str:
-    # rule: {"is_admin": "administrator", "is_operator": "operator"}
+def _apply_custom_map(
+    rule: dict[str, str], row: dict[str, Any], field_name: str = ""
+) -> str:
+    # rule: {"company": "компания", "global": "обший"} — value-to-label mapping
+    # field_name: имя поля в row (например "mode")
+
+    # 1. Если есть field_name — берём значение этого поля и маппим
+    if field_name:
+        value = row.get(field_name)
+        if value in rule:
+            return rule[value]
+
+    # 2. Boolean flag fallback: {"is_active": "Да"} — если поле True/1
     for flag_field, label in rule.items():
         value = row.get(flag_field)
         if value is True or value == 1:
             return label
+
+    # 3. Value-mapping fallback: ищем в row значение совпадающее с ключом rule
+    for field_val, label in rule.items():
+        for row_val in row.values():
+            if row_val == field_val:
+                return label
+
     return ""
 
 
@@ -48,7 +66,7 @@ def build_export_row_values(
     values: list[Any] = []
     for key in headers:
         if key in custom_map:
-            value = _apply_custom_map(custom_map[key], row)
+            value = _apply_custom_map(custom_map[key], row, field_name=key)
         elif key in fields_map:
             value = _format_template(fields_map[key], row)
         elif "." in key:

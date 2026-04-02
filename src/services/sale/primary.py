@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator
 from uuid import uuid4
 
-from sqlalchemy import Numeric, case, cast, func, or_, select
+from sqlalchemy import Float, Numeric, case, cast, func, or_, select
 
 from src.db.models import (
     SKU,
@@ -24,6 +24,11 @@ from src.services.sale.utils import RelationSpec, import_sales_from_excel
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
+from src.utils.indicator_resolver import (
+    PRIMARY_SALES_VALUES,
+    PRIMARY_STOCK_VALUES,
+    normalize_primary_indicator,
+)
 from src.utils.list_query_helper import (
     InOrNullSpec,
     ListQueryHelper,
@@ -121,6 +126,7 @@ class PrimarySalesAndStockService(
                     )
                 ],
                 get_id_map=self.get_id_map,
+                normalize_indicator=normalize_primary_indicator,
             )
         finally:
             pass
@@ -181,10 +187,8 @@ class PrimarySalesAndStockService(
                     if isinstance(filters.indicators, list)
                     else [filters.indicators]
                 )
-
-                stmt = stmt.where(
-                    or_(*(self.model.indicator.ilike(f"%{v}%") for v in raw))
-                )
+                normalized = [normalize_primary_indicator(v) for v in raw]
+                stmt = stmt.where(self.model.indicator.in_(normalized))
 
             if filters.sort_by == "brands" and not joined_sku:
                 stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
@@ -315,19 +319,16 @@ class PrimarySalesAndStockService(
 
         final_stmt = select(
             *final_select_fields,
-            func.json_object_agg(
-                period_agg.c.period,
-                func.json_build_object(
-                    "packages",
-                    period_agg.c.packages,
-                    "amount",
-                    period_agg.c.amount,
-                ),
-            ).label("periods_data"),
-        )
+            period_agg.c.period,
+            func.cast(period_agg.c.packages, Float).label("packages"),
+            func.cast(period_agg.c.amount, Float).label("amount"),
+        ).select_from(period_agg)
 
-        if final_group_by_fields:
-            final_stmt = final_stmt.group_by(*final_group_by_fields)
+        group_by_cols = list(final_group_by_fields) if final_group_by_fields else []
+        group_by_cols.extend(
+            [period_agg.c.period, period_agg.c.packages, period_agg.c.amount]
+        )
+        final_stmt = final_stmt.group_by(*group_by_cols)
 
         sort_map = {
             "sku": getattr(period_agg.c, "sku_name", None),
@@ -348,8 +349,31 @@ class PrimarySalesAndStockService(
             final_stmt, filters.limit, filters.offset
         )
 
-        result = await session.execute(final_stmt)
-        return result.mappings().all()
+        rows = (await session.execute(final_stmt)).mappings().all()
+
+        if not filters.group_by_dimensions:
+            return rows
+
+        dims = filters.group_by_dimensions
+        grouped: dict[tuple, dict] = {}
+        order: list[tuple] = []
+
+        for row in rows:
+            key = tuple(row[f"{d}_id"] for d in dims)
+            if key not in grouped:
+                entry = {}
+                for d in dims:
+                    entry[f"{d}_id"] = row[f"{d}_id"]
+                    entry[f"{d}_name"] = row[f"{d}_name"]
+                entry["periods_data"] = {}
+                grouped[key] = entry
+                order.append(key)
+            grouped[key]["periods_data"][row["period"]] = {
+                "packages": row["packages"],
+                "amount": row["amount"],
+            }
+
+        return [grouped[k] for k in order]
 
     @staticmethod
     async def get_period_totals(
@@ -374,7 +398,7 @@ class PrimarySalesAndStockService(
             select(
                 period_key.label("period"),
                 case(
-                    (PrimarySalesAndStock.indicator.ilike("%продаж%"), "sales"),
+                    (PrimarySalesAndStock.indicator.in_(PRIMARY_SALES_VALUES), "sales"),
                     else_="stock",
                 ).label("ind"),
                 PrimarySalesAndStock.amount,
@@ -383,9 +407,8 @@ class PrimarySalesAndStockService(
             .select_from(PrimarySalesAndStock)
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
             .where(
-                or_(
-                    PrimarySalesAndStock.indicator.ilike("%остат%"),
-                    PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                PrimarySalesAndStock.indicator.in_(
+                    PRIMARY_SALES_VALUES + PRIMARY_STOCK_VALUES
                 )
             )
         )
@@ -519,7 +542,9 @@ class PrimarySalesAndStockService(
                         func.sum(
                             case(
                                 (
-                                    PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                                    PrimarySalesAndStock.indicator.in_(
+                                        PRIMARY_SALES_VALUES
+                                    ),
                                     sales_col,
                                 ),
                                 else_=0,
@@ -529,7 +554,9 @@ class PrimarySalesAndStockService(
                         func.sum(
                             case(
                                 (
-                                    PrimarySalesAndStock.indicator.ilike("%остат%"),
+                                    PrimarySalesAndStock.indicator.in_(
+                                        PRIMARY_STOCK_VALUES
+                                    ),
                                     stock_col,
                                 ),
                                 else_=0,
@@ -539,8 +566,8 @@ class PrimarySalesAndStockService(
                             func.sum(
                                 case(
                                     (
-                                        PrimarySalesAndStock.indicator.ilike(
-                                            "%продаж%"
+                                        PrimarySalesAndStock.indicator.in_(
+                                            PRIMARY_SALES_VALUES
                                         ),
                                         sales_col,
                                     ),
@@ -576,9 +603,8 @@ class PrimarySalesAndStockService(
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .where(
-                or_(
-                    PrimarySalesAndStock.indicator.ilike("%остат%"),
-                    PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                PrimarySalesAndStock.indicator.in_(
+                    PRIMARY_SALES_VALUES + PRIMARY_STOCK_VALUES
                 ),
             )
         )
@@ -631,19 +657,24 @@ class PrimarySalesAndStockService(
 
         final_stmt = select(
             *final_select_fields,
-            func.json_object_agg(
-                period_agg.c.period,
-                func.json_build_object(
-                    "coverage_months_amount",
-                    period_agg.c.coverage_months_amount,
-                    "coverage_months_packages",
-                    period_agg.c.coverage_months_packages,
-                ),
-            ).label("periods_data"),
-        )
+            period_agg.c.period,
+            func.cast(period_agg.c.coverage_months_amount, Float).label(
+                "coverage_months_amount"
+            ),
+            func.cast(period_agg.c.coverage_months_packages, Float).label(
+                "coverage_months_packages"
+            ),
+        ).select_from(period_agg)
 
-        if final_group_by_fields:
-            final_stmt = final_stmt.group_by(*final_group_by_fields)
+        group_by_cols = list(final_group_by_fields) if final_group_by_fields else []
+        group_by_cols.extend(
+            [
+                period_agg.c.period,
+                period_agg.c.coverage_months_amount,
+                period_agg.c.coverage_months_packages,
+            ]
+        )
+        final_stmt = final_stmt.group_by(*group_by_cols)
 
         sort_map = {
             "sku": getattr(period_agg.c, "sku_name", None),
@@ -660,8 +691,35 @@ class PrimarySalesAndStockService(
             sort_map,
         )
 
-        result = await session.execute(final_stmt)
-        return result.mappings().all()
+        final_stmt = ListQueryHelper.apply_pagination(
+            final_stmt, filters.limit, filters.offset
+        )
+
+        rows = (await session.execute(final_stmt)).mappings().all()
+
+        if not filters.group_by_dimensions:
+            return rows
+
+        dims = filters.group_by_dimensions
+        grouped: dict[tuple, dict] = {}
+        order: list[tuple] = []
+
+        for row in rows:
+            key = tuple(row[f"{d}_id"] for d in dims)
+            if key not in grouped:
+                entry = {}
+                for d in dims:
+                    entry[f"{d}_id"] = row[f"{d}_id"]
+                    entry[f"{d}_name"] = row[f"{d}_name"]
+                entry["periods_data"] = {}
+                grouped[key] = entry
+                order.append(key)
+            grouped[key]["periods_data"][row["period"]] = {
+                "coverage_months_amount": row["coverage_months_amount"],
+                "coverage_months_packages": row["coverage_months_packages"],
+            }
+
+        return [grouped[k] for k in order]
 
     @staticmethod
     async def get_distributor_share_report(
@@ -691,7 +749,7 @@ class PrimarySalesAndStockService(
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .where(
-                PrimarySalesAndStock.indicator.ilike("%продаж%"),
+                PrimarySalesAndStock.indicator.in_(PRIMARY_SALES_VALUES),
             )
         )
 
@@ -788,19 +846,20 @@ class PrimarySalesAndStockService(
 
         final_stmt = select(
             *final_select_fields,
-            func.json_object_agg(
-                with_percentages.c.period,
-                func.json_build_object(
-                    "amount",
-                    with_percentages.c.amount,
-                    "share_percent",
-                    with_percentages.c.share_percent,
-                ),
-            ).label("periods_data"),
-        )
+            with_percentages.c.period,
+            func.cast(with_percentages.c.amount, Float).label("amount"),
+            func.cast(with_percentages.c.share_percent, Float).label("share_percent"),
+        ).select_from(with_percentages)
 
-        if final_group_by_fields:
-            final_stmt = final_stmt.group_by(*final_group_by_fields)
+        group_by_cols = list(final_group_by_fields) if final_group_by_fields else []
+        group_by_cols.extend(
+            [
+                with_percentages.c.period,
+                with_percentages.c.amount,
+                with_percentages.c.share_percent,
+            ]
+        )
+        final_stmt = final_stmt.group_by(*group_by_cols)
 
         sort_map = {
             "sku": getattr(with_percentages.c, "sku_name", None),
@@ -821,8 +880,31 @@ class PrimarySalesAndStockService(
             final_stmt, filters.limit, filters.offset
         )
 
-        result = await session.execute(final_stmt)
-        return result.mappings().all()
+        rows = (await session.execute(final_stmt)).mappings().all()
+
+        if not filters.group_by_dimensions:
+            return rows
+
+        dims = filters.group_by_dimensions
+        grouped: dict[tuple, dict] = {}
+        order: list[tuple] = []
+
+        for row in rows:
+            key = tuple(row[f"{d}_id"] for d in dims)
+            if key not in grouped:
+                entry = {}
+                for d in dims:
+                    entry[f"{d}_id"] = row[f"{d}_id"]
+                    entry[f"{d}_name"] = row[f"{d}_name"]
+                entry["periods_data"] = {}
+                grouped[key] = entry
+                order.append(key)
+            grouped[key]["periods_data"][row["period"]] = {
+                "amount": row["amount"],
+                "share_percent": row["share_percent"],
+            }
+
+        return [grouped[k] for k in order]
 
     @staticmethod
     async def get_distributor_share_chart(
@@ -842,7 +924,7 @@ class PrimarySalesAndStockService(
             )
             .select_from(PrimarySalesAndStock)
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
-            .where(PrimarySalesAndStock.indicator.ilike("%продаж%"))
+            .where(PrimarySalesAndStock.indicator.in_(PRIMARY_SALES_VALUES))
         )
 
         if company_id is not None:
@@ -877,7 +959,7 @@ class PrimarySalesAndStockService(
             .select_from(PrimarySalesAndStock)
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .join(SKU, PrimarySalesAndStock.sku_id == SKU.id)
-            .where(PrimarySalesAndStock.indicator.ilike("%продаж%"))
+            .where(PrimarySalesAndStock.indicator.in_(PRIMARY_SALES_VALUES))
         )
 
         if company_id is not None:
@@ -945,9 +1027,9 @@ class PrimarySalesAndStockService(
                 with_percentages.c.period,
                 func.json_build_object(
                     "amount",
-                    with_percentages.c.amount,
+                    func.cast(with_percentages.c.amount, Float),
                     "share_percent",
-                    with_percentages.c.share_percent,
+                    func.cast(with_percentages.c.share_percent, Float),
                 ),
             ).label("periods_data"),
         ).group_by(

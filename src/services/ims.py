@@ -471,10 +471,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
             filters.group_by_period, filters.period_values
         )
         if period_values is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="period_values обязательны",
-            )
+            return []
 
         group_by_period = (filters.group_by_period or "month").strip().lower()
         periods = self._expand_period_values(period_values, group_by_period)

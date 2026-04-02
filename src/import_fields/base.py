@@ -65,6 +65,7 @@ lpu = FC(
     error_label="ЛПУ",
     db_field="medical_facility_id",
 )
+access_mode = FC(keys.ACCESS_MODE_KEY)
 distributor = FC(
     keys.DISTRIBUTOR_NETWORK_KEY,
     Distributor,

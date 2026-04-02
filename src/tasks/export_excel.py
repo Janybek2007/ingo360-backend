@@ -67,13 +67,20 @@ def _build_joinedload_option(model_cls: Any, relation_path: str):
     if not parts:
         return None
 
-    first_attr = getattr(model_cls, parts[0])
+    try:
+        first_attr = getattr(model_cls, parts[0])
+    except AttributeError:
+        return None
+
     option = joinedload(first_attr)
 
     current_cls = first_attr.property.mapper.class_
     current_option = option
     for part in parts[1:]:
-        rel_attr = getattr(current_cls, part)
+        try:
+            rel_attr = getattr(current_cls, part)
+        except AttributeError:
+            return None
         current_option = current_option.joinedload(rel_attr)
         current_cls = rel_attr.property.mapper.class_
 
@@ -129,8 +136,15 @@ async def _write_export_file_from_service(
     model_cls = import_class(model_path)
     serializer_cls = import_class(serializer_path)
 
+    # Автоматически маппим старые пути Doctor → через GlobalDoctor
+    load_option_remap = {
+        "medical_facility": "global_doctor.medical_facility",
+        "speciality": "global_doctor.speciality",
+    }
+    remapped_paths = [load_option_remap.get(p, p) for p in (load_options_paths or [])]
+
     load_options = []
-    for path in load_options_paths or []:
+    for path in remapped_paths:
         option = _build_joinedload_option(model_cls, path)
         if option is not None:
             load_options.append(option)

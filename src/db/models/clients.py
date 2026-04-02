@@ -39,54 +39,108 @@ class ClientCategory(Base):
     __table_args__ = (Index("idx_client_category_name", "name"),)
 
 
+class GlobalDoctor(Base):
+    __tablename__ = "global_doctors"
+
+    full_name: Mapped[str] = mapped_column(String(256), nullable=False)
+
+    medical_facility_id: Mapped[int] = mapped_column(
+        ForeignKey("medical_facilities.id"),
+        nullable=False,
+    )
+    medical_facility: Mapped["MedicalFacility"] = relationship(
+        back_populates="global_doctors"
+    )
+
+    speciality_id: Mapped[int] = mapped_column(
+        ForeignKey("specialities.id"),
+        nullable=False,
+    )
+    speciality: Mapped["Speciality"] = relationship(back_populates="global_doctors")
+
+    doctors: Mapped[list["Doctor"]] = relationship(back_populates="global_doctor")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "full_name",
+            "medical_facility_id",
+            "speciality_id",
+            name="uq_global_doctor_unique",
+        ),
+        Index("idx_global_doctor_full_name", "full_name"),
+        Index("idx_global_doctor_medical_facility", "medical_facility_id"),
+        Index("idx_global_doctor_speciality", "speciality_id"),
+    )
+
+
 class Doctor(Base):
     __tablename__ = "doctors"
 
-    full_name: Mapped[str] = mapped_column(String(256))
+    global_doctor_id: Mapped[int] = mapped_column(
+        ForeignKey("global_doctors.id"),
+        nullable=False,
+    )
+    global_doctor: Mapped["GlobalDoctor"] = relationship(back_populates="doctors")
+
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id"),
+        nullable=False,
+    )
+    company: Mapped["Company"] = relationship(back_populates="doctors")
+
     responsible_employee_id: Mapped[int | None] = mapped_column(
-        ForeignKey("employees.id"), nullable=True
+        ForeignKey("employees.id"),
+        nullable=True,
     )
     responsible_employee: Mapped[Optional["Employee"]] = relationship(
         back_populates="doctors"
     )
-    medical_facility_id: Mapped[int] = mapped_column(
-        ForeignKey("medical_facilities.id"),
+
+    client_category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("client_categories.id"),
+        nullable=True,
     )
     client_category: Mapped[Optional["ClientCategory"]] = relationship(
         back_populates="doctors"
     )
 
-    medical_facility: Mapped["MedicalFacility"] = relationship(back_populates="doctors")
-    speciality_id: Mapped[int] = mapped_column(ForeignKey("specialities.id"))
-    speciality: Mapped["Speciality"] = relationship(back_populates="doctors")
-    client_category_id: Mapped[int | None] = mapped_column(
-        ForeignKey("client_categories.id"), nullable=True
-    )
-    visits: Mapped[list["Visit"]] = relationship(back_populates="doctor")
     product_group_id: Mapped[int] = mapped_column(
         ForeignKey("product_groups.id"),
+        nullable=False,
     )
     product_group: Mapped["ProductGroup"] = relationship(back_populates="doctors")
+
     import_log_id: Mapped[int | None] = mapped_column(
-        ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("import_logs.id", ondelete="CASCADE"),
+        nullable=True,
     )
     import_log: Mapped[Optional["ImportLogs"]] = relationship(back_populates="doctors")
-    company_id: Mapped[int] = mapped_column(
-        ForeignKey("companies.id"),
-    )
-    company: Mapped["Company"] = relationship(back_populates="doctors")
+
+    visits: Mapped[list["Visit"]] = relationship(back_populates="doctor")
+
+    @property
+    def full_name(self) -> str:
+        return self.global_doctor.full_name if self.global_doctor else ""
+
+    @property
+    def medical_facility(self):
+        return self.global_doctor.medical_facility if self.global_doctor else None
+
+    @property
+    def speciality(self):
+        return self.global_doctor.speciality if self.global_doctor else None
+
+    @property
+    def mode(self) -> str:
+        return "company"
 
     __table_args__ = (
-        Index("idx_doctor_speciality", "speciality_id"),
-        Index("idx_doctor_medical_facility", "medical_facility_id"),
-        Index("idx_doctor_full_name", "full_name"),
         Index("idx_doctor_company", "company_id"),
+        Index("idx_doctor_global", "global_doctor_id"),
         UniqueConstraint(
-            "full_name",
-            "medical_facility_id",
-            "speciality_id",
+            "global_doctor_id",
             "company_id",
-            name="uq_doctor_full_name_medical_facility_speciality_company",
+            name="uq_doctor_global_company",
         ),
     )
 
@@ -166,7 +220,9 @@ class Speciality(Base):
     __tablename__ = "specialities"
 
     name: Mapped[str] = mapped_column(String(256), unique=True)
-    doctors: Mapped[list["Doctor"]] = relationship(back_populates="speciality")
+    global_doctors: Mapped[list["GlobalDoctor"]] = relationship(
+        back_populates="speciality"
+    )
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
@@ -189,7 +245,9 @@ class MedicalFacility(Base):
         back_populates="medical_facilities"
     )
     address: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    doctors: Mapped[list["Doctor"]] = relationship(back_populates="medical_facility")
+    global_doctors: Mapped[list["GlobalDoctor"]] = relationship(
+        back_populates="medical_facility"
+    )
     visits: Mapped[list["Visit"]] = relationship(back_populates="medical_facility")
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
