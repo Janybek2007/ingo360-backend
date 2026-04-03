@@ -160,7 +160,18 @@ async def _write_export_file_from_service(
             load_options=load_options,
             chunk_size=chunk_size,
         ):
-            row = serializer_cls.model_validate(item).model_dump()
+            try:
+                row = serializer_cls.model_validate(item).model_dump()
+            except Exception as e:
+                import traceback
+
+                full_tb = traceback.format_exc()
+                item_data = item.__dict__ if hasattr(item, "__dict__") else dict(item)
+                raise RuntimeError(
+                    f"Validation error for {serializer_cls.__name__}: {e}\n"
+                    f"Item data: {item_data}\n"
+                    f"Full traceback:\n{full_tb}"
+                )
             values = build_export_row_values(
                 row=row,
                 headers=headers,

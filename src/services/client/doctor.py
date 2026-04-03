@@ -688,12 +688,6 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
         doctor_data = []
 
         for idx, r in enumerate(records):
-            missing_keys = resolved.collect_missing_keys(r, client.doctor_fields)
-
-            ids, null_keys = resolved.resolve_id_fields(r, client.doctor_fields)
-            if null_keys:
-                missing_keys.extend(null_keys)
-
             access_raw = (
                 r.get("уровень доступа")
                 or r.get("уровень")
@@ -706,15 +700,17 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
             global_values = {"общий", "обший", "global"}
             company_values = {"компания", "компании", "company"}
 
-            mode = None
             if access_raw_str in global_values:
                 mode = "global"
+                validate_required_columns(
+                    [r], client.doctor_global_fields, raise_exception=False
+                )
             elif access_raw_str in company_values:
                 mode = "company"
+                validate_required_columns(
+                    [r], client.doctor_company_fields, raise_exception=False
+                )
             else:
-                missing_keys.append("уровень доступа")
-
-            if mode is None:
                 skipped_records.append(
                     {
                         "row": idx + 1,
@@ -723,41 +719,23 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                 )
                 continue
 
-            full_name = r.get("фио")
-            medical_facility_id = ids.get("medical_facility_id")
-            speciality_id = ids.get("speciality_id")
+            missing_keys = resolved.collect_missing_keys(r, client.doctor_fields)
+            ids, null_keys = resolved.resolve_id_fields(r, client.doctor_fields)
+            if null_keys:
+                missing_keys.extend(null_keys)
 
-            # Если mode=company но нет company_id или product_group_id — пропускаем
-            if mode == "company":
-                missing = []
-                if not ids.get("company_id"):
-                    missing.append("Отсутствует компания")
-                if not ids.get("product_group_id"):
-                    missing.append("Отсутствует группа товара")
-                if missing:
-                    skipped_records.append(
-                        {
-                            "row": idx + 1,
-                            "missing": missing,
-                        }
-                    )
-                    continue
-
-            # GlobalDoctor требует medical_facility_id
-            if not medical_facility_id:
-                mf_raw = (
-                    r.get("лпу")
-                    or r.get("ЛПУ")
-                    or r.get("medical_facility")
-                    or "не указано"
-                )
+            if missing_keys:
                 skipped_records.append(
                     {
                         "row": idx + 1,
-                        "missing": [f"ЛПУ '{mf_raw}' не найдено в справочнике"],
+                        "missing": missing_keys,
                     }
                 )
                 continue
+
+            full_name = r.get("фио")
+            medical_facility_id = ids.get("medical_facility_id")
+            speciality_id = ids.get("speciality_id")
 
             # Собираем GlobalDoctor данные
             gd_key = (full_name, medical_facility_id)

@@ -22,9 +22,27 @@ speciality_fields = [name]
 doctor_fields = [
     fio.as_required(),
     lpu.as_required(),
-    speciality.as_required(),
+    speciality,
     company,
     group,
+    category,
+    employee,
+    access_mode.as_required(),
+]
+
+doctor_global_fields = [
+    fio.as_required(),
+    lpu.as_required(),
+    speciality.as_required(),
+    access_mode.as_required(),
+]
+
+doctor_company_fields = [
+    fio.as_required(),
+    lpu.as_required(),
+    speciality,
+    company.as_required(),
+    group.as_required(),
     category,
     employee,
     access_mode.as_required(),

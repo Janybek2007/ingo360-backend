@@ -297,6 +297,7 @@ async def export_secondary_excel(
         load_options_paths=[
             "pharmacy.geo_indicator",
             "pharmacy.distributor",
+            "distributor",
             "sku.brand",
         ],
         header_map=payload.header_map,
@@ -495,6 +496,7 @@ async def export_tertiary_excel(
         load_options_paths=[
             "pharmacy.geo_indicator",
             "pharmacy.distributor",
+            "distributor",
             "sku.brand",
         ],
         header_map=payload.header_map,

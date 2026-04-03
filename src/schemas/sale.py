@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -170,7 +172,7 @@ class SecondarySalesResponse(BaseModel):
     indicator: str
     packages: float
     amount: float
-    distributor: "DistributorResponse"
+    distributor: DistributorResponse | None
     pharmacy: PharmacyWithDistributorResponse
     sku: SKUSimpleResponse
 
@@ -186,7 +188,7 @@ class TertiarySalesResponse(BaseModel):
     indicator: str
     packages: float
     amount: float
-    distributor: "DistributorResponse"
+    distributor: DistributorResponse | None
     pharmacy: PharmacyWithDistributorResponse
     sku: SKUSimpleResponse
 

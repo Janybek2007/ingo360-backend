@@ -65,7 +65,7 @@ async def export_visits_excel(
         load_options_paths=[
             "pharmacy.geo_indicator",
             "pharmacy.distributor",
-            "doctor",
+            "doctor.global_doctor",
             "product_group",
             "employee",
             "medical_facility.geo_indicator",
