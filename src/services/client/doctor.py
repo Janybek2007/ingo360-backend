@@ -704,14 +704,24 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
             access_raw_str = str(access_raw).strip().lower() if access_raw else ""
 
             global_values = {"общий", "обший", "global"}
-            company_values = {"компания", "company"}
+            company_values = {"компания", "компании", "company"}
 
+            mode = None
             if access_raw_str in global_values:
                 mode = "global"
             elif access_raw_str in company_values:
                 mode = "company"
             else:
-                mode = "company"
+                missing_keys.append("уровень доступа")
+
+            if mode is None:
+                skipped_records.append(
+                    {
+                        "row": idx + 1,
+                        "missing": ["уровень доступа"],
+                    }
+                )
+                continue
 
             full_name = r.get("фио")
             medical_facility_id = ids.get("medical_facility_id")

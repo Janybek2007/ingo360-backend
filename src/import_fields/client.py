@@ -27,7 +27,7 @@ doctor_fields = [
     group,
     category,
     employee,
-    access_mode,
+    access_mode.as_required(),
 ]
 
 pharmacy_fields = [
