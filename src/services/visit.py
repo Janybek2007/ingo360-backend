@@ -445,12 +445,12 @@ class VisitService(
         distinct_doctor_key = tuple_(
             GlobalDoctor.full_name,
             GlobalDoctor.medical_facility_id,
-            GlobalDoctor.speciality_id,
+            Doctor.speciality_id,
         )
 
         doctors_with_visits_subquery = (
             select(
-                GlobalDoctor.speciality_id,
+                Doctor.speciality_id,
                 func.count(func.distinct(distinct_doctor_key)).label(
                     "doctors_with_visits"
                 ),
@@ -463,17 +463,17 @@ class VisitService(
         doctors_with_visits_subquery = ListQueryHelper.apply_specs(
             doctors_with_visits_subquery,
             [
-                InOrNullSpec(GlobalDoctor.speciality_id, filters.speciality_ids),
+                InOrNullSpec(Doctor.speciality_id, filters.speciality_ids),
             ],
         )
 
         doctors_with_visits_subquery = doctors_with_visits_subquery.group_by(
-            GlobalDoctor.speciality_id
+            Doctor.speciality_id
         ).subquery()
 
         total_doctors_subquery = (
             select(
-                GlobalDoctor.speciality_id.label("speciality_id"),
+                Doctor.speciality_id.label("speciality_id"),
                 func.count(func.distinct(distinct_doctor_key)).label("total_count"),
             )
             .select_from(Doctor)
@@ -483,7 +483,7 @@ class VisitService(
         total_doctors_subquery = ListQueryHelper.apply_specs(
             total_doctors_subquery,
             [
-                InOrNullSpec(GlobalDoctor.speciality_id, filters.speciality_ids),
+                InOrNullSpec(Doctor.speciality_id, filters.speciality_ids),
                 InOrNullSpec(
                     GlobalDoctor.medical_facility_id, filters.medical_facility_ids
                 ),
@@ -492,7 +492,7 @@ class VisitService(
         )
 
         total_doctors_subquery = total_doctors_subquery.group_by(
-            GlobalDoctor.speciality_id
+            Doctor.speciality_id
         ).subquery()
 
         stmt = (
@@ -573,7 +573,7 @@ class VisitService(
             )
             .select_from(Doctor)
             .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
-            .join(Speciality, GlobalDoctor.speciality_id == Speciality.id)
+            .join(Speciality, Doctor.speciality_id == Speciality.id)
             .join(
                 MedicalFacility, GlobalDoctor.medical_facility_id == MedicalFacility.id
             )
@@ -620,7 +620,7 @@ class VisitService(
             .join(Employee, Visit.employee_id == Employee.id)
             .join(Doctor, Visit.doctor_id == Doctor.id)
             .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
-            .join(Speciality, GlobalDoctor.speciality_id == Speciality.id)
+            .join(Speciality, Doctor.speciality_id == Speciality.id)
             .join(
                 MedicalFacility, GlobalDoctor.medical_facility_id == MedicalFacility.id
             )

@@ -185,4 +185,14 @@ class TertiarySalesAndStock(Base):
             "year",
             "indicator",
         ),
+        Index(
+            "idx_tertiary_sales_covering_report",
+            "indicator",
+            "year",
+            "month",
+            "sku_id",
+            "pharmacy_id",
+            "distributor_id",
+            postgresql_include=["packages", "amount"],
+        ),
     )

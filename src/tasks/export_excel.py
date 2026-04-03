@@ -139,7 +139,7 @@ async def _write_export_file_from_service(
     # Автоматически маппим старые пути Doctor → через GlobalDoctor
     load_option_remap = {
         "medical_facility": "global_doctor.medical_facility",
-        "speciality": "global_doctor.speciality",
+        "speciality": "speciality",
     }
     remapped_paths = [load_option_remap.get(p, p) for p in (load_options_paths or [])]
 

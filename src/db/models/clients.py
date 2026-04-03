@@ -52,24 +52,16 @@ class GlobalDoctor(Base):
         back_populates="global_doctors"
     )
 
-    speciality_id: Mapped[int] = mapped_column(
-        ForeignKey("specialities.id"),
-        nullable=False,
-    )
-    speciality: Mapped["Speciality"] = relationship(back_populates="global_doctors")
-
     doctors: Mapped[list["Doctor"]] = relationship(back_populates="global_doctor")
 
     __table_args__ = (
         UniqueConstraint(
             "full_name",
             "medical_facility_id",
-            "speciality_id",
             name="uq_global_doctor_unique",
         ),
         Index("idx_global_doctor_full_name", "full_name"),
         Index("idx_global_doctor_medical_facility", "medical_facility_id"),
-        Index("idx_global_doctor_speciality", "speciality_id"),
     )
 
 
@@ -87,6 +79,12 @@ class Doctor(Base):
         nullable=False,
     )
     company: Mapped["Company"] = relationship(back_populates="doctors")
+
+    speciality_id: Mapped[int | None] = mapped_column(
+        ForeignKey("specialities.id"),
+        nullable=True,
+    )
+    speciality: Mapped[Optional["Speciality"]] = relationship(back_populates="doctors")
 
     responsible_employee_id: Mapped[int | None] = mapped_column(
         ForeignKey("employees.id"),
@@ -125,10 +123,6 @@ class Doctor(Base):
     @property
     def medical_facility(self):
         return self.global_doctor.medical_facility if self.global_doctor else None
-
-    @property
-    def speciality(self):
-        return self.global_doctor.speciality if self.global_doctor else None
 
     @property
     def mode(self) -> str:
@@ -220,9 +214,7 @@ class Speciality(Base):
     __tablename__ = "specialities"
 
     name: Mapped[str] = mapped_column(String(256), unique=True)
-    global_doctors: Mapped[list["GlobalDoctor"]] = relationship(
-        back_populates="speciality"
-    )
+    doctors: Mapped[list["Doctor"]] = relationship(back_populates="speciality")
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )

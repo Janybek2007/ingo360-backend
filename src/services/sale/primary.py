@@ -268,7 +268,7 @@ class PrimarySalesAndStockService(
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .where(
-                PrimarySalesAndStock.indicator.ilike(f"%{indicator}%"),
+                PrimarySalesAndStock.indicator.in_([indicator]),
             )
         )
 

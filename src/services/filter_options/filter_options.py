@@ -288,13 +288,9 @@ def apply_visits_scope(
         )
         if period_filter is not None:
             doctor_ids = doctor_ids.where(period_filter)
-        speciality_ids = (
-            select(distinct(GlobalDoctor.speciality_id))
-            .join(Doctor, Doctor.global_doctor_id == GlobalDoctor.id)
-            .where(
-                Doctor.id.in_(doctor_ids),
-                GlobalDoctor.speciality_id.is_not(None),
-            )
+        speciality_ids = select(distinct(Doctor.speciality_id)).where(
+            Doctor.id.in_(doctor_ids),
+            Doctor.speciality_id.is_not(None),
         )
         return stmt.where(Speciality.id.in_(speciality_ids))
 
@@ -336,8 +332,8 @@ def apply_clients_scope(
             return stmt.where(MedicalFacility.id.in_(facility_ids))
 
         if target_ref == "clients_specialities":
-            speciality_ids = select(distinct(GlobalDoctor.speciality_id)).where(
-                GlobalDoctor.speciality_id.is_not(None)
+            speciality_ids = select(distinct(Doctor.speciality_id)).where(
+                Doctor.speciality_id.is_not(None)
             )
             return stmt.where(Speciality.id.in_(speciality_ids))
 

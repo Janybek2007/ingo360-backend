@@ -4,7 +4,7 @@ import orjson
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload
 
 from src.api.dependencies.company import (
     can_view_primary_sales,
@@ -270,8 +270,9 @@ async def list_secondary_sales(
     session: Annotated[AsyncSession, Depends(db_session.get_session)],
 ):
     load_options = [
-        selectinload(SecondarySales.pharmacy).selectinload(Pharmacy.geo_indicator),
-        selectinload(SecondarySales.pharmacy).selectinload(Pharmacy.distributor),
+        joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.geo_indicator),
+        joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.distributor),
+        joinedload(SecondarySales.distributor),
         joinedload(SecondarySales.sku).joinedload(SKU.brand),
     ]
 
@@ -471,6 +472,7 @@ async def list_tertiary_sales(
         joinedload(TertiarySalesAndStock.pharmacy).joinedload(Pharmacy.geo_indicator),
         joinedload(TertiarySalesAndStock.pharmacy).joinedload(Pharmacy.distributor),
         joinedload(TertiarySalesAndStock.sku).joinedload(SKU.brand),
+        joinedload(TertiarySalesAndStock.distributor),
     ]
     return await tertiary_sales_service.get_multi(
         session, payload, load_options=load_options

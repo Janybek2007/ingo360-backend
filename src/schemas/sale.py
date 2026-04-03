@@ -3,7 +3,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from src.schemas.base_filter import BaseDbFilter, SortDirection
-from src.schemas.client import DistributorResponse, PharmacySimpleResponse
+from src.schemas.client import (
+    DistributorResponse,
+    PharmacyWithDistributorResponse,
+)
 from src.schemas.product import SKUSimpleResponse
 
 
@@ -167,7 +170,8 @@ class SecondarySalesResponse(BaseModel):
     indicator: str
     packages: float
     amount: float
-    pharmacy: PharmacySimpleResponse
+    distributor: "DistributorResponse"
+    pharmacy: PharmacyWithDistributorResponse
     sku: SKUSimpleResponse
 
 
@@ -182,7 +186,8 @@ class TertiarySalesResponse(BaseModel):
     indicator: str
     packages: float
     amount: float
-    pharmacy: PharmacySimpleResponse
+    distributor: "DistributorResponse"
+    pharmacy: PharmacyWithDistributorResponse
     sku: SKUSimpleResponse
 
 

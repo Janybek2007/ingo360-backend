@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from src.api.dependencies.company import can_view_visits
 from src.api.dependencies.current_user import current_active_user, current_operator_user
 from src.api.dependencies.excel_file import ExcelFile
-from src.db.models import MedicalFacility, Pharmacy, User, Visit
+from src.db.models import Doctor, MedicalFacility, Pharmacy, User, Visit
 from src.db.session import db_session
 from src.schemas.base_filter import PaginatedResponse
 from src.schemas.export import ExportExcelRequest
@@ -39,7 +39,7 @@ async def get_visits(
     load_options = [
         joinedload(Visit.pharmacy).joinedload(Pharmacy.geo_indicator),
         joinedload(Visit.pharmacy).joinedload(Pharmacy.distributor),
-        joinedload(Visit.doctor),
+        joinedload(Visit.doctor).joinedload(Doctor.global_doctor),
         joinedload(Visit.product_group),
         joinedload(Visit.employee),
         joinedload(Visit.medical_facility).joinedload(MedicalFacility.geo_indicator),

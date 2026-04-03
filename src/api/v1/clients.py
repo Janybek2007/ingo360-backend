@@ -136,14 +136,13 @@ async def get_doctors(
     if filters.mode == "global":
         load_options = [
             selectinload(GlobalDoctor.medical_facility),
-            selectinload(GlobalDoctor.speciality),
         ]
     else:
         load_options = [
             selectinload(Doctor.global_doctor).selectinload(
                 GlobalDoctor.medical_facility
             ),
-            selectinload(Doctor.global_doctor).selectinload(GlobalDoctor.speciality),
+            selectinload(Doctor.speciality),
             selectinload(Doctor.responsible_employee),
             selectinload(Doctor.client_category),
             selectinload(Doctor.product_group),
@@ -170,7 +169,7 @@ async def export_doctors_excel(
         load_options_paths=[
             "global_doctor",
             "global_doctor.medical_facility",
-            "global_doctor.speciality",
+            "speciality",
             "responsible_employee",
             "client_category",
             "product_group",
@@ -203,7 +202,6 @@ async def create_doctor(
     if doctor.mode == "global":
         load_options = [
             joinedload(GlobalDoctor.medical_facility),
-            joinedload(GlobalDoctor.speciality),
         ]
     else:
         load_options = [
@@ -212,7 +210,7 @@ async def create_doctor(
             joinedload(Doctor.product_group),
             joinedload(Doctor.company),
             joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.medical_facility),
-            joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.speciality),
+            joinedload(Doctor.speciality),
         ]
     return await client_service.doctor_service.create(
         session, doctor, load_options=load_options
@@ -246,7 +244,7 @@ async def get_doctor(
         joinedload(Doctor.product_group),
         joinedload(Doctor.company),
         joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.medical_facility),
-        joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.speciality),
+        joinedload(Doctor.speciality),
     ]
     return await client_service.doctor_service.get_or_404(
         session, doctor_id, load_options=load_options
@@ -255,7 +253,7 @@ async def get_doctor(
 
 @router.patch(
     "/doctors/{doctor_id}",
-    response_model=client.DoctorResponse,
+    response_model=None,
     dependencies=[Depends(current_operator_user)],
 )
 async def update_doctor(
@@ -269,7 +267,7 @@ async def update_doctor(
         joinedload(Doctor.product_group),
         joinedload(Doctor.company),
         joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.medical_facility),
-        joinedload(Doctor.global_doctor).joinedload(GlobalDoctor.speciality),
+        joinedload(Doctor.speciality),
     ]
     return await client_service.doctor_service.update(
         session, doctor_id, doctor, load_options=load_options

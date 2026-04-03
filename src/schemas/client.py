@@ -31,10 +31,10 @@ class DoctorCreate(BaseModel):
     full_name: str
     responsible_employee_id: int | None = None
     medical_facility_id: int
-    speciality_id: int
+    speciality_id: int | None = None
     client_category_id: int | None = None
-    product_group_id: int
-    company_id: int
+    product_group_id: int | None = None
+    company_id: int | None = None
     mode: Literal["company", "global"] = "company"
 
 
@@ -127,7 +127,14 @@ class PharmacySimpleResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
-    distributor: Optional["DistributorResponse"]
+    geo_indicator: GeoIndicatorResponse | None
+
+
+class PharmacyWithDistributorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    distributor: Optional["DistributorResponse"] = None
     geo_indicator: GeoIndicatorResponse | None
 
 
