@@ -241,7 +241,7 @@ class PrimarySalesAndStockService(
     @staticmethod
     async def get_shipment_stock_report(
         session: "AsyncSession",
-        indicator: str,
+        indicator: tuple,
         company_id: int | None,
         filters: sale_schema.ShipmentStockFilter | None = None,
     ):
@@ -268,7 +268,9 @@ class PrimarySalesAndStockService(
             .join(ProductGroup, SKU.product_group_id == ProductGroup.id)
             .join(Distributor, PrimarySalesAndStock.distributor_id == Distributor.id)
             .where(
-                PrimarySalesAndStock.indicator.in_([indicator]),
+                PrimarySalesAndStock.indicator.in_(
+                    [normalize_primary_indicator(v) for v in indicator]
+                ),
             )
         )
 

@@ -22,6 +22,6 @@ celery_app.conf.beat_schedule = {
     "cleanup-excel-tasks-daily": {
         "task": "src.tasks.cleanup_excel_tasks.cleanup_excel_tasks",
         "schedule": crontab(minute=0, hour=3),
-        "args": (3,),
+        "args": (1,),
     }
 }

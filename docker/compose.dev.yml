@@ -63,7 +63,7 @@ services:
   celery_worker:
     image: ingo360-backend:dev
     container_name: ingo360_celery_worker
-    command: celery -A src.celery_app worker --loglevel=info
+    command: celery -A src.celery_app worker --loglevel=info --concurrency=4 --prefetch-multiplier=1
     volumes:
       - ../:/app
       - ../temp:/app/temp

@@ -289,7 +289,18 @@ class ListQueryHelper:
         if not period_values.months or month_col is None:
             return stmt
 
-        return stmt.where(tuple_(year_col, month_col).in_(period_values.months))
+        months = period_values.months
+
+        # Group months by year
+        months_by_year: dict[int, set[int]] = {}
+        for year, month in months:
+            months_by_year.setdefault(year, set()).add(month)
+
+        # If all 12 months are selected for every year, only filter by year
+        if all(len(m) == 12 for m in months_by_year.values()):
+            return stmt.where(year_col.in_(months_by_year.keys()))
+
+        return stmt.where(tuple_(year_col, month_col).in_(months))
 
     @staticmethod
     def apply_pagination(stmt, limit: int | None, offset: int | None):

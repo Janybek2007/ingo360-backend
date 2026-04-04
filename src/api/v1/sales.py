@@ -33,6 +33,7 @@ from src.services.sale import (
     secondary_sales_service,
     tertiary_sales_service,
 )
+from src.utils.indicator_resolver import PRIMARY_SALES_VALUES, PRIMARY_STOCK_VALUES
 
 router = APIRouter()
 
@@ -125,7 +126,7 @@ async def get_primary_stock(
     result = await primary_sales_service.get_shipment_stock_report(
         session,
         filters=filters,
-        indicator="остат",
+        indicator=PRIMARY_STOCK_VALUES,
         company_id=current_user.company_id,
     )
     body = orjson.dumps(result)
@@ -141,7 +142,7 @@ async def get_primary_sales(
     result = await primary_sales_service.get_shipment_stock_report(
         session,
         filters=filters,
-        indicator="продаж",
+        indicator=PRIMARY_SALES_VALUES,
         company_id=current_user.company_id,
     )
     body = orjson.dumps(result)
