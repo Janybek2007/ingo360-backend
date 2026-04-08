@@ -15,11 +15,11 @@ if TYPE_CHECKING:
         Country,
         Distributor,
         District,
-        Doctor,
         Dosage,
         DosageForm,
         Employee,
         GeoIndicator,
+        GlobalDoctor,
         MedicalFacility,
         Pharmacy,
         Position,
@@ -76,7 +76,7 @@ class ImportLogs(Base):
     medical_facilities: Mapped[list["MedicalFacility"]] = relationship(
         back_populates="import_log", cascade="all, delete-orphan"
     )
-    doctors: Mapped[list["Doctor"]] = relationship(
+    global_doctors: Mapped[list["GlobalDoctor"]] = relationship(
         back_populates="import_log", cascade="all, delete-orphan"
     )
     employees: Mapped[list["Employee"]] = relationship(

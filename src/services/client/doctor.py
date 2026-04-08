@@ -674,7 +674,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
             uploaded_by=user_id,
             target_table="Врачи",
             records_count=len(records),
-            target_table_name=self.model.__tablename__,
+            target_table_name="global_doctors",
         )
         session.add(import_log)
         await session.flush()
@@ -753,7 +753,6 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                         "product_group_id": ids.get("product_group_id"),
                         "client_category_id": ids.get("client_category_id"),
                         "responsible_employee_id": ids.get("responsible_employee_id"),
-                        "import_log_id": import_log.id,
                     }
                 )
 
@@ -776,6 +775,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                     gd = GlobalDoctor(
                         full_name=key[0],
                         medical_facility_id=key[1],
+                        import_log_id=import_log.id,
                     )
                     session.add(gd)
                     global_data[key] = gd

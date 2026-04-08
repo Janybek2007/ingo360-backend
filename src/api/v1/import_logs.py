@@ -57,7 +57,6 @@ async def delete_import_log(
     import_log_id: int,
 ):
     obj = await import_log_service.get_or_404(session, import_log_id)
-
     delete_import_log_task.delay(import_log_id, obj.target_table_name)
 
     return {"status": "accepted"}

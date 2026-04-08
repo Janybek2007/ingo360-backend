@@ -54,6 +54,13 @@ class GlobalDoctor(Base):
 
     doctors: Mapped[list["Doctor"]] = relationship(back_populates="global_doctor")
 
+    import_log_id: Mapped[int | None] = mapped_column(
+        ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
+    )
+    import_log: Mapped[Optional["ImportLogs"]] = relationship(
+        back_populates="global_doctors"
+    )
+
     __table_args__ = (
         UniqueConstraint(
             "full_name",
@@ -107,12 +114,6 @@ class Doctor(Base):
         nullable=False,
     )
     product_group: Mapped["ProductGroup"] = relationship(back_populates="doctors")
-
-    import_log_id: Mapped[int | None] = mapped_column(
-        ForeignKey("import_logs.id", ondelete="CASCADE"),
-        nullable=True,
-    )
-    import_log: Mapped[Optional["ImportLogs"]] = relationship(back_populates="doctors")
 
     visits: Mapped[list["Visit"]] = relationship(back_populates="doctor")
 

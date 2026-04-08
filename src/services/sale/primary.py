@@ -20,7 +20,12 @@ from src.mapping.sales import primary_sales_mapping
 from src.schemas import sale as sale_schema
 from src.schemas.base_filter import PaginatedResponse
 from src.services.base import BaseService, ModelType
-from src.services.sale.utils import RelationSpec, import_sales_from_excel
+from src.services.sale.utils import (
+    RelationSpec,
+    create_or_update_sale,
+    import_sales_from_excel,
+    normalize_indicator_for_sale,
+)
 from src.utils.build_dimensions import build_dimensions
 from src.utils.build_period_key import build_period_key
 from src.utils.build_period_values import build_period_values
@@ -48,6 +53,40 @@ class PrimarySalesAndStockService(
         sale_schema.PrimarySalesAndStockUpdate,
     ]
 ):
+    async def create(
+        self,
+        session: "AsyncSession",
+        obj_in: sale_schema.PrimarySalesAndStockCreate,
+        load_options: list[Any] | None = None,
+    ):
+        return await create_or_update_sale(
+            session=session,
+            model=self.model,
+            data=obj_in.model_dump(),
+            sale_type="primary",
+            key_fields=("distributor_id", "sku_id", "month", "year", "indicator"),
+            constraint_name="uq_primary_sales_business_key",
+        )
+
+    async def update(
+        self,
+        session: "AsyncSession",
+        item_id: int,
+        obj_in: sale_schema.PrimarySalesAndStockUpdate,
+        load_options: list[Any] | None = None,
+    ):
+        db_obj = await self.get_or_404(session, item_id)
+        update_data = obj_in.model_dump(exclude_unset=True)
+        if "indicator" in update_data and update_data["indicator"] is not None:
+            update_data["indicator"] = normalize_indicator_for_sale(
+                "primary", update_data["indicator"]
+            )
+        for field, value in update_data.items():
+            setattr(db_obj, field, value)
+        await session.commit()
+        await session.refresh(db_obj)
+        return db_obj
+
     async def import_sales(
         self,
         session: "AsyncSession",

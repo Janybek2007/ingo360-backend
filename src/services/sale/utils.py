@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 from fastapi import HTTPException
 from sqlalchemy import literal_column
@@ -10,12 +10,67 @@ from src.utils.case_insensitive_dict import CaseInsensitiveDict
 from src.utils.case_insensitive_set import CaseInsensitiveSet
 from src.utils.excel_parser import iter_excel_records
 from src.utils.import_result import build_import_result
+from src.utils.indicator_resolver import (
+    normalize_primary_indicator,
+    normalize_secondary_indicator,
+    normalize_tertiary_indicator,
+)
 from src.utils.mapping import map_record
 from src.utils.records_resolver import FieldResolverConfig, normalize_record
 from src.utils.validate_required_columns import validate_required_columns
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+SaleType = Literal["primary", "secondary", "tertiary"]
+
+_INDICATOR_NORMALIZERS: dict[SaleType, Callable[[str], str]] = {
+    "primary": normalize_primary_indicator,
+    "secondary": normalize_secondary_indicator,
+    "tertiary": normalize_tertiary_indicator,
+}
+
+
+def normalize_indicator_for_sale(sale_type: SaleType, value: str) -> str:
+    normalizer = _INDICATOR_NORMALIZERS.get(sale_type)
+    if normalizer is None:
+        return value
+    return normalizer(value)
+
+
+async def create_or_update_sale(
+    *,
+    session: "AsyncSession",
+    model: Any,
+    data: dict[str, Any],
+    sale_type: SaleType,
+    key_fields: tuple[str, ...],
+    constraint_name: str,
+) -> Any:
+    """
+    Upsert одной записи продажи с нормализацией индикатора.
+    Возвращает объект из БД после вставки/обновления.
+    """
+    if "indicator" in data and data["indicator"] is not None:
+        data["indicator"] = normalize_indicator_for_sale(
+            sale_type, str(data["indicator"])
+        )
+
+    stmt = pg_insert(model).values([data])
+    stmt = stmt.on_conflict_do_update(
+        constraint=constraint_name,
+        set_={
+            "packages": stmt.excluded.packages,
+            "amount": stmt.excluded.amount,
+        },
+    ).returning(model.id)
+
+    result = await session.execute(stmt)
+    row_id = result.scalar_one()
+    await session.commit()
+
+    obj = await session.get(model, row_id)
+    return obj
 
 
 @dataclass(frozen=True)
