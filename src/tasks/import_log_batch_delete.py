@@ -13,7 +13,7 @@ get_async_session_context = contextlib.asynccontextmanager(db_session.get_sessio
 def delete_import_log_task(self, import_log_id: int, table_name: str):
     async def _delete():
         async with get_async_session_context() as session:
-            if table_name == "global_doctors":
+            if table_name in ("global_doctors", "doctors"):
                 # 1. Удаляем visits связанные с doctors этого импорта
                 while True:
                     result = await session.execute(

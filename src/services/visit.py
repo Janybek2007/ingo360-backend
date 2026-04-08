@@ -445,12 +445,32 @@ class VisitService(
         distinct_doctor_key = tuple_(
             GlobalDoctor.full_name,
             GlobalDoctor.medical_facility_id,
-            Doctor.speciality_id,
         )
 
+        # Всего уникальных врачей по специальности (из global_doctors)
+        total_doctors_subquery = select(
+            GlobalDoctor.speciality_id.label("speciality_id"),
+            func.count(func.distinct(distinct_doctor_key)).label("total_count"),
+        ).select_from(GlobalDoctor)
+
+        total_doctors_subquery = ListQueryHelper.apply_specs(
+            total_doctors_subquery,
+            [
+                InOrNullSpec(GlobalDoctor.speciality_id, filters.speciality_ids),
+                InOrNullSpec(
+                    GlobalDoctor.medical_facility_id, filters.medical_facility_ids
+                ),
+            ],
+        )
+
+        total_doctors_subquery = total_doctors_subquery.group_by(
+            GlobalDoctor.speciality_id
+        ).subquery()
+
+        # Врачи с визитами ФК (уник по ФИО+ЛПУ, через doctors → global_doctors)
         doctors_with_visits_subquery = (
             select(
-                Doctor.speciality_id,
+                GlobalDoctor.speciality_id,
                 func.count(func.distinct(distinct_doctor_key)).label(
                     "doctors_with_visits"
                 ),
@@ -463,36 +483,12 @@ class VisitService(
         doctors_with_visits_subquery = ListQueryHelper.apply_specs(
             doctors_with_visits_subquery,
             [
-                InOrNullSpec(Doctor.speciality_id, filters.speciality_ids),
+                InOrNullSpec(GlobalDoctor.speciality_id, filters.speciality_ids),
             ],
         )
 
         doctors_with_visits_subquery = doctors_with_visits_subquery.group_by(
-            Doctor.speciality_id
-        ).subquery()
-
-        total_doctors_subquery = (
-            select(
-                Doctor.speciality_id.label("speciality_id"),
-                func.count(func.distinct(distinct_doctor_key)).label("total_count"),
-            )
-            .select_from(Doctor)
-            .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
-        )
-
-        total_doctors_subquery = ListQueryHelper.apply_specs(
-            total_doctors_subquery,
-            [
-                InOrNullSpec(Doctor.speciality_id, filters.speciality_ids),
-                InOrNullSpec(
-                    GlobalDoctor.medical_facility_id, filters.medical_facility_ids
-                ),
-                InOrNullSpec(Doctor.product_group_id, filters.product_group_ids),
-            ],
-        )
-
-        total_doctors_subquery = total_doctors_subquery.group_by(
-            Doctor.speciality_id
+            GlobalDoctor.speciality_id
         ).subquery()
 
         stmt = (

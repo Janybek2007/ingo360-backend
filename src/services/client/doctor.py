@@ -57,9 +57,12 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                 global_doctor = GlobalDoctor(
                     full_name=obj_data["full_name"],
                     medical_facility_id=obj_data["medical_facility_id"],
+                    speciality_id=obj_data.get("speciality_id"),
                 )
                 session.add(global_doctor)
                 await session.flush()
+            elif obj_data.get("speciality_id") is not None:
+                global_doctor.speciality_id = obj_data["speciality_id"]
 
             try:
                 await session.commit()
@@ -81,7 +84,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                     "global_doctor": global_doctor,
                     "responsible_employee": None,
                     "medical_facility": global_doctor.medical_facility,
-                    "speciality": None,
+                    "speciality": global_doctor.speciality,
                     "client_category": None,
                     "product_group": None,
                     "company": None,
@@ -218,6 +221,10 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                 status_code=404, detail="Doctor с id {item_id} не найден"
             )
 
+        # speciality_id допустим для глобального врача
+        if "speciality_id" in doctor_fields:
+            global_obj.speciality_id = doctor_fields.pop("speciality_id")
+
         # Проверяем что передаются только глобальные поля
         if doctor_fields:
             from fastapi import HTTPException
@@ -278,7 +285,12 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
         # GLOBAL MODE — только GlobalDoctor
         # =========================
         if filters and filters.mode == "global":
-            stmt = select(GlobalDoctor)
+            from sqlalchemy.orm import selectinload as _selectinload
+
+            stmt = select(GlobalDoctor).options(
+                _selectinload(GlobalDoctor.medical_facility),
+                _selectinload(GlobalDoctor.speciality),
+            )
 
             if load_options:
                 stmt = stmt.options(*load_options)
@@ -321,7 +333,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                     "mode": "global",
                     "full_name": item.full_name,
                     "medical_facility": item.medical_facility,
-                    "speciality": None,
+                    "speciality": item.speciality,
                     "responsible_employee": None,
                     "client_category": None,
                     "product_group": None,
@@ -362,6 +374,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
         ):
             global_stmt = select(GlobalDoctor).options(
                 selectinload(GlobalDoctor.medical_facility),
+                selectinload(GlobalDoctor.speciality),
             )
 
             global_stmt = ListQueryHelper.apply_specs(
@@ -388,14 +401,14 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                     "mode": "global",
                     "full_name": item.full_name,
                     "medical_facility": item.medical_facility,
-                    "speciality": None,
+                    "speciality": item.speciality,
                     "responsible_employee": None,
                     "client_category": None,
                     "product_group": None,
                     "company": None,
                     "_sort_full_name": item.full_name,
                     "_sort_medical_facility_id": item.medical_facility_id,
-                    "_sort_speciality_id": None,
+                    "_sort_speciality_id": item.speciality_id,
                     "_sort_company_id": None,
                     "_sort_responsible_employee_id": None,
                     "_sort_client_category_id": None,
@@ -527,6 +540,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
         # --- GlobalDoctor ---
         global_stmt = select(GlobalDoctor).options(
             selectinload(GlobalDoctor.medical_facility),
+            selectinload(GlobalDoctor.speciality),
         )
         global_result = await session.execute(global_stmt)
         global_items = global_result.scalars().all()
@@ -537,7 +551,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                 "mode": "global",
                 "full_name": item.full_name,
                 "medical_facility": item.medical_facility,
-                "speciality": None,
+                "speciality": item.speciality,
                 "responsible_employee": None,
                 "client_category": None,
                 "product_group": None,
@@ -740,7 +754,9 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
             # Собираем GlobalDoctor данные
             gd_key = (full_name, medical_facility_id)
             if gd_key not in global_data:
-                global_data[gd_key] = None
+                global_data[gd_key] = {"obj": None, "speciality_id": speciality_id}
+            elif speciality_id is not None:
+                global_data[gd_key]["speciality_id"] = speciality_id
 
             # Собираем Doctor данные (только для mode=company)
             if mode == "company":
@@ -767,18 +783,21 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
             )
             for gd in existing.scalars().all():
                 key = (gd.full_name, gd.medical_facility_id)
-                global_data[key] = gd
+                global_data[key]["obj"] = gd
+                if global_data[key]["speciality_id"] is not None:
+                    gd.speciality_id = global_data[key]["speciality_id"]
 
             # Создать недостающие
             for key in gd_keys:
-                if global_data[key] is None:
+                if global_data[key]["obj"] is None:
                     gd = GlobalDoctor(
                         full_name=key[0],
                         medical_facility_id=key[1],
                         import_log_id=import_log.id,
+                        speciality_id=global_data[key]["speciality_id"],
                     )
                     session.add(gd)
-                    global_data[key] = gd
+                    global_data[key]["obj"] = gd
 
             await session.flush()
 
@@ -788,9 +807,9 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
         if doctor_data:
             for d in doctor_data:
                 gd_key = (d["full_name"], d["medical_facility_id"])
-                gd = global_data.get(gd_key)
-                if gd:
-                    d["global_doctor_id"] = gd.id
+                gd_entry = global_data.get(gd_key)
+                if gd_entry and gd_entry["obj"]:
+                    d["global_doctor_id"] = gd_entry["obj"].id
                 del d["full_name"]
                 del d["medical_facility_id"]
 

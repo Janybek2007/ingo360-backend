@@ -54,6 +54,14 @@ class GlobalDoctor(Base):
 
     doctors: Mapped[list["Doctor"]] = relationship(back_populates="global_doctor")
 
+    speciality_id: Mapped[int | None] = mapped_column(
+        ForeignKey("specialities.id"), nullable=True
+    )
+    speciality: Mapped[Optional["Speciality"]] = relationship(
+        back_populates="global_doctors",
+        foreign_keys="[GlobalDoctor.speciality_id]",
+    )
+
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
@@ -216,6 +224,10 @@ class Speciality(Base):
 
     name: Mapped[str] = mapped_column(String(256), unique=True)
     doctors: Mapped[list["Doctor"]] = relationship(back_populates="speciality")
+    global_doctors: Mapped[list["GlobalDoctor"]] = relationship(
+        back_populates="speciality",
+        foreign_keys="[GlobalDoctor.speciality_id]",
+    )
     import_log_id: Mapped[int | None] = mapped_column(
         ForeignKey("import_logs.id", ondelete="CASCADE"), nullable=True
     )
