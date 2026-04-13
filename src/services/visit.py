@@ -194,6 +194,26 @@ class VisitService(
         async for item in stream:
             yield item
 
+    @staticmethod
+    async def _get_doctor_id_map(
+        session: "AsyncSession",
+        names: set[str],
+    ) -> tuple[CaseInsensitiveDict, CaseInsensitiveSet]:
+        """Ищет Doctor.id по GlobalDoctor.full_name через JOIN, т.к. full_name
+        является @property на Doctor, а не колонкой SQLAlchemy."""
+        stmt = (
+            select(Doctor.id, GlobalDoctor.full_name)
+            .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
+            .where(GlobalDoctor.full_name.in_(names))
+        )
+        result = await session.execute(stmt)
+        rows = result.all()
+        obj_map = CaseInsensitiveDict(
+            {full_name: doctor_id for doctor_id, full_name in rows}
+        )
+        missing = CaseInsensitiveSet(v for v in names if v not in obj_map)
+        return obj_map, missing
+
     async def _import_excel_from_file(
         self,
         session: "AsyncSession",
@@ -266,9 +286,7 @@ class VisitService(
                     pending_emps.clear()
 
                 if pending_docs:
-                    m, miss = await self.get_id_map(
-                        session, Doctor, "full_name", pending_docs
-                    )
+                    m, miss = await self._get_doctor_id_map(session, pending_docs)
                     doc_cache.update(m)
                     missing_docs.update(miss)
                     pending_docs.clear()
