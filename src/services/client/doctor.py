@@ -209,7 +209,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                 await session.rollback()
                 raise
 
-        # 2. Не нашли в Doctor — ищем в GlobalDoctor
+        # 2. Не нашли в Doctor - ищем в GlobalDoctor
         global_obj_stmt = select(GlobalDoctor).where(GlobalDoctor.id == item_id)
         result = await session.execute(global_obj_stmt)
         global_obj = result.scalar_one_or_none()
@@ -282,7 +282,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
         load_options: list[Any] | None = None,
     ):
         # =========================
-        # GLOBAL MODE — только GlobalDoctor
+        # GLOBAL MODE - только GlobalDoctor
         # =========================
         if filters and filters.mode == "global":
             from sqlalchemy.orm import selectinload as _selectinload
@@ -357,7 +357,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
         # =========================
         is_company_only = filters and filters.mode == "company"
 
-        # Doctor-specific filters — GlobalDoctor не имеет этих полей
+        # Doctor-specific filters - GlobalDoctor не имеет этих полей
         has_doctor_only_filters = filters and (
             filters.responsible_employee_ids
             or filters.client_category_ids
@@ -607,7 +607,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
             await session.delete(db_obj)
             await session.flush()
 
-            # Если это был последний Doctor — удаляем GlobalDoctor
+            # Если это был последний Doctor - удаляем GlobalDoctor
             check_stmt = (
                 select(func.count())
                 .select_from(Doctor)
@@ -637,7 +637,7 @@ class DoctorService(BaseService[clients.Doctor, DoctorCreate, DoctorUpdate]):
                     detail="Ошибка при удалении",
                 ) from e
 
-        # 2. Не нашли в Doctor — ищем в GlobalDoctor
+        # 2. Не нашли в Doctor - ищем в GlobalDoctor
         gd_stmt = select(GlobalDoctor).where(GlobalDoctor.id == item_id)
         gd_result = await session.execute(gd_stmt)
         global_obj = gd_result.scalar_one_or_none()

@@ -488,7 +488,7 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                 detail=f"Неизвестный тип сущности: {filters.group_column}",
             )
 
-        # Pre-fetch company info once — reused for ranked stmt and entity_filter
+        # Pre-fetch company info once - reused for ranked stmt and entity_filter
         _company_ims_name: str | None = None
         _company_name: str | None = None
         _company_brands: list[str] = []
@@ -553,7 +553,6 @@ class IMSMetricsService(BaseService[IMS, IMSCreate, IMSUpdate]):
                     ).label("is_user_company"),
                 ).order_by(ranked_subquery.c.rank)
             else:
-
                 if company_brands:
                     user_company_sales_subquery = (
                         select(

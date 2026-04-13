@@ -26,16 +26,16 @@ def _format_template(template: str, data: dict[str, Any]) -> str:
 def _apply_custom_map(
     rule: dict[str, str], row: dict[str, Any], field_name: str = ""
 ) -> str:
-    # rule: {"company": "компания", "global": "обший"} — value-to-label mapping
+    # rule: {"company": "компания", "global": "обший"} - value-to-label mapping
     # field_name: имя поля в row (например "mode")
 
-    # 1. Если есть field_name — берём значение этого поля и маппим
+    # 1. Если есть field_name - берём значение этого поля и маппим
     if field_name:
         value = row.get(field_name)
         if value in rule:
             return rule[value]
 
-    # 2. Boolean flag fallback: {"is_active": "Да"} — если поле True/1
+    # 2. Boolean flag fallback: {"is_active": "Да"} - если поле True/1
     for flag_field, label in rule.items():
         value = row.get(flag_field)
         if value is True or value == 1:

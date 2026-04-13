@@ -218,21 +218,49 @@ class VisitService(
     async def _get_doctor_id_map(
         session: "AsyncSession",
         names: set[str],
-    ) -> tuple[CaseInsensitiveDict, CaseInsensitiveSet]:
-        """Ищет Doctor.id по GlobalDoctor.full_name через JOIN, т.к. full_name
-        является @property на Doctor, а не колонкой SQLAlchemy."""
+        company_ids: set[int] | None = None,
+    ) -> tuple[CaseInsensitiveDict, CaseInsensitiveSet, CaseInsensitiveSet]:
+        """Ищет Doctor.id по GlobalDoctor.full_name через JOIN.
+        Doctor.full_name - @property, не колонка SQLAlchemy.
+        company_ids фильтрует по компании, чтобы не смешивать врачей
+        с одинаковым именем из разных компаний.
+
+        Возвращает:
+          obj_map            - найдены (name → doctor_id)
+          missing_in_company - есть в системе, но не в справочнике компании
+          missing_entirely   - не найдены нигде в системе
+        """
         stmt = (
             select(Doctor.id, GlobalDoctor.full_name)
             .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
             .where(GlobalDoctor.full_name.in_(names))
         )
+        if company_ids:
+            stmt = stmt.where(Doctor.company_id.in_(company_ids))
         result = await session.execute(stmt)
         rows = result.all()
         obj_map = CaseInsensitiveDict(
             {full_name: doctor_id for doctor_id, full_name in rows}
         )
-        missing = CaseInsensitiveSet(v for v in names if v not in obj_map)
-        return obj_map, missing
+
+        not_found = CaseInsensitiveSet(v for v in names if v not in obj_map)
+        if not not_found:
+            return obj_map, CaseInsensitiveSet(), CaseInsensitiveSet()
+
+        # Проверяем: есть ли врач в системе вообще (без фильтра по компании)
+        global_stmt = select(GlobalDoctor.full_name).where(
+            GlobalDoctor.full_name.in_(not_found)
+        )
+        global_result = await session.execute(global_stmt)
+        global_names = CaseInsensitiveSet(row[0] for row in global_result.all())
+
+        missing_in_company = CaseInsensitiveSet(
+            v for v in not_found if v in global_names
+        )
+        missing_entirely = CaseInsensitiveSet(
+            v for v in not_found if v not in global_names
+        )
+        return obj_map, missing_in_company, missing_entirely
 
     async def _import_excel_from_file(
         self,
@@ -275,7 +303,8 @@ class VisitService(
 
             missing_pgs: CaseInsensitiveSet = CaseInsensitiveSet()
             missing_emps: CaseInsensitiveSet = CaseInsensitiveSet()
-            missing_docs: CaseInsensitiveSet = CaseInsensitiveSet()
+            missing_docs_in_company: CaseInsensitiveSet = CaseInsensitiveSet()
+            missing_docs_entirely: CaseInsensitiveSet = CaseInsensitiveSet()
             missing_mfs: CaseInsensitiveSet = CaseInsensitiveSet()
             missing_phs: CaseInsensitiveSet = CaseInsensitiveSet()
 
@@ -308,9 +337,14 @@ class VisitService(
                     pending_emps.clear()
 
                 if pending_docs:
-                    m, miss = await self._get_doctor_id_map(session, pending_docs)
+                    m, miss_company, miss_entirely = await self._get_doctor_id_map(
+                        session,
+                        pending_docs,
+                        company_ids=set(emp_company_cache.values()),
+                    )
                     doc_cache.update(m)
-                    missing_docs.update(miss)
+                    missing_docs_in_company.update(miss_company)
+                    missing_docs_entirely.update(miss_entirely)
                     pending_docs.clear()
 
                 if pending_mfs:
@@ -343,9 +377,21 @@ class VisitService(
                     if r.get("группа") in missing_pgs:
                         missing_keys.append(f"группа: {r['группа']}")
                     if r.get("сотрудник") in missing_emps:
-                        missing_keys.append(f"сотрудник: {r['сотрудник']}")
-                    if r.get("врач") and r.get("врач") in missing_docs:
-                        missing_keys.append(f"врач: {r['врач']}")
+                        missing_keys.append(
+                            f"сотрудник: {r['сотрудник']} - не найден в справочнике сотрудников компании. "
+                            f"Добавьте сотрудника в справочник компании перед импортом."
+                        )
+                    if r.get("врач") and r.get("врач") in missing_docs_in_company:
+                        missing_keys.append(
+                            f"врач: {r['врач']} - найден в системе, но не добавлен "
+                            f"в справочник врачей вашей компании."
+                        )
+                    elif r.get("врач") and r.get("врач") in missing_docs_entirely:
+                        missing_keys.append(
+                            f"врач: {r['врач']} - не найден в системе. "
+                            f"Сначала добавьте врача в глобальный справочник, "
+                            f"затем в справочник вашей компании."
+                        )
 
                     m_facility_id = None
                     p_id = None
@@ -409,7 +455,8 @@ class VisitService(
                     if (
                         r.get("врач")
                         and r["врач"] not in doc_cache
-                        and r["врач"] not in missing_docs
+                        and r["врач"] not in missing_docs_in_company
+                        and r["врач"] not in missing_docs_entirely
                     ):
                         pending_docs.add(r["врач"])
                     if r.get("тип клиента") == "Врач" and r.get("учреждение"):
