@@ -195,6 +195,26 @@ class VisitService(
             yield item
 
     @staticmethod
+    async def _get_employee_id_company_map(
+        session: "AsyncSession",
+        names: set[str],
+    ) -> tuple[CaseInsensitiveDict, CaseInsensitiveDict, CaseInsensitiveSet]:
+        """Возвращает (name→id, name→company_id, missing) для Employee."""
+        stmt = select(Employee.id, Employee.full_name, Employee.company_id).where(
+            Employee.full_name.in_(names)
+        )
+        result = await session.execute(stmt)
+        rows = result.all()
+        id_map = CaseInsensitiveDict(
+            {full_name: emp_id for emp_id, full_name, _ in rows}
+        )
+        company_map = CaseInsensitiveDict(
+            {full_name: company_id for _, full_name, company_id in rows}
+        )
+        missing = CaseInsensitiveSet(v for v in names if v not in id_map)
+        return id_map, company_map, missing
+
+    @staticmethod
     async def _get_doctor_id_map(
         session: "AsyncSession",
         names: set[str],
@@ -248,6 +268,7 @@ class VisitService(
 
             pg_cache: CaseInsensitiveDict = CaseInsensitiveDict()
             emp_cache: CaseInsensitiveDict = CaseInsensitiveDict()
+            emp_company_cache: CaseInsensitiveDict = CaseInsensitiveDict()
             doc_cache: CaseInsensitiveDict = CaseInsensitiveDict()
             mf_cache: CaseInsensitiveDict = CaseInsensitiveDict()
             ph_cache: CaseInsensitiveDict = CaseInsensitiveDict()
@@ -278,10 +299,11 @@ class VisitService(
                     pending_pgs.clear()
 
                 if pending_emps:
-                    m, miss = await self.get_id_map(
-                        session, Employee, "full_name", pending_emps
+                    m, cm, miss = await self._get_employee_id_company_map(
+                        session, pending_emps
                     )
                     emp_cache.update(m)
+                    emp_company_cache.update(cm)
                     missing_emps.update(miss)
                     pending_emps.clear()
 
@@ -351,6 +373,7 @@ class VisitService(
                         "product_group_id": pg_cache.get(r.get("группа")),
                         "doctor_id": doc_cache.get(r.get("врач")),
                         "employee_id": emp_cache.get(r.get("сотрудник")),
+                        "company_id": emp_company_cache.get(r.get("сотрудник")),
                         "medical_facility_id": m_facility_id,
                         "pharmacy_id": p_id,
                         "import_log_id": import_log.id,
