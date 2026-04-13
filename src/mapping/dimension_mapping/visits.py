@@ -20,11 +20,6 @@ VISITS_DOCTOR_COUNT_DIMENSTIONS_MAPPING = {
         "name": Speciality.name.label("speciality_name"),
         "group_fields": [Speciality.id, Speciality.name],
     },
-    "doctor": {
-        "id": Doctor.id.label("doctor_id"),
-        "name": GlobalDoctor.full_name.label("doctor_name"),
-        "group_fields": [Doctor.id, GlobalDoctor.full_name],
-    },
 }
 
 VISITS_SUM_FOR_PERIOD_DIMENSTIONS_MAPPING = {

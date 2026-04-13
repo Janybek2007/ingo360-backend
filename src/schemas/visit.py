@@ -111,13 +111,12 @@ class DoctorsCountWithVisitFilter(BaseModel):
     group_by_period: Literal["month", "quarter", "year"] = "month"
     limit: int | None = None
     offset: int = 0
-    group_by_dimensions: list[Literal["medical_facility", "speciality", "doctor"]] = (
-        Field(default_factory=lambda: ["medical_facility", "speciality", "doctor"])
+    group_by_dimensions: list[Literal["medical_facility", "speciality"]] = Field(
+        default_factory=lambda: ["medical_facility", "speciality"]
     )
     sort_by: (
         Literal[
             "medical_facility",
-            "doctor",
             "speciality",
             "total_doctors",
             "doctors_with_visits",

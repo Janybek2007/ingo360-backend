@@ -653,7 +653,7 @@ class VisitService(
         all_doctors_subquery = (
             select(
                 *select_fields,
-                func.count(func.distinct(Doctor.id)).label("total_doctors"),
+                func.count(func.distinct(GlobalDoctor.id)).label("total_doctors"),
             )
             .select_from(Doctor)
             .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
@@ -691,14 +691,11 @@ class VisitService(
             elif dim == "speciality":
                 visit_select_fields.append(Speciality.id.label("speciality_id"))
                 visit_group_by_fields.append(Speciality.id)
-            elif dim == "doctor":
-                visit_select_fields.append(Doctor.id.label("doctor_id"))
-                visit_group_by_fields.append(Doctor.id)
 
         doctors_with_visits_subquery = (
             select(
                 *visit_select_fields,
-                func.count(func.distinct(Doctor.id)).label("doctors_with_visits"),
+                func.count(func.distinct(GlobalDoctor.id)).label("doctors_with_visits"),
             )
             .select_from(Visit)
             .join(Employee, Visit.employee_id == Employee.id)
@@ -762,11 +759,6 @@ class VisitService(
                     all_doctors_subquery.c.speciality_id
                     == doctors_with_visits_subquery.c.speciality_id
                 )
-            elif dim == "doctor":
-                join_conditions.append(
-                    all_doctors_subquery.c.doctor_id
-                    == doctors_with_visits_subquery.c.doctor_id
-                )
 
         final_select_fields = []
         final_group_by_fields = []
@@ -809,7 +801,6 @@ class VisitService(
             "medical_facility": getattr(
                 all_doctors_subquery.c, "medical_facility_name", None
             ),
-            "doctor": getattr(all_doctors_subquery.c, "doctor_name", None),
             "speciality": getattr(all_doctors_subquery.c, "speciality_name", None),
             "total_doctors": all_doctors_subquery.c.total_doctors,
             "doctors_with_visits": func.coalesce(
