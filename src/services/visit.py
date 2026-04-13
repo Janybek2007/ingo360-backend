@@ -655,9 +655,8 @@ class VisitService(
                 *select_fields,
                 func.count(func.distinct(GlobalDoctor.id)).label("total_doctors"),
             )
-            .select_from(Doctor)
-            .join(GlobalDoctor, Doctor.global_doctor_id == GlobalDoctor.id)
-            .join(Speciality, Doctor.speciality_id == Speciality.id)
+            .select_from(GlobalDoctor)
+            .join(Speciality, GlobalDoctor.speciality_id == Speciality.id)
             .join(
                 MedicalFacility, GlobalDoctor.medical_facility_id == MedicalFacility.id
             )
@@ -668,7 +667,6 @@ class VisitService(
             [
                 InOrNullSpec(Speciality.id, filters.speciality_ids),
                 InOrNullSpec(MedicalFacility.id, filters.medical_facility_ids),
-                InOrNullSpec(Doctor.id, filters.doctor_ids),
                 SearchSpec(
                     filters.search if filters.group_by_dimensions else None, search_cols
                 ),
