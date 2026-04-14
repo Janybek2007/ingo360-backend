@@ -16,6 +16,7 @@ from src.api.dependencies.excel_file import ExcelFile
 from src.api.utils.pivot_distributore_share import pivot_distributor_share
 from src.api.utils.pivot_sales_by_distributors import pivot_sales_by_distributors
 from src.db.models import (
+    IMS,
     SKU,
     Pharmacy,
     PrimarySalesAndStock,
@@ -662,6 +663,7 @@ async def get_last_year(
         .scalar_subquery()
         .label("tertiary"),
         select(func.max(Visit.year)).scalar_subquery().label("visits"),
+        select(func.left(func.max(IMS.period), 7)).scalar_subquery().label("ims"),
     )
     row = (await session.execute(stmt)).one()
 
@@ -670,4 +672,5 @@ async def get_last_year(
         "secondary": row.secondary,
         "tertiary": row.tertiary,
         "visits": row.visits,
+        "ims": row.ims,
     }
