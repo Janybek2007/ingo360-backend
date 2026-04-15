@@ -42,4 +42,3 @@ def send_email(to_email: str, subject: str, body: str, is_html: bool = False):
         log.info(f"Email успешно отправлен на {to_email}")
     except Exception as e:
         log.error(f"Ошибка при отправке email на {to_email}: {e}")
-        raise
