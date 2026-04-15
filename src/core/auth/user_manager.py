@@ -24,7 +24,7 @@ from src.websocket.connection_manager import ConnectionManager
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from fastapi import BackgroundTasks, Request
+    from fastapi import Request
     from fastapi_users.password import PasswordHelperProtocol
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,10 +38,8 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
         user_db: BaseUserDatabase[User, int],
         connect_manager: ConnectionManager,
         password_helper: Optional["PasswordHelperProtocol"] = None,
-        background_tasks: Optional["BackgroundTasks"] = None,
     ):
         super().__init__(user_db, password_helper)
-        self.background_tasks = background_tasks
         self.connect_manager = connect_manager
 
     async def on_after_forgot_password(
@@ -61,16 +59,12 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
         </html>
         """
 
-        if self.background_tasks:
-            self.background_tasks.add_task(
-                send_email,
-                to_email=user.email,
-                body=html_body,
-                subject="Восстановление пароля",
-                is_html=True,
-            )
-        else:
-            log.warning("BackgroundTasks not available, email not sent")
+        send_email.delay(
+            to_email=user.email,
+            body=html_body,
+            subject="Восстановление пароля",
+            is_html=True,
+        )
 
     async def on_after_request_verify(
         self, user: User, token: str, request: Optional["Request"] = None
@@ -343,17 +337,13 @@ class UserManager(IntegerIDMixin, BaseUserManager[User, int]):
         </html>
         """
 
-        if self.background_tasks:
-            self.background_tasks.add_task(
-                send_email,
-                to_email=email,
-                body=html_body,
-                subject="Установите пароль для вашего аккаунта",
-                is_html=True,
-            )
-            log.info("Password setup email scheduled for %r", email)
-        else:
-            log.warning("BackgroundTasks not available, email not sent")
+        send_email.delay(
+            to_email=email,
+            body=html_body,
+            subject="Установите пароль для вашего аккаунта",
+            is_html=True,
+        )
+        log.info("Password setup email scheduled for %r", email)
 
     @staticmethod
     async def validate_password_setup_token(

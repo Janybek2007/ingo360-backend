@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import BackgroundTasks, Depends
+from fastapi import Depends
 
 from src.api.dependencies.password_helper import get_password_helper
 from src.api.dependencies.users import get_user_db
@@ -14,12 +14,10 @@ if TYPE_CHECKING:
 
 async def get_user_manager(
     user_db: Annotated["SQLAlchemyUserDatabase", Depends(get_user_db)],
-    background_tasks: BackgroundTasks,
     password_helper: Annotated["PasswordHelperProtocol", Depends(get_password_helper)],
 ):
     yield UserManager(
         user_db,
-        background_tasks=background_tasks,
         password_helper=password_helper,
         connect_manager=connection_manager,
     )
