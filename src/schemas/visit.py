@@ -8,6 +8,7 @@ from src.schemas.client import (
     MedicalFacilitySimpleResponse,
     PharmacySimpleResponse,
 )
+from src.schemas.company import CompanyMinimalResponse
 from src.schemas.employee import EmployeeSimpleResponse
 from src.schemas.product import ProductGroupSimpleResponse
 
@@ -37,6 +38,7 @@ class VisitUpdate(BaseModel):
 class VisitsRequest(BaseDbFilter):
     pharmacy_ids: list[int] | None = None
     employee_ids: list[int] | None = None
+    company_ids: list[int] | None = None
     product_group_ids: list[int] | None = None
     medical_facility_ids: list[int] | None = None
     doctor_ids: list[int] | None = None
@@ -54,6 +56,7 @@ class VisitsRequest(BaseDbFilter):
             "client_type",
             "month",
             "year",
+            "company",
         ]
         | None
     ) = None
@@ -70,6 +73,7 @@ class VisitResponse(BaseModel):
     doctor: DoctorSimpleResponse | None
     medical_facility: MedicalFacilitySimpleResponse | None
     pharmacy: PharmacySimpleResponse | None
+    company: CompanyMinimalResponse | None = None
 
 
 class DoctorsBySpecialtyResponse(BaseModel):

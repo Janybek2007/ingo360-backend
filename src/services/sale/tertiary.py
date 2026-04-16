@@ -9,6 +9,7 @@ from sqlalchemy import Float, Numeric, and_, case, func, select
 from src.db.models import (
     SKU,
     Brand,
+    Company,
     Distributor,
     GeoIndicator,
     ImportLogs,
@@ -206,6 +207,7 @@ class TertiarySalesService(
             "indicator": self.model.indicator,
             "packages": self.model.packages,
             "amount": self.model.amount,
+            "company": Company.name,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
@@ -231,12 +233,22 @@ class TertiarySalesService(
             )
 
             joined_sku = False
+            joined_company = False
+
             if filters.brand_ids:
                 stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
                 joined_sku = True
                 stmt = ListQueryHelper.apply_in_or_null(
                     stmt, SKU.brand_id, filters.brand_ids
                 )
+
+            if filters.company_ids:
+                if not joined_sku:
+                    stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+                    joined_sku = True
+                stmt = stmt.join(Company, SKU.company_id == Company.id)
+                joined_company = True
+                stmt = stmt.where(Company.id.in_(filters.company_ids))
 
             if filters.indicators:
                 raw = (
@@ -247,8 +259,11 @@ class TertiarySalesService(
                 normalized = [normalize_tertiary_indicator(v) for v in raw]
                 stmt = stmt.where(self.model.indicator.in_(normalized))
 
-            if filters.sort_by == "brands" and not joined_sku:
-                stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+            if filters.sort_by == "company" and not joined_company:
+                if not joined_sku:
+                    stmt = stmt.join(SKU, self.model.sku_id == SKU.id)
+                    joined_sku = True
+                stmt = stmt.join(Company, SKU.company_id == Company.id)
 
             # Count before pagination
             count_stmt = select(func.count()).select_from(stmt.subquery())

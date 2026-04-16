@@ -9,6 +9,7 @@ from src.schemas.client import (
     DistributorResponse,
     PharmacyWithDistributorResponse,
 )
+from src.schemas.company import CompanyMinimalResponse
 from src.schemas.product import SKUSimpleResponse
 
 
@@ -109,6 +110,7 @@ class PrimarySalesAndStockListRequest(BaseDbFilter):
     distributor_ids: list[int] | None = None
     brand_ids: list[int] | None = None
     sku_ids: list[int] | None = None
+    company_ids: list[int] | None = None
     months: list[int] | None = None
     quarters: list[int] | None = None
     year: str | None = None
@@ -116,7 +118,16 @@ class PrimarySalesAndStockListRequest(BaseDbFilter):
     amount: str | None = None
     packages: str | None = None
     sort_by: (
-        Literal["distributor", "brand", "sku", "month", "year", "packages", "amount"]
+        Literal[
+            "distributor",
+            "brand",
+            "sku",
+            "month",
+            "year",
+            "packages",
+            "amount",
+            "company",
+        ]
         | None
     ) = None
 
@@ -126,6 +137,7 @@ class SecondaryTertiarySalesListRequest(BaseDbFilter):
     distributor_ids: list[int] | None = None
     brand_ids: list[int] | None = None
     sku_ids: list[int] | None = None
+    company_ids: list[int] | None = None
     months: list[int] | None = None
     quarters: list[int] | None = None
     year: str | None = None
@@ -143,6 +155,7 @@ class SecondaryTertiarySalesListRequest(BaseDbFilter):
             "indicator",
             "packages",
             "amount",
+            "company",
         ]
         | None
     ) = None
@@ -159,6 +172,7 @@ class PrimarySalesAndStockResponse(BaseModel):
     amount: float
     distributor: DistributorResponse
     sku: SKUSimpleResponse
+    company: CompanyMinimalResponse | None = None
 
 
 class SecondarySalesResponse(BaseModel):
@@ -175,6 +189,7 @@ class SecondarySalesResponse(BaseModel):
     distributor: DistributorResponse | None
     pharmacy: PharmacyWithDistributorResponse
     sku: SKUSimpleResponse
+    company: CompanyMinimalResponse | None = None
 
 
 class TertiarySalesResponse(BaseModel):
@@ -191,6 +206,7 @@ class TertiarySalesResponse(BaseModel):
     distributor: DistributorResponse | None
     pharmacy: PharmacyWithDistributorResponse
     sku: SKUSimpleResponse
+    company: CompanyMinimalResponse | None = None
 
 
 class SalesReportFilter(BaseModel):

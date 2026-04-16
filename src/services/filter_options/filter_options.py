@@ -219,6 +219,18 @@ def apply_sales_scope(
             pharmacy_ids = select(distinct(TertiarySalesAndStock.pharmacy_id))
         return stmt.where(Pharmacy.id.in_(pharmacy_ids))
 
+    if target_ref == "companies_companies":
+        if scope_ref == "sales_primary":
+            sku_ids = select(distinct(PrimarySalesAndStock.sku_id))
+        elif scope_ref == "sales_secondary":
+            sku_ids = select(distinct(SecondarySales.sku_id))
+        else:
+            sku_ids = select(distinct(TertiarySalesAndStock.sku_id))
+        company_ids = select(distinct(SKU.company_id)).where(
+            SKU.id.in_(sku_ids), SKU.company_id.is_not(None)
+        )
+        return stmt.where(Company.id.in_(company_ids))
+
     return stmt
 
 
@@ -315,6 +327,15 @@ def apply_visits_scope(
         if period_filter is not None:
             doctor_ids = doctor_ids.where(period_filter)
         return stmt.where(Doctor.id.in_(doctor_ids))
+
+    if target_ref == "companies_companies":
+        employee_ids = select(distinct(Visit.employee_id))
+        if period_filter is not None:
+            employee_ids = employee_ids.where(period_filter)
+        company_ids = select(distinct(Employee.company_id)).where(
+            Employee.id.in_(employee_ids), Employee.company_id.is_not(None)
+        )
+        return stmt.where(Company.id.in_(company_ids))
 
     return stmt
 

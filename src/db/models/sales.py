@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
 if TYPE_CHECKING:
-    from . import SKU, Distributor, ImportLogs, Pharmacy
+    from . import SKU, Company, Distributor, ImportLogs, Pharmacy
 
 
 class PrimarySalesAndStock(Base):
@@ -30,6 +30,10 @@ class PrimarySalesAndStock(Base):
     import_log: Mapped[Optional["ImportLogs"]] = relationship(
         back_populates="primary_sales"
     )
+
+    @property
+    def company(self) -> Optional["Company"]:
+        return self.sku.company if self.sku else None
 
     __table_args__ = (
         UniqueConstraint(
@@ -97,6 +101,10 @@ class SecondarySales(Base):
     distributor_id: Mapped[int] = mapped_column(ForeignKey("distributors.id"))
     distributor: Mapped["Distributor"] = relationship(back_populates="secondary_sales")
 
+    @property
+    def company(self) -> Optional["Company"]:
+        return self.sku.company if self.sku else None
+
     __table_args__ = (
         UniqueConstraint(
             "pharmacy_id",
@@ -150,6 +158,10 @@ class TertiarySalesAndStock(Base):
     )
     distributor_id: Mapped[int] = mapped_column(ForeignKey("distributors.id"))
     distributor: Mapped["Distributor"] = relationship(back_populates="tertiary_sales")
+
+    @property
+    def company(self) -> Optional["Company"]:
+        return self.sku.company if self.sku else None
 
     __table_args__ = (
         UniqueConstraint(

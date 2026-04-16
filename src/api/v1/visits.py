@@ -42,6 +42,7 @@ async def get_visits(
         joinedload(Visit.doctor).joinedload(Doctor.global_doctor),
         joinedload(Visit.product_group),
         joinedload(Visit.employee),
+        joinedload(Visit.company),
         joinedload(Visit.medical_facility).joinedload(MedicalFacility.geo_indicator),
     ]
     return await visit_service.get_multi(

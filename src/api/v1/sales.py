@@ -50,6 +50,7 @@ async def list_primary_sales(
 ):
     load_options = [
         joinedload(PrimarySalesAndStock.sku).joinedload(SKU.brand),
+        joinedload(PrimarySalesAndStock.sku).joinedload(SKU.company),
         joinedload(PrimarySalesAndStock.distributor),
     ]
     return await primary_sales_service.get_multi(
@@ -276,6 +277,7 @@ async def list_secondary_sales(
         joinedload(SecondarySales.pharmacy).joinedload(Pharmacy.distributor),
         joinedload(SecondarySales.distributor),
         joinedload(SecondarySales.sku).joinedload(SKU.brand),
+        joinedload(SecondarySales.sku).joinedload(SKU.company),
     ]
 
     return await secondary_sales_service.get_multi(
@@ -475,6 +477,7 @@ async def list_tertiary_sales(
         joinedload(TertiarySalesAndStock.pharmacy).joinedload(Pharmacy.geo_indicator),
         joinedload(TertiarySalesAndStock.pharmacy).joinedload(Pharmacy.distributor),
         joinedload(TertiarySalesAndStock.sku).joinedload(SKU.brand),
+        joinedload(TertiarySalesAndStock.sku).joinedload(SKU.company),
         joinedload(TertiarySalesAndStock.distributor),
     ]
     return await tertiary_sales_service.get_multi(

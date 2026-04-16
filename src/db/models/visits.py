@@ -7,6 +7,7 @@ from .base import Base
 
 if TYPE_CHECKING:
     from . import (
+        Company,
         Doctor,
         Employee,
         ImportLogs,

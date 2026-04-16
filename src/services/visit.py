@@ -7,6 +7,7 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy import and_, func, insert, literal, or_, select, tuple_
 
 from src.db.models import (
+    Company,
     Doctor,
     Employee,
     GlobalDoctor,
@@ -116,6 +117,7 @@ class VisitService(
             "client_type": self.model.client_type,
             "month": self.model.month,
             "year": self.model.year,
+            "company": Company.name,
         }
         stmt = ListQueryHelper.apply_sorting_with_default(
             stmt,
@@ -150,6 +152,12 @@ class VisitService(
                         self.model.pharmacy_id.in_(filters.doctor_or_pharmacy_ids),
                     )
                 )
+
+            if filters.company_ids:
+                stmt = stmt.where(self.model.company_id.in_(filters.company_ids))
+
+            if filters.sort_by == "company":
+                stmt = stmt.join(Company, self.model.company_id == Company.id)
 
         # Count before pagination
         count_stmt = select(func.count()).select_from(stmt.subquery())
